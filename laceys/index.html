@@ -6,7 +6,7 @@
 <title>Lacey's Narrows · slip chart</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
-:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e;--walk:#bfb9ac}
+:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
 header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
@@ -27,7 +27,7 @@ svg{transform-origin:0 0}
 .slip rect{stroke:#3a4342;stroke-width:.5}
 .slip.on rect{stroke:#fff;stroke-width:2}
 .slip.dim{opacity:.2}
-.slip text{pointer-events:none;font-weight:700;font-size:10px;fill:#1b2423}
+.slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
 .zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
 .zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173;font-size:18px;cursor:pointer}
 aside{background:#0a3338;padding:16px;overflow:auto}
@@ -48,7 +48,7 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
 </head>
 <body>
 <header>
-  <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR</div>
+  <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
     <h1>Lacey's Narrows</h1>
     <div class="meta">
@@ -61,7 +61,7 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
 <div class="chips" id="chips"></div>
 <div class="layout">
   <div class="chart" id="chart">
-    <svg id="svg" viewBox="0 0 2100 1500" width="2100" height="1500"></svg>
+    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
     <div class="zoom">
       <button id="z-in">+</button>
       <button id="z-out">−</button>
@@ -75,7 +75,7 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
     </div>
     <div id="pane-slip">
       <h2>Find a slip</h2>
-      <p>Click any numbered slip on the chart. Occupancy, boat name, and notes stay on this device.</p>
+      <p>Click any numbered slip. Occupancy, boat name, and notes stay on this device.</p>
       <div id="slip-detail" hidden>
         <h2 id="slip-title"></h2>
         <p id="slip-meta"></p>
@@ -102,123 +102,111 @@ let data=load();
 const svg=document.getElementById("svg");
 const NS="http://www.w3.org/2000/svg";
 const el=(n,a,t)=>{const e=document.createElementNS(NS,n);Object.entries(a||{}).forEach(([k,v])=>e.setAttribute(k,v));if(t!=null)e.textContent=t;return e;};
-const seq=(a,b)=>{const o=[];if(a<=b)for(let i=a;i<=b;i++)o.push(i);else for(let i=a;i>=b;i--)o.push(i);return o;};
 const COLORS={pref:"#d2b48c",std:"#c9896a",wide:"#5aa0c4",sales:"#e39a7a",cruiser:"#e8c4b4",hb:"#6dad6a",hb2:"#4f9ea3",fuel:"#e3c35c",courtesy:"#f3efe6"};
 const slips=[];
 function add(num,dock,kind,size,x,y,w,h,filter){
   slips.push({id:String(num),num,dock,kind,size,x,y,w,h,filter:filter||dock});
 }
-
-svg.appendChild(el("rect",{width:2100,height:1500,fill:"#0c3c41"}));
-svg.appendChild(el("text",{x:1050,y:28,"text-anchor":"middle",fill:"#c5d8d6","font-size":15,"letter-spacing":3},"NARROWS CHANNEL"));
-svg.appendChild(el("text",{x:1050,y:1484,"text-anchor":"middle",fill:"#c5d8d6","font-size":15,"letter-spacing":3},"NARROWS CHANNEL"));
-
-svg.appendChild(el("rect",{x:1480,y:48,width:280,height:90,rx:8,fill:"#8a8f62"}));
-svg.appendChild(el("text",{x:1620,y:82,"text-anchor":"middle",fill:"#243018","font-size":14,"font-weight":700},"SHOP / Service Dept."));
-svg.appendChild(el("text",{x:1620,y:102,"text-anchor":"middle",fill:"#243018","font-size":12},"Office"));
-svg.appendChild(el("ellipse",{cx:1620,cy:175,rx:90,ry:32,fill:"none",stroke:"#9ad","stroke-width":3}));
-svg.appendChild(el("text",{x:1620,y:182,"text-anchor":"middle",fill:"#8ec4ea","font-size":20,"font-weight":800},"P"));
-svg.appendChild(el("text",{x:1620,y:228,"text-anchor":"middle",fill:"#c5d8d6","font-size":11},"Main walkway · Dock 10 access"));
-svg.appendChild(el("rect",{x:1880,y:48,width:80,height:1400,fill:"#8a8a84"}));
-svg.appendChild(el("text",{x:1920,y:720,fill:"#222",transform:"rotate(90 1920 720)","font-size":14},"Hwy 92 Bridge"));
-
 function lab(x,y,t,s){svg.appendChild(el("text",{x,y,fill:"#d7eceb","font-size":s||13,"font-weight":700},t));}
 function walk(x,y,w,h){svg.appendChild(el("rect",{x,y,width:w,height:h,rx:3,fill:"#bfb9ac"}));}
 
-const SW=26, SH=16, GAP=3;
-
-function nsFinger(dock, left, right, x, y, kind, size){
+/* N–S walkway, E–W slips (wide, short) */
+function nsFinger(dock, west, east, x, y, kind, size){
   const w=40, h=15, g=3;
-  const n=Math.max(left.length, right.length);
+  const n=Math.max(west.length, east.length);
   walk(x+w+2, y-4, 12, n*(h+g)+10);
-  lab(x+w-4, y-14, dock, 15);
-  left.forEach((num,i)=>add(num,dock,kind,size, x, y+i*(h+g), w,h, dock));
-  right.forEach((num,i)=>add(num,dock,kind,size, x+w+16, y+i*(h+g), w,h, dock));
-  return {w: w*2+16, h: n*(h+g)+8};
+  lab(x+w-2, y-12, dock, 14);
+  west.forEach((num,i)=>add(num,dock,kind,size, x, y+i*(h+g), w,h, dock));
+  east.forEach((num,i)=>add(num,dock,kind,size, x+w+16, y+i*(h+g), w,h, dock));
 }
-function ewFinger(dock, top, bot, x, y, kind, size){
+/* E–W walkway, N–S slips (narrow, tall) */
+function ewFinger(dock, north, south, x, y, kind, size){
   const w=16, h=36, g=3;
-  walk(x-4, y+h+2, top.length*(w+g)+10, 12);
-  lab(x, y-12, dock, 15);
-  top.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y, w,h, dock));
-  bot.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y+h+16, w,h, dock));
-  return {w: top.length*(w+g), h: h*2+16};
+  walk(x-4, y+h+2, north.length*(w+g)+10, 12);
+  lab(x, y-12, dock, 14);
+  north.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y, w,h, dock));
+  south.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y+h+16, w,h, dock));
 }
 
-/* Docks 1–3: N–S with E–W slips. Dock 4 is a double that also houses 5. */
-const prefX=50, prefY=248;
-lab(prefX, 228, "10×30 Preferred", 13);
-nsFinger("1", seq(237,248), seq(236,225), prefX, prefY, "wide", "16×42");
-nsFinger("2", seq(261,272), seq(260,249), prefX+110, prefY, "wide", "16×42");
-nsFinger("3", seq(49,64), seq(48,33), prefX+220, prefY, "pref", "10×30 Preferred");
-/* Double dock 4+5: 4 is N–S / E–W slips; 5 is E–W / N–S slips */
-const d4x=prefX+330, d4y=prefY+70;
-lab(d4x, prefY-14, "4 / 5 double", 13);
-ewFinger("5", seq(282,273), seq(283,292), d4x, prefY, "pref", "10×30 Preferred");
-nsFinger("4", seq(19,32), seq(14,1), d4x, d4y, "pref", "10×30 Preferred");
-svg.appendChild(el("rect",{x:prefX+220,y:prefY+16*18+8,width:58,height:22,rx:4,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:prefX+249,y:prefY+16*18+23,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
+svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
+svg.appendChild(el("text",{x:1200,y:24,"text-anchor":"middle",fill:"#c5d8d6","font-size":13,"letter-spacing":4},"NORTH"));
+svg.appendChild(el("text",{x:2288,y:860,fill:"#c5d8d6","font-size":14,"letter-spacing":3,transform:"rotate(90 2288 860)"},"NARROWS CHANNEL"));
 
-/* Marina store dock — rotated 90° into the gap between 1–4 and cruiser/houseboat */
-const storeY=590;
-const storeX=50;
-svg.appendChild(el("rect",{x:storeX,y:storeY,width:100,height:36,rx:6,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:storeX+50,y:storeY+15,"text-anchor":"middle",fill:"#fff","font-size":12,"font-weight":700},"Marina Store"));
-svg.appendChild(el("text",{x:storeX+50,y:storeY+29,"text-anchor":"middle",fill:"#d7eceb","font-size":10},"Wave runners"));
-lab(storeX+110, storeY+14, "Store dock · Sales 10×34", 12);
-const sales=seq(856,841);
-const sW=16, sH=36, sG=3, sy=storeY+44;
-sales.forEach((n,i)=>add(n,"Sales","sales","10×34", storeX+110+i*(sW+sG), sy, sW,sH, "Sales"));
-add("WB","Work boat","hb2","Work boat", storeX+110+sales.length*(sW+sG), sy, 22,sH, "Work boat");
-const storeLen=110+sales.length*(sW+sG)+28;
-walk(storeX+106, sy+sH+2, sales.length*(sW+sG)+30, 12);
-lab(storeX+110, sy+sH+32, "Fuel · courtesy", 11);
-seq(1,4).forEach((i)=>add("F"+i,"Fuel","fuel","Fuel stall", storeX+110+(i-1)*22, sy+sH+16+12, 16,sH, "Fuel"));
-seq(1,6).forEach((i)=>add("C"+i,"Courtesy","courtesy","Courtesy", storeX+110+4*22+(i-1)*22, sy+sH+16+12, 16,sH, "All"));
+/* Shop + parking — NW, as on the drawing */
+svg.appendChild(el("rect",{x:40,y:40,width:220,height:70,rx:8,fill:"#8a8f62"}));
+svg.appendChild(el("text",{x:150,y:70,"text-anchor":"middle",fill:"#243018","font-size":13,"font-weight":700},"SHOP / Service Dept."));
+svg.appendChild(el("text",{x:150,y:90,"text-anchor":"middle",fill:"#243018","font-size":11},"Office"));
+svg.appendChild(el("ellipse",{cx:150,cy:150,rx:70,ry:26,fill:"none",stroke:"#9ad","stroke-width":3}));
+svg.appendChild(el("text",{x:150,y:156,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));
+lab(40, 190, "Dock 5 access", 11);
+lab(280, 70, "Main walkway · Dock 10 access", 11);
+svg.appendChild(el("rect",{x:980,y:36,width:1100,height:22,fill:"#8a8a84"}));
+svg.appendChild(el("text",{x:1530,y:52,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge"));
 
-/* Cruiser + houseboats stay put, just dropped below the store dock */
-const clY=780;
-
-const cruX=50, cruY=clY+20;
-lab(cruX, cruY-12, "Cruiser dock", 12);
-const cruTop=[800,808,809,810,811,812,813,814,815,816];
-const cruBot=[801,802,803,804,805,806,807];
-const cW=18, cH=38, cG=4;
-walk(cruX-6, cruY+cH+2, cruTop.length*(cW+cG)+12, 12);
-cruTop.forEach((n,i)=>add(n,"Cruiser","cruiser","Cruiser", cruX+i*(cW+cG), cruY, cW,cH, "Cruiser"));
-cruBot.forEach((n,i)=>add(n,"Cruiser","cruiser","Cruiser", cruX+i*(cW+cG), cruY+cH+16, cW,cH, "Cruiser"));
-svg.appendChild(el("rect",{x:cruX,y:cruY+cH*2+22,width:62,height:28,rx:4,fill:"#e7a0b8"}));
-svg.appendChild(el("text",{x:cruX+31,y:cruY+cH*2+40,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
-
-const hbX=cruX+cruTop.length*(cW+cG)+28;
-lab(hbX, clY-10, "Houseboat dock", 12);
-const hbW=42, hbH=16;
-walk(hbX+hbW+2, clY, 14, 14*18+70);
-seq(817,830).forEach((n,i)=>add(n,"Houseboats", i<10?"hb":"hb2", i<10?"12×38":"12×30", hbX, clY+i*18, hbW,hbH, "Houseboats"));
-seq(831,838).forEach((n,i)=>add(n,"Houseboats","hb","12×38", hbX+hbW+18, clY+i*18, hbW,hbH, "Houseboats"));
-add(839,"Fuel","fuel","20×87", hbX, clY+14*18+8, hbW*2+18, 22, "Fuel");
-add(840,"Fuel","fuel","20×87", hbX, clY+14*18+34, hbW*2+18, 22, "Fuel");
-svg.appendChild(el("text",{x:hbX,y:clY+14*18+74,fill:"#c5d8d6","font-size":11},"Emma's Room · 24×100"));
-
-/* Standard 7–13 — along the causeway, RIGHT */
-lab(900, 228, "10×30 Standard", 13);
-walk(888, 238, 720, 16);
+/* Docks 7–13 — NE grid, N–S fingers, E–W slips (drawing: the big block) */
+lab(1000, 78, "10×30 Standard", 13);
+walk(990, 88, 1080, 14);
 const east=[
-  ["7", seq(65,80), seq(96,81)],
-  ["8", seq(97,112), seq(128,113)],
-  ["9", seq(129,144), seq(160,145)],
-  ["10", seq(161,176), seq(192,177)],
-  ["11", seq(193,208), seq(224,209)],
-  ["12", seq(293,308), seq(324,309)],
-  ["13", seq(325,340), seq(356,341)]
+  ["7", [65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80], [96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81]],
+  ["8", [97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112], [128,127,126,125,124,123,122,121,120,119,118,117,116,115,114,113]],
+  ["9", [129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144], [160,159,158,157,156,155,154,153,152,151,150,149,148,147,146,145]],
+  ["10",[161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176], [192,191,190,189,188,187,186,185,184,183,182,181,180,179,178,177]],
+  ["11",[193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208], [224,223,222,221,220,219,218,217,216,215,214,213,212,211,210,209]],
+  ["12",[293,294,295,296,297,298,299,300,301,302,303,304,305,306,307,308], [324,323,322,321,320,319,318,317,316,315,314,313,312,311,310,309]],
+  ["13",[325,326,327,328,329,330,331,332,333,334,335,336,337,338,339,340], [356,355,354,353,352,351,350,349,348,347,346,345,344,343,342,341]]
 ];
 east.forEach((d,di)=>{
-  const x=910+di*100, y=238, n=d[1].length;
-  walk(x, y, 14, n*(SH+GAP)+24);
-  lab(x+2, y-6, d[0], 14);
-  d[1].forEach((num,i)=>add(num,d[0],"std","10×30 Standard", x-SW-2, y+22+i*(SH+GAP), SW,SH, d[0]));
-  d[2].forEach((num,i)=>add(num,d[0],"std","10×30 Standard", x+16, y+22+i*(SH+GAP), SW,SH, d[0]));
+  const x=1020+di*150, y=88;
+  nsFinger(d[0], d[1].map(n=>n), d[2], x, y+22, "std", "10×30 Standard");
 });
+
+/* WEST cluster — drawing: 4, 3, 2, 1 are N–S with E–W slips */
+lab(40, 268, "10×30 Preferred", 13);
+const yF=290;
+nsFinger("4", [32,31,30,29,28,27,26,25,24,23,22,21,20,19], [1,2,3,4,5,6,7,8,9,10,11,12,13,14], 40, yF, "pref", "10×30 Preferred");
+nsFinger("3", [64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49], [33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48], 150, yF, "pref", "10×30 Preferred");
+nsFinger("2", [272,271,270,269,268,267,266,265,264,263,262,261], [249,250,251,252,253,254,255,256,257,258,259,260], 260, yF, "wide", "16×42");
+nsFinger("1", [248,247,246,245,244,243,242,241,240,239,238,237], [225,226,227,228,229,230,231,232,233,234,235,236], 370, yF, "wide", "16×42");
+svg.appendChild(el("rect",{x:318,y:yF-28,width:58,height:20,rx:4,fill:"#2b6d8a"}));
+svg.appendChild(el("text",{x:347,y:yF-14,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
+
+/* Dock 5 — drawing: SW, E–W with N–S slips */
+ewFinger("5", [283,284,285,286,287,288,289,290,291,292], [273,274,275,276,277,278,279,280,281,282], 40, 600, "pref", "10×30 Preferred");
+
+/* Marina store dock — N–S, between 1–4 and cruiser/houseboat, sales one row + walkway + fuel/courtesy */
+const storeX=520, storeY=280;
+svg.appendChild(el("rect",{x:storeX,y:storeY,width:100,height:44,rx:6,fill:"#2b6d8a"}));
+svg.appendChild(el("text",{x:storeX+50,y:storeY+18,"text-anchor":"middle",fill:"#fff","font-size":12,"font-weight":700},"Marina Store"));
+svg.appendChild(el("text",{x:storeX+50,y:storeY+34,"text-anchor":"middle",fill:"#d7eceb","font-size":10},"Wave runners"));
+lab(storeX, storeY+60, "Sales 10×34", 12);
+const sales=[851,852,853,854,855,856,841,842,843,844,845,846,847,848,849,850];
+const sy=storeY+72;
+sales.forEach((n,i)=>add(n,"Sales","sales", i>=6?"10×34 · Work boat":"10×34", storeX, sy+i*18, 40,16, "Sales"));
+walk(storeX+44, sy-2, 14, sales.length*18+8);
+lab(storeX+64, sy-10, "Fuel · courtesy", 11);
+[1,2,3,4].forEach((i,idx)=>add("F"+i,"Fuel","fuel","Fuel stall", storeX+64, sy+idx*20, 40,18, "Fuel"));
+[1,2,3,4,5,6].forEach((i,idx)=>add("C"+i,"Courtesy","courtesy","Courtesy", storeX+64, sy+4*20+8+idx*20, 40,18, "All"));
+svg.appendChild(el("rect",{x:storeX,y:sy+sales.length*18+12,width:72,height:28,rx:4,fill:"#e7a0b8"}));
+svg.appendChild(el("text",{x:storeX+36,y:sy+sales.length*18+30,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
+
+/* Cruiser — E–W, N–S slips, west of houseboats (drawing: channel cluster) */
+const cruX=700, cruY=980;
+lab(cruX, cruY-12, "Cruiser dock", 12);
+const cruN=[800,808,809,810,811,812,813,814,815,816];
+const cruS=[801,802,803,804,805,806,807];
+ewFinger("Cruiser", cruN, cruS, cruX, cruY, "cruiser", "Cruiser");
+svg.appendChild(el("rect",{x:cruX+200,y:cruY+92,width:62,height:26,rx:4,fill:"#e7a0b8"}));
+svg.appendChild(el("text",{x:cruX+231,y:cruY+109,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
+
+/* Houseboat — N–S, E–W slips, along Narrows Channel */
+const hbX=1100, hbY=720;
+lab(hbX, hbY-12, "Houseboat dock", 12);
+nsFinger("Houseboats", [817,818,819,820,821,822,823,824,825,826,827,828,829,830], [831,832,833,834,835,836,837,838], hbX, hbY, "hb", "12×38");
+add(839,"Fuel","fuel","20×87", hbX, hbY+14*18+8, 96,22, "Fuel");
+add(840,"Fuel","fuel","20×87", hbX, hbY+14*18+34, 96,22, "Fuel");
+svg.appendChild(el("text",{x:hbX,y:hbY+14*18+74,fill:"#c5d8d6","font-size":11},"Emma's Room · 24×100"));
+svg.appendChild(el("rect",{x:hbX+110,y:hbY+14*18+50,width:62,height:26,rx:4,fill:"#e7a0b8"}));
+svg.appendChild(el("text",{x:hbX+141,y:hbY+14*18+67,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
 
 const layer=el("g",{id:"slips"});
 svg.appendChild(layer);
@@ -235,13 +223,12 @@ function redraw(){
   slips.forEach(s=>{
     const g=el("g",{class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim"), "data-id":s.id});
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
-    const label=String(s.num).replace(/^F|^C/,"");
-    g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+4,"text-anchor":"middle"}, label));
+    g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+3,"text-anchor":"middle"}, String(s.num).replace(/^F|^C/,"")));
     layer.appendChild(g);
   });
 }
 document.getElementById("count").textContent = slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
-const chips=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Work boat","Fuel","Sales"];
+const chips=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
 chips.forEach(c=>{
   const b=document.createElement("button");
@@ -301,14 +288,14 @@ renderDir();
 let scale=1,tx=0,ty=0;
 const apply=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
 const chart=document.getElementById("chart");
-chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.5,Math.max(.4,scale*(e.deltaY<0?1.08:0.92)));apply();},{passive:false});
+chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.5,Math.max(.35,scale*(e.deltaY<0?1.08:0.92)));apply();},{passive:false});
 let drag=null;
 chart.addEventListener("pointerdown",e=>{if(e.target.closest("[data-id]"))return;drag={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);});
 chart.addEventListener("pointermove",e=>{if(!drag)return;tx=e.clientX-drag.x;ty=e.clientY-drag.y;apply();});
 chart.addEventListener("pointerup",()=>drag=null);
 const fit=()=>{scale=1;tx=0;ty=0;apply();};
 document.getElementById("z-in").onclick=()=>{scale=Math.min(3.5,scale*1.15);apply();};
-document.getElementById("z-out").onclick=()=>{scale=Math.max(.4,scale/1.15);apply();};
+document.getElementById("z-out").onclick=()=>{scale=Math.max(.35,scale/1.15);apply();};
 document.getElementById("z-full").onclick=fit;
 </script>
 </body>
