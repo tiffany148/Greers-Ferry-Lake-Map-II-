@@ -6,47 +6,43 @@
 <title>Lacey's Narrows · slip chart</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
-:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e;--paper:#e4dcc8;--walk:#c9c4b8}
+:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
 header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
 .kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
 .row{display:flex;align-items:flex-end;gap:16px}
-h1{margin:4px 0 0;font-size:28px;font-weight:650}
+h1{margin:4px 0 0;font-size:26px;font-weight:650}
 .meta{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
-.iconrow{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
-.iconrow button{width:34px;height:34px;border:0;border-radius:9px;background:#15565b;color:var(--ink);cursor:pointer}
 .search{padding:8px 16px 0}
 .search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
 .chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
-.layout{display:grid;grid-template-columns:1fr 300px;height:calc(100% - 168px)}
-.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
-.chart:active{cursor:grabbing}
-svg{transform-origin:0 0}
-.slip{cursor:pointer;stroke:#4d5554;stroke-width:.4}
-.slip .n{pointer-events:none;font-size:7px;font-weight:700}
-.slip.on{stroke:#fff;stroke-width:1.4}
-.slip.dim{opacity:.18}
-.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+.layout{display:grid;grid-template-columns:1.3fr 1fr;height:calc(100% - 160px);min-height:420px}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:12px;background:#0a3539}
+.chart img{transform-origin:0 0;user-select:none;-webkit-user-drag:none;max-width:none}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px}
 .zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173b3e;font-size:18px;cursor:pointer}
-aside{background:#0a3338;padding:16px;overflow:auto}
-.tabs{display:flex;gap:16px;margin-bottom:14px}
+aside{background:#0a3338;padding:14px;overflow:auto}
+.tabs{display:flex;gap:16px;margin-bottom:10px}
 .tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
 .tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
 aside h2{font-size:15px;margin:0 0 8px}
-aside p{font-size:13px;color:var(--muted);line-height:1.5}
-aside label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
-aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
-.st{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+aside p{font-size:13px;color:var(--muted);line-height:1.45}
+.grid{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+.slipbtn{min-width:48px;padding:8px 6px;border:0;border-radius:8px;background:#e4dcc8;color:#1c2423;font-weight:700;font-size:13px;cursor:pointer}
+.slipbtn.occupied{background:#b55a32;color:#fff}
+.slipbtn.reserved{background:#d7b45a}
+.slipbtn.on{outline:2px solid #fff}
+.pair{display:flex;flex-direction:column;gap:4px}
+label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
+input,textarea{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
+.st{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
 .st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
-.legend{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.6}
-.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
-@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:58vh;margin:0 12px;border-radius:14px}}
-@media print{header,.search,.chips,.zoom,.iconrow{display:none!important}aside{display:none}.layout{display:block}}
+@media(max-width:900px){.layout{grid-template-columns:1fr;height:auto}.chart{height:42vh;margin:0 12px}}
 </style>
 </head>
 <body>
@@ -54,21 +50,14 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
   <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR</div>
   <div class="row">
     <h1>Lacey's Narrows</h1>
-    <div class="meta">
-      <div id="count"></div>
-      <div>Drag to pan · scroll to zoom</div>
-      <div class="iconrow">
-        <button id="btn-fit" title="Fit">▣</button>
-        <button id="btn-print" title="Print">⎙</button>
-      </div>
-    </div>
+    <div class="meta"><div>Your dock map · tap a slip number</div></div>
   </div>
 </header>
-<div class="search"><input id="q" type="search" placeholder="Search slip number or dock..."/></div>
+<div class="search"><input id="q" type="search" placeholder="Search actual slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
   <div class="chart" id="chart">
-    <svg id="svg" viewBox="0 0 1900 1280" width="1900" height="1280"></svg>
+    <img id="map" src="dock-map.jpg" alt="Lacey's Narrows dock map"/>
     <div class="zoom">
       <button id="z-in">+</button>
       <button id="z-out">−</button>
@@ -77,14 +66,15 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
   </div>
   <aside>
     <div class="tabs">
-      <button class="on" data-tab="slip">Slip</button>
+      <button class="on" data-tab="slip">Slips</button>
       <button data-tab="dir">Directory</button>
     </div>
     <div id="pane-slip">
-      <h2>Find a slip</h2>
-      <p>Numbers match the marina dock map. Tap a slip to mark occupancy, boat name, and notes — they stay on this device.</p>
+      <h2 id="dock-title">All docks</h2>
+      <p>Numbers are the marina slip numbers from the map, not 5-1 / 5-2. Pick a dock or type a number.</p>
+      <div id="pad"></div>
       <div id="slip-detail" hidden>
-        <h2 id="slip-title">Slip</h2>
+        <h2 id="slip-title"></h2>
         <p id="slip-meta"></p>
         <div class="st">
           <button data-st="vacant">Vacant</button>
@@ -94,13 +84,6 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
         <label>Boat name<input id="boat"/></label>
         <label>Notes<textarea id="notes" rows="3"></textarea></label>
       </div>
-      <div class="legend">
-        <div><span class="sw" style="background:#c4a574"></span>10×30 standard / preferred</div>
-        <div><span class="sw" style="background:#5aa0c4"></span>16×42</div>
-        <div><span class="sw" style="background:#d4896a"></span>10×34 sales / cruiser</div>
-        <div><span class="sw" style="background:#6dad6a"></span>12×38 houseboat</div>
-        <div><span class="sw" style="background:#e3c35c"></span>Fuel / 20×87</div>
-      </div>
     </div>
     <div id="pane-dir" hidden>
       <h2>Directory</h2>
@@ -109,214 +92,107 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
   </aside>
 </div>
 <script>
-const STORE="laceys-slips-v3";
+const STORE="laceys-slips-v4";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
-const svg=document.getElementById("svg");
-const NS="http://www.w3.org/2000/svg";
-function el(name,attrs,text){
-  const n=document.createElementNS(NS,name);
-  Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));
-  if(text!=null) n.textContent=text;
-  return n;
-}
-function seq(a,b){const o=[]; if(a<=b) for(let i=a;i<=b;i++) o.push(i); else for(let i=a;i>=b;i--) o.push(i); return o;}
-function pairs(a0,b0,n){
-  const out=[];
-  for(let i=0;i<n;i++) out.push([a0+i, b0-i]);
-  return out;
-}
-const COLORS={
-  std:"#c4a574", pref:"#c4a574", wide:"#5aa0c4", sales:"#d4896a",
-  cruiser:"#e2b7a4", hb:"#6dad6a", hb2:"#4f9ea3", fuel:"#e3c35c",
-  courtesy:"#f2efe6", vacant:"#e4dcc8"
-};
-const slips=[];
-function addSlip(num, dock, kind, size, x,y,w,h, filter){
-  slips.push({id:String(num), num, dock, kind, size, x,y,w,h, filter:filter||dock});
-}
+const seq=(a,b)=>{const o=[];if(a<=b)for(let i=a;i<=b;i++)o.push(i);else for(let i=a;i>=b;i--)o.push(i);return o;};
+function zipPairs(top,bot){return top.map((t,i)=>[t,bot[i]])}
 
-svg.appendChild(el("rect",{width:1900,height:1280,fill:"#0c3c41"}));
-svg.appendChild(el("text",{x:950,y:28,"text-anchor":"middle",fill:"#c5d8d6","font-size":14,"letter-spacing":3},"NARROWS CHANNEL"));
-svg.appendChild(el("text",{x:950,y:1264,"text-anchor":"middle",fill:"#c5d8d6","font-size":14,"letter-spacing":3},"NARROWS CHANNEL"));
-
-/* land / shop / parking */
-svg.appendChild(el("rect",{x:1180,y:48,width:220,height:70,rx:6,fill:"#8a8f62"}));
-svg.appendChild(el("text",{x:1290,y:78,"text-anchor":"middle",fill:"#243018","font-size":12,"font-weight":700},"SHOP / Service Dept."));
-svg.appendChild(el("text",{x:1290,y:96,"text-anchor":"middle",fill:"#243018","font-size":11},"Office"));
-svg.appendChild(el("ellipse",{cx:1290,cy:155,rx:88,ry:28,fill:"none",stroke:"#d5ecea","stroke-width":3}));
-svg.appendChild(el("text",{x:1290,y:160,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));
-svg.appendChild(el("rect",{x:1680,y:48,width:70,height:1180,fill:"#8d8d88"}));
-svg.appendChild(el("text",{x:1715,y:640,fill:"#2a2a28","font-size":13,transform:"rotate(90 1715 640)"},"Hwy 92 Bridge"));
-svg.appendChild(el("text",{x:1290,y:200,"text-anchor":"middle",fill:"#c5d8d6","font-size":11},"Main walkway · Dock 5 / 10 access"));
-
-function label(x,y,t,size){
-  svg.appendChild(el("text",{x,y,fill:"#d7eceb","font-size":size||12,"font-weight":700},t));
-}
-
-/* Dock 5 — horizontal finger, 10 pairs */
-(function(){
-  const x0=980, y=230, w=22, h=16, gap=2;
-  label(x0-70, y+8, "5");
-  svg.appendChild(el("rect",{x:x0-8,y:y-2,width:10* (w+gap)+16,height:h*2+10,rx:3,fill:"#b7b3a8"}));
-  const top=seq(292,283), bot=seq(273,282);
-  top.forEach((n,i)=>addSlip(n,"5","pref","10x30", x0+i*(w+gap), y-h-1, w,h,"5"));
-  bot.forEach((n,i)=>addSlip(n,"5","pref","10x30", x0+i*(w+gap), y+h+3, w,h,"5"));
-})();
-
-/* Preferred horizontal pair-rows: docks 4,3,2,1 */
-function pairRow(dock, pairsList, x0,y, kind, size, filter){
-  const w=20,h=15,gap=2;
-  svg.appendChild(el("rect",{x:x0-6,y:y-2,width:pairsList.length*(w+gap)+12,height:h*2+12,rx:3,fill:"#b7b3a8"}));
-  label(x0-22, y+h+4, dock);
-  pairsList.forEach((p,i)=>{
-    const k0 = (p[0]>=237 && p[0]<=272) || (p[1]>=237 && p[1]<=272) ? "wide" : kind;
-    const sz = k0==="wide" ? "16x42" : size;
-    addSlip(p[0], dock, k0, sz, x0+i*(w+gap), y, w,h, filter);
-    addSlip(p[1], dock, k0, sz, x0+i*(w+gap), y+h+4, w,h, filter);
-  });
-}
-pairRow("4", pairs(19,14,14), 80, 290, "pref","10x30","4");
-pairRow("3", pairs(49,48,16), 80, 360, "pref","10x30","3");
-pairRow("2", pairs(261,260,12), 80, 430, "pref","10x30","2");
-pairRow("1", pairs(237,236,12), 80, 500, "pref","10x30","1");
-label(80, 278, "10×30 Preferred");
-label(80, 548, "16×42 on docks 1–2 (blue)");
-svg.appendChild(el("rect",{x:430,y:470,width:54,height:22,rx:4,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:457,y:485,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
-
-/* Standard vertical piers 7–13 */
-const east=[
-  {id:"7",  left:seq(96,81),  right:seq(65,80),  x:760},
-  {id:"8",  left:seq(128,113),right:seq(97,112), x:860},
-  {id:"9",  left:seq(160,145),right:seq(129,144),x:960},
-  {id:"10", left:seq(192,177),right:seq(161,176),x:1060},
-  {id:"11", left:seq(224,209),right:seq(193,208),x:1160},
-  {id:"12", left:seq(324,309),right:seq(293,308),x:1260},
-  {id:"13", left:seq(356,341),right:seq(325,340),x:1360}
+/* Actual marina slip numbers from Tiffany's drawing */
+const docks=[
+  {id:"5", title:"Dock 5 · 10×30 Preferred", pairs: zipPairs(seq(282,273), seq(283,292))},
+  {id:"4", title:"Dock 4 · 10×30 Preferred", pairs: zipPairs(seq(19,32), seq(14,1))},
+  {id:"3", title:"Dock 3 · 10×30 Preferred", pairs: zipPairs(seq(49,64), seq(48,33))},
+  {id:"2", title:"Dock 2 · 10×30 / 16×42", pairs: zipPairs(seq(261,272), seq(260,249))},
+  {id:"1", title:"Dock 1 · 10×30 / 16×42", pairs: zipPairs(seq(237,248), seq(236,225))},
+  {id:"7", title:"Dock 7 · 10×30", pairs: zipPairs(seq(65,80), seq(96,81))},
+  {id:"8", title:"Dock 8 · 10×30", pairs: zipPairs(seq(97,112), seq(128,113))},
+  {id:"9", title:"Dock 9 · 10×30", pairs: zipPairs(seq(129,144), seq(160,145))},
+  {id:"10", title:"Dock 10 · 10×30", pairs: zipPairs(seq(161,176), seq(192,177))},
+  {id:"11", title:"Dock 11 · 10×30", pairs: zipPairs(seq(193,208), seq(224,209))},
+  {id:"12", title:"Dock 12 · 10×30", pairs: zipPairs(seq(293,308), seq(324,309))},
+  {id:"13", title:"Dock 13 · 10×30", pairs: zipPairs(seq(325,340), seq(356,341))},
+  {id:"Sales", title:"Sales slips · 10×34", pairs: zipPairs(seq(841,848), seq(856,849))},
+  {id:"Cruiser", title:"Cruiser dock", pairs: [[800,801],[808,802],[809,803],[810,804],[811,805],[812,806],[813,807],[814,null],[815,null],[816,null]]},
+  {id:"Houseboats", title:"Houseboat dock", pairs: zipPairs(seq(817,830), seq(831,838).concat([null,null,null,null,null,null]))},
+  {id:"Fuel", title:"Fuel dock 20×87", pairs: [[839,840]]},
+  {id:"Work boat", title:"Work boat", pairs: [["WB",null]]}
 ];
-label(760, 278, "10×30 Standard");
-svg.appendChild(el("rect",{x:748,y:288,width:700,height:16,rx:2,fill:"#b7b3a8"}));
-east.forEach(d=>{
-  const n=d.left.length, w=18,h=13,gap=2;
-  const len=n*(h+gap)+20;
-  svg.appendChild(el("rect",{x:d.x,y:288,width:14,height:len,rx:2,fill:"#b7b3a8"}));
-  label(d.x+2, 282, d.id);
-  d.left.forEach((num,i)=>addSlip(num,d.id,"std","10x30", d.x-w-2, 308+i*(h+gap), w,h, d.id));
-  d.right.forEach((num,i)=>addSlip(num,d.id,"std","10x30", d.x+16, 308+i*(h+gap), w,h, d.id));
-});
-
-/* Marina store + fuel + courtesy */
-svg.appendChild(el("rect",{x:80,y:600,width:90,height:40,rx:4,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:125,y:624,"text-anchor":"middle",fill:"#fff","font-size":11},"Marina Store"));
-svg.appendChild(el("text",{x:180,y:614,fill:"#9ad","font-size":10},"Wave runners"));
-label(80, 660, "Fuel stalls");
-for(let i=0;i<5;i++){
-  addSlip("F"+(i+1), "Fuel", "fuel","Fuel stall", 80+i*28, 668, 24, 14, "Fuel");
+function allNums(){
+  const o=[];
+  docks.forEach(d=>d.pairs.forEach(p=>p.forEach(n=>{if(n!=null)o.push({n,dock:d.id,title:d.title})})));
+  return o;
 }
-label(230, 660, "Courtesy");
-for(let i=0;i<8;i++){
-  addSlip("C"+(i+1), "Courtesy", "courtesy","Courtesy", 230+(i%4)*28, 668+Math.floor(i/4)*18, 24, 14, "All");
-}
-
-/* Sales 841–856 */
-label(80, 720, "Sales 10×34");
-(function(){
-  const left=seq(841,848), right=seq(856,849);
-  left.forEach((n,i)=>addSlip(n,"Sales","sales","10x34", 80, 728+i*16, 28,14, "Sales"));
-  right.forEach((n,i)=>addSlip(n,"Sales","sales","10x34", 112, 728+i*16, 28,14, "Sales"));
-})();
-
-/* Cruiser 800–816 */
-label(200, 720, "Cruiser dock");
-(function(){
-  const left=[800,808,809,810,811,812,813,814,815,816];
-  const right=[801,802,803,804,805,806,807];
-  left.forEach((n,i)=>addSlip(n,"Cruiser","cruiser","10x34", 200, 728+i*16, 26,14, "Cruiser"));
-  right.forEach((n,i)=>addSlip(n,"Cruiser","cruiser","10x34", 230, 728+i*16, 26,14, "Cruiser"));
-  addSlip("WB","Work boat","hb2","Work boat", 200, 728+10*16, 56,16, "Work boat");
-})();
-svg.appendChild(el("rect",{x:270,y:820,width:70,height:36,rx:4,fill:"#e7a0b8"}));
-svg.appendChild(el("text",{x:305,y:842,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
-
-/* Houseboat dock 817–840 */
-label(380, 720, "New houseboat dock");
-(function(){
-  seq(817,826).forEach((n,i)=>addSlip(n,"Houseboats","hb","12x38", 380, 728+i*15, 30,13, "Houseboats"));
-  seq(827,830).forEach((n,i)=>addSlip(n,"Houseboats","hb2","12x30", 380, 728+10*15+i*15, 30,13, "Houseboats"));
-  seq(831,838).forEach((n,i)=>addSlip(n,"Houseboats","hb","12x38", 414, 728+i*15, 30,13, "Houseboats"));
-  addSlip(839,"Fuel","fuel","20x87", 380, 728+14*15, 64,22, "Fuel");
-  addSlip(840,"Fuel","fuel","20x87", 380, 728+14*15+24, 64,22, "Fuel");
-})();
-svg.appendChild(el("text",{x:454,y:900,fill:"#c5d8d6","font-size":10},"Emma's Room · 24×100"));
-
-const layer=el("g",{id:"slips"});
-svg.appendChild(layer);
-let selected=null, filter="All";
-function fillFor(s){
-  const rec=data[s.id];
-  if(rec && rec.status==="occupied") return "#b55a32";
-  if(rec && rec.status==="reserved") return "#d7b45a";
-  return COLORS[s.kind]||COLORS.vacant;
-}
-function match(s,f){
-  if(!f||f==="All") return true;
-  return s.filter===f || s.dock===f;
-}
-function redraw(){
-  layer.innerHTML="";
-  slips.forEach(s=>{
-    const g=el("g",{"data-id":s.id, class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim")});
-    g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:1.5,fill:fillFor(s),stroke:"#3d4443","stroke-width":.4}));
-    const t=el("text",{x:s.x+s.w/2, y:s.y+s.h/2+3, "text-anchor":"middle", fill:"#1c2423", "font-size": Math.max(6, Math.min(8,s.w/3))}, String(s.num).replace(/^F|^C/,""));
-    g.appendChild(t);
-    layer.appendChild(g);
-  });
-}
-document.getElementById("count").textContent = slips.filter(s=>String(s.num).match(/^\d+$/)).length + " numbered slips";
+const NUMS=allNums();
+let filter="All", selected=null;
 const chips=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Work boat","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
 chips.forEach(c=>{
   const b=document.createElement("button");
   b.className="chip"+(c==="All"?" on":"");
   b.textContent=c;
-  b.onclick=()=>{filter=c;[...chipsEl.children].forEach(x=>x.classList.toggle("on",x.textContent===c));redraw();};
+  b.onclick=()=>{filter=c;[...chipsEl.children].forEach(x=>x.classList.toggle("on",x.textContent===c));renderPad();};
   chipsEl.appendChild(b);
 });
-redraw();
-svg.addEventListener("click",e=>{
-  const t=e.target.closest("[data-id]"); if(!t) return;
-  select(t.getAttribute("data-id"));
-});
-function select(id){
-  selected=id;
-  const s=slips.find(x=>x.id===id);
-  const rec=data[id]||{status:"vacant",boat:"",notes:""};
+function stOf(n){return (data[n]&&data[n].status)||"vacant"}
+function renderPad(){
+  const pad=document.getElementById("pad");
+  const show=filter==="All"?docks:docks.filter(d=>d.id===filter);
+  document.getElementById("dock-title").textContent = filter==="All"?"Pick a dock, then a slip number":(show[0]&&show[0].title)||filter;
+  pad.innerHTML="";
+  show.forEach(d=>{
+    if(filter==="All"){
+      const h=document.createElement("h2"); h.textContent=d.title; pad.appendChild(h);
+    }
+    const g=document.createElement("div"); g.className="grid";
+    d.pairs.forEach(pair=>{
+      const col=document.createElement("div"); col.className="pair";
+      pair.forEach(n=>{
+        if(n==null) return;
+        const b=document.createElement("button");
+        b.className="slipbtn "+stOf(n)+(String(selected)===String(n)?" on":"");
+        b.textContent=n;
+        b.onclick=()=>select(n,d);
+        col.appendChild(b);
+      });
+      g.appendChild(col);
+    });
+    pad.appendChild(g);
+  });
+}
+function select(n,d){
+  selected=n;
+  const rec=data[n]||{status:"vacant",boat:"",notes:""};
   document.getElementById("slip-detail").hidden=false;
-  document.getElementById("slip-title").textContent = (String(s.num).match(/^\d+$/)?"Slip ":"") + s.num;
-  document.getElementById("slip-meta").textContent = "Dock "+s.dock+" · "+s.size;
+  document.getElementById("slip-title").textContent="Slip "+n;
+  document.getElementById("slip-meta").textContent=(d&&d.title)||"";
   document.getElementById("boat").value=rec.boat||"";
   document.getElementById("notes").value=rec.notes||"";
   document.querySelectorAll(".st button").forEach(b=>b.classList.toggle("on", b.dataset.st===(rec.status||"vacant")));
-  showTab("slip"); redraw();
+  showTab("slip"); renderPad(); renderDir();
 }
 document.querySelectorAll(".st button").forEach(b=>b.onclick=()=>{
-  if(!selected) return;
+  if(selected==null) return;
   data[selected]=data[selected]||{};
-  data[selected].status=b.dataset.st; save(data); select(selected);
+  data[selected].status=b.dataset.st; save(data); select(selected, docks.find(d=>d.pairs.some(p=>p.includes(selected)||p.includes(Number(selected)))));
 });
 ["boat","notes"].forEach(fid=>{
   document.getElementById(fid).addEventListener("input",()=>{
-    if(!selected) return;
+    if(selected==null) return;
     data[selected]=data[selected]||{status:"vacant"};
     data[selected][fid]=document.getElementById(fid).value; save(data); renderDir();
   });
 });
 document.getElementById("q").addEventListener("input", function(){
-  const v=this.value.trim().toLowerCase(); if(!v) return;
-  const hit=slips.find(s=>String(s.num)===v || String(s.num).includes(v) || ("dock "+s.dock).includes(v) || s.dock.toLowerCase()===v);
-  if(hit) select(hit.id);
+  const v=this.value.trim();
+  if(!v) return;
+  const hit=NUMS.find(x=>String(x.n)===v);
+  if(!hit) return;
+  filter=hit.dock;
+  [...chipsEl.children].forEach(x=>x.classList.toggle("on", x.textContent===filter));
+  const d=docks.find(dd=>dd.id===hit.dock);
+  select(hit.n,d);
 });
 function showTab(name){
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===name));
@@ -328,24 +204,30 @@ function renderDir(){
   const list=document.getElementById("dir-list");
   const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));
   if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}
-  list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");
-  list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));
+  list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>Slip ${r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");
+  list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>{
+    const hit=NUMS.find(x=>String(x.n)===n.dataset.jump);
+    if(!hit) return;
+    filter=hit.dock;
+    [...chipsEl.children].forEach(x=>x.classList.toggle("on", x.textContent===filter));
+    select(hit.n, docks.find(d=>d.id===hit.dock));
+  });
 }
-renderDir();
+renderPad(); renderDir();
+
 let scale=1,tx=0,ty=0;
-const apply=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+const img=document.getElementById("map");
+const apply=()=>{img.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;};
 const chart=document.getElementById("chart");
-chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.4,Math.max(.4,scale*(e.deltaY<0?1.08:0.92)));apply();},{passive:false});
+chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(4,Math.max(.4,scale*(e.deltaY<0?1.08:0.92)));apply();},{passive:false});
 let drag=null;
-chart.addEventListener("pointerdown",e=>{if(e.target.closest("[data-id]"))return;drag={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);});
+chart.addEventListener("pointerdown",e=>{drag={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);});
 chart.addEventListener("pointermove",e=>{if(!drag)return;tx=e.clientX-drag.x;ty=e.clientY-drag.y;apply();});
 chart.addEventListener("pointerup",()=>drag=null);
 const fit=()=>{scale=1;tx=0;ty=0;apply();};
-document.getElementById("z-in").onclick=()=>{scale=Math.min(3.4,scale*1.15);apply();};
+document.getElementById("z-in").onclick=()=>{scale=Math.min(4,scale*1.15);apply();};
 document.getElementById("z-out").onclick=()=>{scale=Math.max(.4,scale/1.15);apply();};
 document.getElementById("z-full").onclick=fit;
-document.getElementById("btn-fit").onclick=fit;
-document.getElementById("btn-print").onclick=()=>window.print();
 </script>
 </body>
 </html>
