@@ -1,6 +1,6 @@
 /* Greers Ferry Lake Explorer — service worker
    Caches the app shell. Map tiles are cached opportunistically as they are viewed. */
-const CACHE = "gfl-explorer-v8";
+const CACHE = "gfl-explorer-v9";
 const SHELL = ["./index.html", "./coves.js", "./manifest.json", "./icon-192.png", "./icon-512.png", "./hist-prelake-valley.jpg"];
 
 self.addEventListener("install", (e) => {
