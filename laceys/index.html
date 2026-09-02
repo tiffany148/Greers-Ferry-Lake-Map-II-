@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Lacey's Narrows · slip chart</title>
+<meta name="theme-color" content="#0d3d42" />
+<style>
+  :root {
+    --bg:#0d3d42; --bg2:#0a3338; --ink:#f4f1ea; --muted:#c5d5d3;
+    --accent:#1a6b6f; --chip:#134e52; --paper:#e7e0d2; --dock:#cfc6b4;
+    --walk:#9aa3a1; --water:#0d3d42; --land:#d9d0be; --safe:env(safe-area-inset-top,0px);
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; margin:0; font-family:-apple-system,system-ui,Segoe UI,sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:calc(12px + var(--safe)) 16px 8px; }
+  .kicker { font-size:11px; letter-spacing:.14em; color:var(--muted); }
+  .top { display:flex; align-items:flex-end; gap:16px; }
+  h1 { margin:2px 0 0; font-size:28px; font-weight:650; }
+  .meta { margin-left:auto; text-align:right; font-size:13px; color:var(--muted); }
+  .tools { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+  .iconbtn { width:36px; height:36px; border:0; border-radius:10px; background:#125156; color:var(--ink); cursor:pointer; }
+  .search { margin:8px 16px 0; }
+  .search input { width:100%; border:0; border-radius:12px; padding:12px 14px; background:#125156; color:var(--ink); font-size:15px; }
+  .chips { display:flex; gap:8px; overflow-x:auto; padding:10px 16px 8px; }
+  .chip { flex:0 0 auto; border:0; border-radius:999px; padding:8px 14px; background:var(--chip); color:var(--ink); font-size:14px; cursor:pointer; }
+  .chip.on { background:#d7eceb; color:#0d3d42; font-weight:700; }
+  .wrap { display:grid; grid-template-columns:1fr 300px; height:calc(100% - 168px); min-height:420px; }
+  .chart {
+    position:relative; margin:0 0 0 12px; border-radius:16px 0 0 0; overflow:hidden; background:var(--water);
+    cursor:grab;
+  }
+  .chart:active { cursor:grabbing; }
+  svg { transform-origin: 0 0; }
+  .slip { cursor:pointer; stroke:#5d6564; stroke-width:.6; }
+  .slip.vacant { fill:#ece7db; }
+  .slip.occupied { fill:#c9845a; }
+  .slip.reserved { fill:#e2c36b; }
+  .slip.on { stroke:#fff; stroke-width:1.6; }
+  .slip.dim { opacity:.28; }
+  .walk { fill:var(--walk); }
+  .land { fill:var(--land); }
+  .label { fill:#d7eceb; font-size:11px; font-family:inherit; }
+  .label-dark { fill:#3d4443; font-size:10px; font-weight:700; }
+  .zoom { position:absolute; right:12px; bottom:12px; display:flex; flex-direction:column; gap:6px; }
+  .zoom button { width:36px; height:36px; border:0; border-radius:10px; background:#fff; color:#173; font-size:18px; cursor:pointer; }
+  aside { background:#0b363b; padding:14px 16px; overflow:auto; }
+  .tabs { display:flex; gap:18px; margin-bottom:12px; }
+  .tabs button { background:none; border:0; color:var(--muted); font-size:15px; padding:0 0 6px; cursor:pointer; }
+  .tabs button.on { color:var(--ink); border-bottom:2px solid #d7eceb; }
+  aside h2 { font-size:13px; margin:0 0 8px; }
+  aside p, aside label { font-size:13px; color:var(--muted); line-height:1.45; }
+  aside input, aside select, aside textarea {
+    width:100%; margin:6px 0 10px; border:0; border-radius:10px; padding:10px; background:#125156; color:var(--ink); font:inherit;
+  }
+  .status { display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 12px; }
+  .status button { border:0; border-radius:999px; padding:7px 10px; background:#125156; color:var(--ink); cursor:pointer; font-size:12px; }
+  .status button.on { background:#d7eceb; color:#0d3d42; font-weight:700; }
+  .dir-item { padding:8px 0; border-bottom:1px solid #16565a; font-size:13px; cursor:pointer; }
+  @media (max-width:860px) {
+    .wrap { grid-template-columns:1fr; height:auto; }
+    aside { min-height:280px; }
+    .chart { height:55vh; margin:0 12px; border-radius:16px; }
+  }
+  @media print {
+    header, .search, .chips, .zoom, .tools { display:none !important; }
+    .wrap { display:block; height:auto; }
+    aside { display:none; }
+    .chart { overflow:visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR</div>
+  <div class="top">
+    <h1>Lacey's Narrows</h1>
+    <div class="meta">
+      <div id="count">410 slips</div>
+      <div>Drag to pan · scroll to zoom</div>
+      <div class="tools">
+        <button class="iconbtn" id="btn-fit" title="Fit">▣</button>
+        <button class="iconbtn" id="btn-print" title="Print">⎙</button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="search"><input id="q" type="search" placeholder="Search slip number or dock..." /></div>
+<div class="chips" id="chips"></div>
+<div class="wrap">
+  <div class="chart" id="chart">
+    <svg id="svg" viewBox="0 0 1400 900" width="1400" height="900"></svg>
+    <div class="zoom">
+      <button id="z-in">+</button>
+      <button id="z-out">−</button>
+      <button id="z-full" title="Fit">⛶</button>
+    </div>
+  </div>
+  <aside>
+    <div class="tabs">
+      <button class="on" data-tab="slip">Slip</button>
+      <button data-tab="dir">Directory</button>
+    </div>
+    <div id="pane-slip">
+      <h2>Find a slip</h2>
+      <p>Search a number, tap a dock filter, or click any slip on the chart. Mark occupancy, boat names, and notes — they stay on this device.</p>
+      <div id="slip-detail" hidden>
+        <h2 id="slip-title">Slip</h2>
+        <div class="status">
+          <button data-st="vacant">Vacant</button>
+          <button data-st="occupied">Occupied</button>
+          <button data-st="reserved">Reserved</button>
+        </div>
+        <label>Boat name<input id="boat" /></label>
+        <label>Notes<textarea id="notes" rows="3"></textarea></label>
+      </div>
+      <p>Land and parking sit at the top.<br>Docks 1–5 are the covered west basin.<br>Docks 7–13 run toward the Hwy 92 bridge.<br>The L-dock holds houseboats, cruisers, and fuel.</p>
+    </div>
+    <div id="pane-dir" hidden>
+      <h2>Directory</h2>
+      <div id="dir-list"></div>
+    </div>
+  </aside>
+</div>
+<script>
+const STORE = "laceys-narrows-slips-v1";
+const load = () => { try { return JSON.parse(localStorage.getItem(STORE) || "{}"); } catch { return {}; } };
+const save = (d) => localStorage.setItem(STORE, JSON.stringify(d));
+let data = load();
+
+/* Dock geometry: west basin 1-5, east fingers 7-13, specials on the L */
+const docks = [
+  { id:"5", x:90,  y:170, slips:32, dir:"h", special:null },
+  { id:"4", x:90,  y:250, slips:32, dir:"h", special:null },
+  { id:"3", x:90,  y:330, slips:32, dir:"h", special:null },
+  { id:"2", x:90,  y:410, slips:28, dir:"h", special:null },
+  { id:"1", x:90,  y:490, slips:24, dir:"h", special:null },
+  { id:"7", x:560, y:170, slips:36, dir:"h", special:null },
+  { id:"8", x:560, y:240, slips:36, dir:"h", special:null },
+  { id:"9", x:560, y:310, slips:36, dir:"h", special:null },
+  { id:"10",x:560, y:380, slips:36, dir:"h", special:null },
+  { id:"11",x:560, y:450, slips:36, dir:"h", special:null },
+  { id:"12",x:560, y:520, slips:34, dir:"h", special:null },
+  { id:"13",x:560, y:590, slips:32, dir:"h", special:null },
+  { id:"Houseboats", x:90, y:600, slips:8, dir:"h", special:"Houseboats" },
+  { id:"Cruiser", x:250, y:600, slips:4, dir:"h", special:"Cruiser" },
+  { id:"Work boat", x:370, y:600, slips:2, dir:"h", special:"Work boat" },
+  { id:"Fuel", x:430, y:600, slips:1, dir:"h", special:"Fuel" },
+  { id:"Sales", x:460, y:600, slips:1, dir:"h", special:"Sales" }
+];
+
+const slips = [];
+function buildSlips(){
+  docks.forEach(d => {
+    const n = d.slips;
+    const pair = Math.ceil(n/2);
+    for (let i=0;i<n;i++){
+      const side = i < pair ? 0 : 1;
+      const idx = side === 0 ? i : i - pair;
+      const w=14, h=22, gap=3;
+      let x,y,rw,rh;
+      if (d.dir === "h") {
+        x = d.x + 40 + idx*(w+gap);
+        y = d.y + (side ? 18 : -h);
+        rw=w; rh=h;
+      }
+      const num = String(i+1).padStart(2,"0");
+      const id = d.special ? (d.id+"-"+num) : (d.id+"-"+num);
+      const label = d.special ? (d.id+" "+(i+1)) : (d.id+"-"+num);
+      slips.push({ id, dock:d.id, special:d.special, label, n:i+1, x, y, w:rw, h:rh });
+    }
+  });
+}
+buildSlips();
+document.getElementById("count").textContent = slips.length + " slips";
+
+const svg = document.getElementById("svg");
+function el(name, attrs, text){
+  const n = document.createElementNS("http://www.w3.org/2000/svg", name);
+  Object.entries(attrs).forEach(([k,v]) => n.setAttribute(k,v));
+  if (text) n.textContent = text;
+  return n;
+}
+function drawBase(){
+  svg.innerHTML = "";
+  svg.appendChild(el("rect", {x:0,y:0,width:1400,height:900, fill:"#0d3d42"}));
+  svg.appendChild(el("rect", {class:"land", x:60, y:40, width:1080, height:90, rx:8}));
+  svg.appendChild(el("text", {class:"label-dark", x:520, y:92, "text-anchor":"middle", "font-size":"22"}, "PARKING"));
+  svg.appendChild(el("rect", {class:"land", x:1160, y:40, width:80, height:760, rx:4}));
+  svg.appendChild(el("text", {class:"label-dark", x:1200, y:400, transform:"rotate(90 1200 400)", "font-size":"14"}, "Hwy 92 Bridge"));
+  svg.appendChild(el("text", {class:"label", x:700, y:860, "text-anchor":"middle", "font-size":"16"}, "NARROWS CHANNEL"));
+  svg.appendChild(el("text", {class:"label", x:200, y:155, "font-size":"12"}, "Marine Store"));
+  svg.appendChild(el("text", {class:"label", x:430, y:690, "font-size":"12"}, "Fuel Dock"));
+  svg.appendChild(el("text", {class:"label", x:90, y:690, "font-size":"12"}, "Service Area"));
+  docks.forEach(d => {
+    const pair = Math.ceil(d.slips/2);
+    const len = 40 + pair*17;
+    svg.appendChild(el("rect", {class:"walk", x:d.x, y:d.y, width:len, height:16, rx:2}));
+    svg.appendChild(el("text", {class:"label", x:d.x, y:d.y+12, "font-size":"11"}, d.special ? d.id : ("Dock "+d.id)));
+  });
+}
+drawBase();
+
+const slipLayer = el("g", {id:"slips"});
+svg.appendChild(slipLayer);
+function statusOf(id){ return (data[id] && data[id].status) || "vacant"; }
+function redrawSlips(filter){
+  slipLayer.innerHTML = "";
+  slips.forEach(s => {
+    const st = statusOf(s.id);
+    const r = el("rect", { class:"slip "+st, id:"s-"+s.id, x:s.x, y:s.y, width:s.w, height:s.h, rx:1.5, "data-id":s.id });
+    if (filter && !matchFilter(s, filter)) r.classList.add("dim");
+    if (selected === s.id) r.classList.add("on");
+    slipLayer.appendChild(r);
+  });
+}
+function matchFilter(s, f){
+  if (!f || f==="All") return true;
+  if (s.dock === f || s.special === f) return true;
+  return false;
+}
+
+let selected = null;
+let filter = "All";
+const chips = ["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Work boat","Fuel","Sales"];
+const chipsEl = document.getElementById("chips");
+chips.forEach(c => {
+  const b = document.createElement("button");
+  b.className = "chip"+(c==="All"?" on":"");
+  b.textContent = c;
+  b.onclick = () => { filter=c; [...chipsEl.children].forEach(x=>x.classList.toggle("on", x.textContent===c)); redrawSlips(filter); };
+  chipsEl.appendChild(b);
+});
+redrawSlips("All");
+
+svg.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-id]");
+  if (!t) return;
+  selectSlip(t.getAttribute("data-id"));
+});
+function selectSlip(id){
+  selected = id;
+  const s = slips.find(x => x.id===id);
+  document.getElementById("slip-detail").hidden = false;
+  document.getElementById("slip-title").textContent = s.label;
+  const rec = data[id] || { status:"vacant", boat:"", notes:"" };
+  document.getElementById("boat").value = rec.boat || "";
+  document.getElementById("notes").value = rec.notes || "";
+  document.querySelectorAll(".status button").forEach(b => b.classList.toggle("on", b.dataset.st===rec.status));
+  showTab("slip");
+  redrawSlips(filter);
+}
+document.querySelectorAll(".status button").forEach(b => {
+  b.onclick = () => {
+    if (!selected) return;
+    data[selected] = data[selected] || {};
+    data[selected].status = b.dataset.st;
+    save(data); redrawSlips(filter); selectSlip(selected);
+  };
+});
+["boat","notes"].forEach(fid => {
+  document.getElementById(fid).addEventListener("input", () => {
+    if (!selected) return;
+    data[selected] = data[selected] || { status:"vacant" };
+    data[selected][fid] = document.getElementById(fid).value;
+    save(data);
+    renderDir();
+  });
+});
+
+document.getElementById("q").addEventListener("input", function(){
+  const v = this.value.trim().toLowerCase();
+  if (!v) return;
+  const hit = slips.find(s => s.label.toLowerCase().includes(v) || s.id.toLowerCase().includes(v) || String(s.n)===v);
+  if (hit) selectSlip(hit.id);
+});
+
+function showTab(name){
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab===name));
+  document.getElementById("pane-slip").hidden = name!=="slip";
+  document.getElementById("pane-dir").hidden = name!=="dir";
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
+function renderDir(){
+  const list = document.getElementById("dir-list");
+  const rows = Object.keys(data).map(id => ({id, ...data[id]})).filter(r => r.boat || r.notes || (r.status && r.status!=="vacant"));
+  if (!rows.length) { list.innerHTML = "<p>No marked slips yet.</p>"; return; }
+  list.innerHTML = rows.map(r => `<div class="dir-item" data-jump="${r.id}"><b>${(slips.find(s=>s.id===r.id)||{}).label||r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");
+  list.querySelectorAll("[data-jump]").forEach(el => el.onclick = () => selectSlip(el.dataset.jump));
+}
+renderDir();
+
+/* pan / zoom */
+let scale=1, tx=0, ty=0;
+function apply(){ svg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; }
+const chart = document.getElementById("chart");
+chart.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const next = Math.min(3, Math.max(.5, scale * (e.deltaY<0 ? 1.08 : 0.92)));
+  scale = next; apply();
+}, {passive:false});
+let drag=null;
+chart.addEventListener("pointerdown", (e) => { if (e.target.closest("[data-id]")) return; drag={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); });
+chart.addEventListener("pointermove", (e) => { if (!drag) return; tx=e.clientX-drag.x; ty=e.clientY-drag.y; apply(); });
+chart.addEventListener("pointerup", () => drag=null);
+function fit(){ scale=1; tx=0; ty=0; apply(); }
+document.getElementById("z-in").onclick = () => { scale=Math.min(3,scale*1.15); apply(); };
+document.getElementById("z-out").onclick = () => { scale=Math.max(.5,scale/1.15); apply(); };
+document.getElementById("z-full").onclick = fit;
+document.getElementById("btn-fit").onclick = fit;
+document.getElementById("btn-print").onclick = () => window.print();
+</script>
+</body>
+</html>
