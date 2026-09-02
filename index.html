@@ -66,7 +66,8 @@
   <label class="row"><input type="radio" name="base" value="streets" /> Streets</label>
   <label class="row"><input type="radio" name="base" value="topo" /> Topo</label>
   <h2>Historical overlay</h2>
-  <label class="row"><input type="checkbox" id="hist-on" checked /> USGS historic topo</label>
+  <label class="row"><input type="checkbox" id="hist-on" /> USGS historic topo (scanned)</label>
+  <label class="row"><input type="checkbox" id="prelake-on" checked /> Pre-lake valley (1894)</label>
   <h2>Pins</h2>
   <div id="cats"></div>
 </div>
@@ -80,7 +81,7 @@
 </div>
 <div id="opacity-box" class="opacity-box">
   <span>Opacity</span>
-  <input id="hist-opacity" type="range" min="0" max="100" value="55" />
+  <input id="hist-opacity" type="range" min="0" max="100" value="65" />
 </div>
 <div class="fabs">
   <button class="fab ghost" id="btn-north" type="button" title="Reset north">N</button>
@@ -131,16 +132,28 @@ layers.satellite.addTo(map);
 
 const hist = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}", {
   maxZoom:15, opacity:0.55, attribution:"Esri / USGS historic topo"
-}).addTo(map);
+});
 const histOn = document.getElementById("hist-on");
+const prelakeOn = document.getElementById("prelake-on");
 const opacityBox = document.getElementById("opacity-box");
 const opacitySlider = document.getElementById("hist-opacity");
-function setHist(on){
-  if (on) { if (!map.hasLayer(hist)) hist.addTo(map); opacityBox.classList.remove("hidden"); }
-  else { if (map.hasLayer(hist)) map.removeLayer(hist); opacityBox.classList.add("hidden"); }
+const prelake = L.imageOverlay("hist-prelake-valley.jpg", [[35.50, -92.38], [35.68, -91.97]], {
+  opacity: 0.65, attribution: "USGS Mountain View 15-minute quad, 1894"
+}).addTo(map);
+function anyOverlay(){ return histOn.checked || prelakeOn.checked; }
+function setOverlays(){
+  if (histOn.checked) { if (!map.hasLayer(hist)) hist.addTo(map); }
+  else if (map.hasLayer(hist)) map.removeLayer(hist);
+  if (prelakeOn.checked) { if (!map.hasLayer(prelake)) prelake.addTo(map); }
+  else if (map.hasLayer(prelake)) map.removeLayer(prelake);
+  opacityBox.classList.toggle("hidden", !anyOverlay());
+  const o = opacitySlider.value / 100;
+  hist.setOpacity(o);
+  prelake.setOpacity(o);
 }
-histOn.onchange = function(){ setHist(this.checked); };
-opacitySlider.oninput = function(){ hist.setOpacity(this.value / 100); };
+histOn.onchange = setOverlays;
+prelakeOn.onchange = setOverlays;
+opacitySlider.oninput = setOverlays;
 
 
 const groups = {};
