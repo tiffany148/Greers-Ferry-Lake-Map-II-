@@ -35,8 +35,17 @@
   .note { position:absolute; left:10px; bottom:calc(14px + var(--safe-bot)); z-index:700; font-size:10px; color:#9bb4c4; max-width:52%; }
   .pin-form { display:none; position:absolute; z-index:950; left:50%; top:40%; transform:translate(-50%,-50%); width:min(300px,90vw); background:var(--panel); border-radius:16px; padding:16px; }
   .pin-form.open { display:block; }
-  .pin-form input { width:100%; margin:8px 0 12px; border:0; border-radius:10px; padding:10px; background:#123447; color:var(--ink); }
-  .pin-form .actions { display:flex; gap:8px; justify-content:flex-end; }
+  .pin-form input, .pin-form select, .pin-form textarea { width:100%; margin:8px 0 10px; border:0; border-radius:10px; padding:10px; background:#123447; color:var(--ink); font:inherit; }
+  .pin-form textarea { min-height:64px; resize:vertical; }
+  .pin-form .actions { display:flex; gap:8px; justify-content:flex-end; align-items:center; }
+  .pin-form .actions .grow { margin-right:auto; }
+  .pin-form button { border:0; border-radius:12px; padding:8px 14px; font-size:14px; background:#123447; color:var(--ink); }
+  .pin-form .danger { background:#5c2430; color:#ffd7de; }
+  .popup-actions { margin-top:10px; display:flex; gap:8px; }
+  .popup-actions button { border:0; border-radius:10px; padding:6px 10px; background:#123447; color:#e8f2f7; font-size:13px; }
+  .place-hint { display:none; position:absolute; z-index:850; left:50%; top:calc(58px + var(--safe-top)); transform:translateX(-50%); background:#c49a58; color:#071822; font-weight:700; font-size:13px; padding:8px 14px; border-radius:999px; white-space:nowrap; }
+  .place-hint.on { display:block; }
+  .fab.placing { box-shadow:0 0 0 3px #fff8; }
 
   .opacity-box {
     position:absolute; right:10px; bottom:calc(78px + var(--safe-bot)); z-index:800;
@@ -71,10 +80,22 @@
   <h2>Pins</h2>
   <div id="cats"></div>
 </div>
+<div id="place-hint" class="place-hint">Tap the map to drop a pin</div>
 <div id="pin-form" class="pin-form">
-  <strong>Drop a pin here</strong>
+  <strong id="pin-form-title">Drop a pin</strong>
   <input id="pin-name" type="text" placeholder="Name this spot" />
+  <select id="pin-cat">
+    <option>My pins</option>
+    <option>Cove</option>
+    <option>Marina</option>
+    <option>Park</option>
+    <option>Landmark</option>
+    <option>Town</option>
+    <option>Infrastructure</option>
+  </select>
+  <textarea id="pin-fact" placeholder="Note (optional)"></textarea>
   <div class="actions">
+    <button type="button" id="pin-delete" class="danger grow" hidden>Delete</button>
     <button type="button" id="pin-cancel">Cancel</button>
     <button type="button" id="pin-save" class="fab" style="width:auto;height:auto;border-radius:12px;padding:8px 14px;">Save</button>
   </div>
@@ -85,7 +106,7 @@
 </div>
 <div class="fabs">
   <button class="fab ghost" id="btn-north" type="button" title="Reset north">N</button>
-  <button class="fab" id="btn-pin" type="button" title="Pin map center">+</button>
+  <button class="fab" id="btn-pin" type="button" title="Add pin">+</button>
 </div>
 <p class="note">Not a navigation chart. USACE / public map data.</p>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -116,8 +137,35 @@ const extra = (typeof COVE_PINS !== "undefined") ? COVE_PINS : [];
 const ALL = PINS.concat(extra.map(function(p){
   return {name:p.name,lat:p.lat,lng:p.lng,cat:p.category||"Cove",fact:p.fact||"",tip:p.tip||""};
 }));
-const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6"};
+const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6","My pins":"#e07a5f"};
 function colorFor(cat){ return COLORS[cat] || "#c49a58"; }
+function esc(s){ return String(s||"").replace(/[&<>"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]; }); }
+function stockKey(p){ return p.name+"|"+p.lat+"|"+p.lng; }
+const STORE_USER = "gfl-user-pins";
+const STORE_OVR = "gfl-pin-overrides";
+let userPins = JSON.parse(localStorage.getItem(STORE_USER)||"[]");
+let overrides = JSON.parse(localStorage.getItem(STORE_OVR)||"{}");
+userPins = userPins.map(function(p,i){
+  if (!p.id) p.id = "u-"+Date.now()+"-"+i;
+  if (!p.cat) p.cat = "My pins";
+  return p;
+});
+function persistPins(){
+  localStorage.setItem(STORE_USER, JSON.stringify(userPins));
+  localStorage.setItem(STORE_OVR, JSON.stringify(overrides));
+}
+function visiblePins(){
+  const stock = ALL.map(function(p){
+    const key = stockKey(p);
+    const o = overrides[key];
+    if (o && o.deleted) return null;
+    const out = Object.assign({kind:"stock", key:key}, p);
+    if (o) { if (o.name!=null) out.name=o.name; if (o.lat!=null) out.lat=o.lat; if (o.lng!=null) out.lng=o.lng; if (o.cat) out.cat=o.cat; if (o.fact!=null) out.fact=o.fact; if (o.tip!=null) out.tip=o.tip; }
+    return out;
+  }).filter(Boolean);
+  const mine = userPins.map(function(p){ return Object.assign({kind:"user"}, p); });
+  return stock.concat(mine);
+}
 
 const map = L.map("map", { zoomControl:false }).fitBounds([[35.48,-92.36],[35.66,-91.97]]);
 L.control.zoom({ position:"bottomleft" }).addTo(map);
@@ -156,25 +204,48 @@ prelakeOn.onchange = setOverlays;
 opacitySlider.oninput = setOverlays;
 
 
-const groups = {};
-ALL.forEach(function(p){
-  if (!groups[p.cat]) groups[p.cat] = L.layerGroup();
-  L.circleMarker([p.lat,p.lng], { radius:7, color:"#fff", weight:1, fillColor:colorFor(p.cat), fillOpacity:0.95 })
-    .bindPopup("<b>"+p.name+"</b><br>"+(p.cat||"")+"<br>"+(p.fact||"")+(p.tip?"<br><i>"+p.tip+"</i>":""))
-    .addTo(groups[p.cat]);
-});
+let groups = {};
 const catsEl = document.getElementById("cats");
-Object.keys(groups).sort().forEach(function(cat){
-  groups[cat].addTo(map);
-  const id = "cat-"+cat.replace(/\s+/g,"-");
-  const row = document.createElement("label");
-  row.className = "row";
-  row.innerHTML = '<input type="checkbox" checked id="'+id+'" /> <span class="swatch" style="background:'+colorFor(cat)+'"></span> '+cat+' <span class="hits-meta">'+groups[cat].getLayers().length+'</span>';
-  catsEl.appendChild(row);
-  row.querySelector("input").onchange = function(){
-    if (this.checked) map.addLayer(groups[cat]); else map.removeLayer(groups[cat]);
-  };
-});
+const catOn = {};
+function popupHtml(p){
+  return "<b>"+esc(p.name)+"</b><br>"+esc(p.cat||"")+(p.fact?"<br>"+esc(p.fact):"")+(p.tip?"<br><i>"+esc(p.tip)+"</i>":"")+'<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-del">Delete</button></div>';
+}
+function bindPopupActions(marker, p){
+  marker.on("popupopen", function(){
+    const root = marker.getPopup().getElement();
+    if (!root) return;
+    const edit = root.querySelector(".pin-edit");
+    const del = root.querySelector(".pin-del");
+    if (edit) edit.onclick = function(){ marker.closePopup(); openPinForm(p); };
+    if (del) del.onclick = function(){ marker.closePopup(); if (confirm("Remove "+p.name+"?")) removePin(p); };
+  });
+}
+function renderPins(){
+  Object.keys(groups).forEach(function(cat){ map.removeLayer(groups[cat]); });
+  groups = {};
+  visiblePins().forEach(function(p){
+    if (!groups[p.cat]) groups[p.cat] = L.layerGroup();
+    const marker = L.circleMarker([p.lat,p.lng], { radius: p.kind==="user" ? 8 : 7, color:"#fff", weight:1, fillColor:colorFor(p.cat), fillOpacity:0.95 });
+    marker.bindPopup(popupHtml(p));
+    bindPopupActions(marker, p);
+    marker.addTo(groups[p.cat]);
+  });
+  catsEl.innerHTML = "";
+  Object.keys(groups).sort().forEach(function(cat){
+    const on = catOn[cat] !== false;
+    if (on) groups[cat].addTo(map);
+    const id = "cat-"+cat.replace(/\s+/g,"-");
+    const row = document.createElement("label");
+    row.className = "row";
+    row.innerHTML = '<input type="checkbox" '+(on?"checked":"")+' id="'+id+'" /> <span class="swatch" style="background:'+colorFor(cat)+'"></span> '+cat+' <span class="hits-meta">'+groups[cat].getLayers().length+'</span>';
+    catsEl.appendChild(row);
+    row.querySelector("input").onchange = function(){
+      catOn[cat] = this.checked;
+      if (this.checked) map.addLayer(groups[cat]); else map.removeLayer(groups[cat]);
+    };
+  });
+}
+renderPins();
 
 document.querySelectorAll('input[name="base"]').forEach(function(r){
   r.onchange = function(){
@@ -188,7 +259,15 @@ const sheet = document.getElementById("sheet");
 document.getElementById("btn-layers").onclick = function(){
   sheet.classList.toggle("open");
 };
-map.on("click", function(){ sheet.classList.remove("open"); hideHits(); });
+map.on("click", function(e){
+  sheet.classList.remove("open");
+  hideHits();
+  if (placing) {
+    placing = false;
+    syncPlaceUi();
+    openPinForm({kind:"new", lat:e.latlng.lat, lng:e.latlng.lng});
+  }
+});
 
 document.getElementById("btn-north").onclick = function(){ map.setBearing ? map.setBearing(0) : map.setView(map.getCenter(), map.getZoom()); };
 document.getElementById("btn-locate").onclick = function(){
@@ -222,12 +301,12 @@ function showHits(list){
 q.addEventListener("input", function(){
   const s = this.value.trim().toLowerCase();
   if (s.length < 2) { hideHits(); return; }
-  showHits(ALL.filter(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; }));
+  showHits(visiblePins().filter(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; }));
 });
 q.addEventListener("keydown", function(e){
   if (e.key === "Enter") {
     const s = this.value.trim().toLowerCase();
-    const hit = ALL.find(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; });
+    const hit = visiblePins().find(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; });
     if (hit) { map.setView([hit.lat, hit.lng], 15); hideHits(); }
   }
   if (e.key === "Escape") hideHits();
@@ -235,28 +314,73 @@ q.addEventListener("keydown", function(e){
 
 const pinForm = document.getElementById("pin-form");
 const pinName = document.getElementById("pin-name");
-document.getElementById("btn-pin").onclick = function(){
-  pinForm.classList.add("open");
-  pinName.value = "";
-  pinName.focus();
-};
-document.getElementById("pin-cancel").onclick = function(){ pinForm.classList.remove("open"); };
-function savePin(name, lat, lng){
-  L.circleMarker([lat,lng], { radius:8, color:"#fff", fillColor:"#e07a5f", fillOpacity:1 }).bindPopup(name).addTo(map);
-  const saved = JSON.parse(localStorage.getItem("gfl-user-pins")||"[]");
-  saved.push({name:name,lat:lat,lng:lng});
-  localStorage.setItem("gfl-user-pins", JSON.stringify(saved));
+const pinCat = document.getElementById("pin-cat");
+const pinFact = document.getElementById("pin-fact");
+const pinDelete = document.getElementById("pin-delete");
+const pinFormTitle = document.getElementById("pin-form-title");
+const placeHint = document.getElementById("place-hint");
+const btnPin = document.getElementById("btn-pin");
+let placing = false;
+let editing = null;
+function syncPlaceUi(){
+  placeHint.classList.toggle("on", placing);
+  btnPin.classList.toggle("placing", placing);
 }
+function closePinForm(){
+  pinForm.classList.remove("open");
+  editing = null;
+  pinDelete.hidden = true;
+}
+function openPinForm(p){
+  editing = p;
+  pinFormTitle.textContent = p.kind==="new" ? "Drop a pin" : "Edit pin";
+  pinName.value = p.name || "";
+  pinCat.value = p.cat && COLORS[p.cat] ? p.cat : (p.kind==="new" ? "My pins" : (p.cat || "My pins"));
+  if (![].some.call(pinCat.options, function(o){ return o.value===pinCat.value; })) {
+    pinCat.value = "My pins";
+  }
+  pinFact.value = p.fact || p.tip || "";
+  pinDelete.hidden = p.kind==="new";
+  pinForm.classList.add("open");
+  pinName.focus();
+}
+function removePin(p){
+  if (p.kind==="user") userPins = userPins.filter(function(x){ return x.id !== p.id; });
+  else overrides[p.key] = {deleted:true};
+  persistPins();
+  closePinForm();
+  renderPins();
+}
+btnPin.onclick = function(){
+  if (pinForm.classList.contains("open")) closePinForm();
+  placing = !placing;
+  syncPlaceUi();
+};
+document.getElementById("pin-cancel").onclick = function(){ closePinForm(); placing=false; syncPlaceUi(); };
+pinDelete.onclick = function(){
+  if (!editing || editing.kind==="new") return;
+  if (confirm("Remove "+(editing.name||"this pin")+"?")) removePin(editing);
+};
 document.getElementById("pin-save").onclick = function(){
   const name = pinName.value.trim();
   if (!name) return;
-  const c = map.getCenter();
-  savePin(name, c.lat, c.lng);
-  pinForm.classList.remove("open");
+  const cat = pinCat.value || "My pins";
+  const fact = pinFact.value.trim();
+  if (!editing || editing.kind==="new") {
+    const ll = editing && editing.lat!=null ? {lat:editing.lat,lng:editing.lng} : map.getCenter();
+    userPins.push({id:"u-"+Date.now(), name:name, lat:ll.lat, lng:ll.lng, cat:cat, fact:fact});
+  } else if (editing.kind==="user") {
+    userPins = userPins.map(function(x){
+      if (x.id !== editing.id) return x;
+      return Object.assign({}, x, {name:name, cat:cat, fact:fact});
+    });
+  } else {
+    overrides[editing.key] = {name:name, lat:editing.lat, lng:editing.lng, cat:cat, fact:fact, tip:""};
+  }
+  persistPins();
+  closePinForm();
+  renderPins();
 };
-JSON.parse(localStorage.getItem("gfl-user-pins")||"[]").forEach(function(pin){
-  L.circleMarker([pin.lat,pin.lng], { radius:8, color:"#fff", fillColor:"#e07a5f", fillOpacity:1 }).bindPopup(pin.name).addTo(map);
-});
 
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(function(){});
