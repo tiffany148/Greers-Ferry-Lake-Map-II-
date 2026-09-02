@@ -1,59 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Lacey's Narrows · slip chart</title>
-<meta name="theme-color" content="#0c3c41" />
+<meta name="theme-color" content="#0c3c41"/>
 <style>
-  :root {
-    --water:#0c3c41; --ink:#eef4f3; --muted:#b7c9c7; --chip:#13494e;
-    --land:#8a8f62; --paper:#e4dcc8; --walk:#b7b3a8; --roof:#6d7a78;
-  }
-  * { box-sizing:border-box; }
-  html,body { height:100%; margin:0; background:var(--water); color:var(--ink);
-    font-family:-apple-system,system-ui,Segoe UI,sans-serif; }
-  header { padding:calc(10px + env(safe-area-inset-top)) 18px 4px; }
-  .kicker { font-size:11px; letter-spacing:.16em; color:var(--muted); }
-  .row { display:flex; align-items:flex-end; gap:16px; }
-  h1 { margin:4px 0 0; font-size:30px; font-weight:650; letter-spacing:-.02em; }
-  .meta { margin-left:auto; text-align:right; font-size:13px; color:var(--muted); }
-  .iconrow { display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
-  .iconrow button { width:34px; height:34px; border:0; border-radius:9px; background:#15565b; color:var(--ink); cursor:pointer; }
-  .search { padding:8px 18px 0; }
-  .search input { width:100%; border:0; border-radius:12px; padding:12px 14px; font-size:15px; background:#15565b; color:var(--ink); }
-  .chips { display:flex; gap:8px; overflow-x:auto; padding:10px 18px; }
-  .chip { flex:0 0 auto; border:0; border-radius:999px; padding:8px 13px; background:var(--chip); color:var(--ink); cursor:pointer; font-size:14px; }
-  .chip.on { background:#d5ecea; color:#0c3c41; font-weight:700; }
-  .layout { display:grid; grid-template-columns:1fr 292px; height:calc(100% - 170px); }
-  .chart { position:relative; overflow:hidden; cursor:grab; margin-left:12px; border-radius:14px 0 0 0; background:#0a3539; }
-  .chart:active { cursor:grabbing; }
-  svg { transform-origin:0 0; }
-  .slip { cursor:pointer; stroke:#5c6463; stroke-width:.5; }
-  .slip.vacant { fill:var(--paper); }
-  .slip.occupied { fill:#c27a4a; }
-  .slip.reserved { fill:#d7b45a; }
-  .slip.on { stroke:#fff; stroke-width:1.5; }
-  .slip.dim { opacity:.22; }
-  .zoom { position:absolute; right:12px; bottom:12px; display:flex; flex-direction:column; gap:6px; }
-  .zoom button { width:36px; height:36px; border:0; border-radius:10px; background:#fff; color:#173b3e; font-size:18px; cursor:pointer; }
-  aside { background:#0a3338; padding:16px; overflow:auto; }
-  .tabs { display:flex; gap:16px; margin-bottom:14px; }
-  .tabs button { background:none; border:0; color:var(--muted); font-size:15px; padding-bottom:6px; cursor:pointer; }
-  .tabs button.on { color:var(--ink); box-shadow:inset 0 -2px 0 #d5ecea; }
-  aside h2 { font-size:15px; margin:0 0 8px; }
-  aside p { font-size:13px; color:var(--muted); line-height:1.5; }
-  aside label { display:block; font-size:12px; color:var(--muted); margin-top:8px; }
-  aside input, aside textarea { width:100%; border:0; border-radius:10px; padding:9px; margin-top:4px; background:#15565b; color:var(--ink); font:inherit; }
-  .st { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
-  .st button { border:0; border-radius:999px; padding:7px 10px; background:#15565b; color:var(--ink); cursor:pointer; font-size:12px; }
-  .st button.on { background:#d5ecea; color:#0c3c41; font-weight:700; }
-  .dir-item { padding:8px 0; border-bottom:1px solid #165156; font-size:13px; cursor:pointer; }
-  @media (max-width:860px){
-    .layout { grid-template-columns:1fr; height:auto; }
-    .chart { height:58vh; margin:0 12px; border-radius:14px; }
-  }
-  @media print { header,.search,.chips,.zoom,.iconrow { display:none!important; } aside{display:none;} .layout{display:block;} }
+:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e;--paper:#e4dcc8;--walk:#c9c4b8}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
+header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
+.kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
+.row{display:flex;align-items:flex-end;gap:16px}
+h1{margin:4px 0 0;font-size:28px;font-weight:650}
+.meta{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
+.iconrow{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.iconrow button{width:34px;height:34px;border:0;border-radius:9px;background:#15565b;color:var(--ink);cursor:pointer}
+.search{padding:8px 16px 0}
+.search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
+.chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
+.chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.layout{display:grid;grid-template-columns:1fr 300px;height:calc(100% - 168px)}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
+.chart:active{cursor:grabbing}
+svg{transform-origin:0 0}
+.slip{cursor:pointer;stroke:#4d5554;stroke-width:.4}
+.slip .n{pointer-events:none;font-size:7px;font-weight:700}
+.slip.on{stroke:#fff;stroke-width:1.4}
+.slip.dim{opacity:.18}
+.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173b3e;font-size:18px;cursor:pointer}
+aside{background:#0a3338;padding:16px;overflow:auto}
+.tabs{display:flex;gap:16px;margin-bottom:14px}
+.tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
+.tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
+aside h2{font-size:15px;margin:0 0 8px}
+aside p{font-size:13px;color:var(--muted);line-height:1.5}
+aside label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
+aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
+.st{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
+.st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
+.legend{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.6}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:58vh;margin:0 12px;border-radius:14px}}
+@media print{header,.search,.chips,.zoom,.iconrow{display:none!important}aside{display:none}.layout{display:block}}
 </style>
 </head>
 <body>
@@ -62,20 +55,20 @@
   <div class="row">
     <h1>Lacey's Narrows</h1>
     <div class="meta">
-      <div id="count">410 slips</div>
+      <div id="count"></div>
       <div>Drag to pan · scroll to zoom</div>
       <div class="iconrow">
-        <button id="btn-fit" title="Fit chart">▣</button>
+        <button id="btn-fit" title="Fit">▣</button>
         <button id="btn-print" title="Print">⎙</button>
       </div>
     </div>
   </div>
 </header>
-<div class="search"><input id="q" type="search" placeholder="Search slip number or dock..." /></div>
+<div class="search"><input id="q" type="search" placeholder="Search slip number or dock..."/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
   <div class="chart" id="chart">
-    <svg id="svg" viewBox="0 0 1600 1000" width="1600" height="1000"></svg>
+    <svg id="svg" viewBox="0 0 1900 1280" width="1900" height="1280"></svg>
     <div class="zoom">
       <button id="z-in">+</button>
       <button id="z-out">−</button>
@@ -89,18 +82,25 @@
     </div>
     <div id="pane-slip">
       <h2>Find a slip</h2>
-      <p>Search a number, tap a dock filter, or click any slip on the chart. Mark occupancy, boat names, and notes — they stay on this device.</p>
+      <p>Numbers match the marina dock map. Tap a slip to mark occupancy, boat name, and notes — they stay on this device.</p>
       <div id="slip-detail" hidden>
         <h2 id="slip-title">Slip</h2>
+        <p id="slip-meta"></p>
         <div class="st">
           <button data-st="vacant">Vacant</button>
           <button data-st="occupied">Occupied</button>
           <button data-st="reserved">Reserved</button>
         </div>
-        <label>Boat name<input id="boat" /></label>
+        <label>Boat name<input id="boat"/></label>
         <label>Notes<textarea id="notes" rows="3"></textarea></label>
       </div>
-      <p>Land and parking sit at the top.<br>Docks 1–5 are the covered west basin.<br>Docks 7–13 run toward the Hwy 92 bridge.<br>The L-dock holds houseboats, cruisers, and fuel.</p>
+      <div class="legend">
+        <div><span class="sw" style="background:#c4a574"></span>10×30 standard / preferred</div>
+        <div><span class="sw" style="background:#5aa0c4"></span>16×42</div>
+        <div><span class="sw" style="background:#d4896a"></span>10×34 sales / cruiser</div>
+        <div><span class="sw" style="background:#6dad6a"></span>12×38 houseboat</div>
+        <div><span class="sw" style="background:#e3c35c"></span>Fuel / 20×87</div>
+      </div>
     </div>
     <div id="pane-dir" hidden>
       <h2>Directory</h2>
@@ -109,7 +109,7 @@
   </aside>
 </div>
 <script>
-const STORE="laceys-narrows-slips-v2";
+const STORE="laceys-slips-v3";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
@@ -117,133 +117,175 @@ const svg=document.getElementById("svg");
 const NS="http://www.w3.org/2000/svg";
 function el(name,attrs,text){
   const n=document.createElementNS(NS,name);
-  Object.entries(attrs).forEach(([k,v])=>n.setAttribute(k,v));
+  Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));
   if(text!=null) n.textContent=text;
   return n;
 }
-
-/* Geometry matching the preview screenshot:
-   Parking grid across the top.
-   West basin: docks 5..1 as HORIZONTAL covered piers, stacked.
-   Spine walkway, then docks 7-13 as VERTICAL fingers toward the Hwy 92 bridge on the right.
-   L-dock / service cluster on the far left. */
-const west = [
-  {id:"5", x:210, y:200, n:32},
-  {id:"4", x:210, y:290, n:32},
-  {id:"3", x:210, y:380, n:32},
-  {id:"2", x:210, y:470, n:28},
-  {id:"1", x:210, y:560, n:24}
-];
-const east = [
-  {id:"7",  x:620, n:36},
-  {id:"8",  x:700, n:36},
-  {id:"9",  x:780, n:36},
-  {id:"10", x:860, n:36},
-  {id:"11", x:940, n:36},
-  {id:"12", x:1020,n:34},
-  {id:"13", x:1100,n:32}
-];
-const specials = [
-  {id:"Houseboats", x:40, y:200, n:8, w:22, h:48, gap:4, dir:"v"},
-  {id:"Cruiser", x:40, y:620, n:4, w:28, h:18, gap:3, dir:"h"},
-  {id:"Work boat", x:40, y:720, n:2, w:28, h:16, gap:3, dir:"h"},
-  {id:"Fuel", x:40, y:780, n:1, w:36, h:20, gap:3, dir:"h"},
-  {id:"Sales", x:90, y:780, n:1, w:36, h:20, gap:3, dir:"h"}
-];
-
+function seq(a,b){const o=[]; if(a<=b) for(let i=a;i<=b;i++) o.push(i); else for(let i=a;i>=b;i--) o.push(i); return o;}
+function pairs(a0,b0,n){
+  const out=[];
+  for(let i=0;i<n;i++) out.push([a0+i, b0-i]);
+  return out;
+}
+const COLORS={
+  std:"#c4a574", pref:"#c4a574", wide:"#5aa0c4", sales:"#d4896a",
+  cruiser:"#e2b7a4", hb:"#6dad6a", hb2:"#4f9ea3", fuel:"#e3c35c",
+  courtesy:"#f2efe6", vacant:"#e4dcc8"
+};
 const slips=[];
-function addSlip(dock, special, label, n, x,y,w,h){
-  slips.push({id:dock+"-"+n, dock, special, label, n, x,y,w,h});
+function addSlip(num, dock, kind, size, x,y,w,h, filter){
+  slips.push({id:String(num), num, dock, kind, size, x,y,w,h, filter:filter||dock});
 }
 
-function draw(){
-  svg.innerHTML="";
-  svg.appendChild(el("rect",{x:0,y:0,width:1600,height:1000,fill:"#0c3c41"}));
-  /* parking */
-  svg.appendChild(el("rect",{x:200,y:36,width:980,height:120,rx:6,fill:"#8a8f62"}));
-  for(let r=0;r<3;r++) for(let c=0;c<22;c++){
-    svg.appendChild(el("rect",{x:220+c*42, y:48+r*34, width:34, height:26, rx:2, fill:"#9aa06e", stroke:"#6f744e", "stroke-width":.6}));
-  }
-  svg.appendChild(el("text",{x:690,y:108,"text-anchor":"middle",fill:"#2f331f","font-size":22,"font-weight":700},"PARKING"));
-  /* bridge */
-  svg.appendChild(el("rect",{x:1280,y:36,width:90,height:900,fill:"#8d8d88"}));
-  svg.appendChild(el("text",{x:1325,y:480,fill:"#2a2a28","font-size":14,transform:"rotate(90 1325 480)"},"Hwy 92 Bridge"));
-  svg.appendChild(el("text",{x:800,y:970,"text-anchor":"middle",fill:"#c5d8d6","font-size":16,"letter-spacing":2},"NARROWS CHANNEL"));
-  /* west covered roofs */
-  west.forEach(d=>{
-    const pair=Math.ceil(d.n/2);
-    const len=36+pair*16;
-    svg.appendChild(el("rect",{x:d.x-8,y:d.y-28,width:len+16,height:60,rx:4,fill:"#5e6b69",opacity:.55}));
-    svg.appendChild(el("rect",{x:d.x,y:d.y,width:len,height:14,rx:2,fill:"#b7b3a8"}));
-    svg.appendChild(el("text",{x:d.x-4,y:d.y+11,fill:"#eef4f3","font-size":12,"text-anchor":"end"}, d.id));
-    for(let i=0;i<d.n;i++){
-      const side=i<pair?0:1;
-      const idx=side===0?i:i-pair;
-      const x=d.x+18+idx*16, w=13, h=20;
-      const y=side? d.y+16 : d.y-h;
-      addSlip(d.id,null,d.id+"-"+String(i+1).padStart(2,"0"), i+1, x,y,w,h);
-    }
-  });
-  /* east spine + vertical fingers */
-  svg.appendChild(el("rect",{x:600,y:188,width:560,height:16,rx:2,fill:"#b7b3a8"}));
-  east.forEach(d=>{
-    const pair=Math.ceil(d.n/2);
-    const len=20+pair*15;
-    svg.appendChild(el("rect",{x:d.x,y:188,width:14,height:len,rx:2,fill:"#b7b3a8"}));
-    svg.appendChild(el("text",{x:d.x+7,y:180,fill:"#eef4f3","font-size":12,"text-anchor":"middle"}, d.id));
-    for(let i=0;i<d.n;i++){
-      const side=i<pair?0:1;
-      const idx=side===0?i:i-pair;
-      const y=210+idx*15, h=13, w=20;
-      const x=side? d.x+16 : d.x-w;
-      addSlip(d.id,null,d.id+"-"+String(i+1).padStart(2,"0"), i+1, x,y,w,h);
-    }
-  });
-  /* L / service cluster */
-  svg.appendChild(el("rect",{x:28,y:188,width:150,height:14,rx:2,fill:"#b7b3a8"}));
-  svg.appendChild(el("rect",{x:28,y:188,width:14,height:430,rx:2,fill:"#b7b3a8"}));
-  svg.appendChild(el("text",{x:36,y:176,fill:"#c5d8d6","font-size":11},"Marine Store"));
-  svg.appendChild(el("text",{x:36,y:640,fill:"#c5d8d6","font-size":11},"Restrooms"));
-  svg.appendChild(el("text",{x:36,y:768,fill:"#c5d8d6","font-size":11},"Fuel Dock"));
-  specials.forEach(d=>{
-    svg.appendChild(el("text",{x:d.x+18,y:d.y-6,fill:"#c5d8d6","font-size":10}, d.id));
-    for(let i=0;i<d.n;i++){
-      let x,y;
-      if(d.dir==="v"){ x=d.x+22; y=d.y+i*(d.h+d.gap); }
-      else { x=d.x+22+i*(d.w+d.gap); y=d.y; }
-      addSlip(d.id,d.id, d.id+" "+(i+1), i+1, x,y,d.w,d.h);
-    }
+svg.appendChild(el("rect",{width:1900,height:1280,fill:"#0c3c41"}));
+svg.appendChild(el("text",{x:950,y:28,"text-anchor":"middle",fill:"#c5d8d6","font-size":14,"letter-spacing":3},"NARROWS CHANNEL"));
+svg.appendChild(el("text",{x:950,y:1264,"text-anchor":"middle",fill:"#c5d8d6","font-size":14,"letter-spacing":3},"NARROWS CHANNEL"));
+
+/* land / shop / parking */
+svg.appendChild(el("rect",{x:1180,y:48,width:220,height:70,rx:6,fill:"#8a8f62"}));
+svg.appendChild(el("text",{x:1290,y:78,"text-anchor":"middle",fill:"#243018","font-size":12,"font-weight":700},"SHOP / Service Dept."));
+svg.appendChild(el("text",{x:1290,y:96,"text-anchor":"middle",fill:"#243018","font-size":11},"Office"));
+svg.appendChild(el("ellipse",{cx:1290,cy:155,rx:88,ry:28,fill:"none",stroke:"#d5ecea","stroke-width":3}));
+svg.appendChild(el("text",{x:1290,y:160,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));
+svg.appendChild(el("rect",{x:1680,y:48,width:70,height:1180,fill:"#8d8d88"}));
+svg.appendChild(el("text",{x:1715,y:640,fill:"#2a2a28","font-size":13,transform:"rotate(90 1715 640)"},"Hwy 92 Bridge"));
+svg.appendChild(el("text",{x:1290,y:200,"text-anchor":"middle",fill:"#c5d8d6","font-size":11},"Main walkway · Dock 5 / 10 access"));
+
+function label(x,y,t,size){
+  svg.appendChild(el("text",{x,y,fill:"#d7eceb","font-size":size||12,"font-weight":700},t));
+}
+
+/* Dock 5 — horizontal finger, 10 pairs */
+(function(){
+  const x0=980, y=230, w=22, h=16, gap=2;
+  label(x0-70, y+8, "5");
+  svg.appendChild(el("rect",{x:x0-8,y:y-2,width:10* (w+gap)+16,height:h*2+10,rx:3,fill:"#b7b3a8"}));
+  const top=seq(292,283), bot=seq(273,282);
+  top.forEach((n,i)=>addSlip(n,"5","pref","10x30", x0+i*(w+gap), y-h-1, w,h,"5"));
+  bot.forEach((n,i)=>addSlip(n,"5","pref","10x30", x0+i*(w+gap), y+h+3, w,h,"5"));
+})();
+
+/* Preferred horizontal pair-rows: docks 4,3,2,1 */
+function pairRow(dock, pairsList, x0,y, kind, size, filter){
+  const w=20,h=15,gap=2;
+  svg.appendChild(el("rect",{x:x0-6,y:y-2,width:pairsList.length*(w+gap)+12,height:h*2+12,rx:3,fill:"#b7b3a8"}));
+  label(x0-22, y+h+4, dock);
+  pairsList.forEach((p,i)=>{
+    const k0 = (p[0]>=237 && p[0]<=272) || (p[1]>=237 && p[1]<=272) ? "wide" : kind;
+    const sz = k0==="wide" ? "16x42" : size;
+    addSlip(p[0], dock, k0, sz, x0+i*(w+gap), y, w,h, filter);
+    addSlip(p[1], dock, k0, sz, x0+i*(w+gap), y+h+4, w,h, filter);
   });
 }
-draw();
-document.getElementById("count").textContent = slips.length+" slips";
+pairRow("4", pairs(19,14,14), 80, 290, "pref","10x30","4");
+pairRow("3", pairs(49,48,16), 80, 360, "pref","10x30","3");
+pairRow("2", pairs(261,260,12), 80, 430, "pref","10x30","2");
+pairRow("1", pairs(237,236,12), 80, 500, "pref","10x30","1");
+label(80, 278, "10×30 Preferred");
+label(80, 548, "16×42 on docks 1–2 (blue)");
+svg.appendChild(el("rect",{x:430,y:470,width:54,height:22,rx:4,fill:"#2b6d8a"}));
+svg.appendChild(el("text",{x:457,y:485,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
+
+/* Standard vertical piers 7–13 */
+const east=[
+  {id:"7",  left:seq(96,81),  right:seq(65,80),  x:760},
+  {id:"8",  left:seq(128,113),right:seq(97,112), x:860},
+  {id:"9",  left:seq(160,145),right:seq(129,144),x:960},
+  {id:"10", left:seq(192,177),right:seq(161,176),x:1060},
+  {id:"11", left:seq(224,209),right:seq(193,208),x:1160},
+  {id:"12", left:seq(324,309),right:seq(293,308),x:1260},
+  {id:"13", left:seq(356,341),right:seq(325,340),x:1360}
+];
+label(760, 278, "10×30 Standard");
+svg.appendChild(el("rect",{x:748,y:288,width:700,height:16,rx:2,fill:"#b7b3a8"}));
+east.forEach(d=>{
+  const n=d.left.length, w=18,h=13,gap=2;
+  const len=n*(h+gap)+20;
+  svg.appendChild(el("rect",{x:d.x,y:288,width:14,height:len,rx:2,fill:"#b7b3a8"}));
+  label(d.x+2, 282, d.id);
+  d.left.forEach((num,i)=>addSlip(num,d.id,"std","10x30", d.x-w-2, 308+i*(h+gap), w,h, d.id));
+  d.right.forEach((num,i)=>addSlip(num,d.id,"std","10x30", d.x+16, 308+i*(h+gap), w,h, d.id));
+});
+
+/* Marina store + fuel + courtesy */
+svg.appendChild(el("rect",{x:80,y:600,width:90,height:40,rx:4,fill:"#2b6d8a"}));
+svg.appendChild(el("text",{x:125,y:624,"text-anchor":"middle",fill:"#fff","font-size":11},"Marina Store"));
+svg.appendChild(el("text",{x:180,y:614,fill:"#9ad","font-size":10},"Wave runners"));
+label(80, 660, "Fuel stalls");
+for(let i=0;i<5;i++){
+  addSlip("F"+(i+1), "Fuel", "fuel","Fuel stall", 80+i*28, 668, 24, 14, "Fuel");
+}
+label(230, 660, "Courtesy");
+for(let i=0;i<8;i++){
+  addSlip("C"+(i+1), "Courtesy", "courtesy","Courtesy", 230+(i%4)*28, 668+Math.floor(i/4)*18, 24, 14, "All");
+}
+
+/* Sales 841–856 */
+label(80, 720, "Sales 10×34");
+(function(){
+  const left=seq(841,848), right=seq(856,849);
+  left.forEach((n,i)=>addSlip(n,"Sales","sales","10x34", 80, 728+i*16, 28,14, "Sales"));
+  right.forEach((n,i)=>addSlip(n,"Sales","sales","10x34", 112, 728+i*16, 28,14, "Sales"));
+})();
+
+/* Cruiser 800–816 */
+label(200, 720, "Cruiser dock");
+(function(){
+  const left=[800,808,809,810,811,812,813,814,815,816];
+  const right=[801,802,803,804,805,806,807];
+  left.forEach((n,i)=>addSlip(n,"Cruiser","cruiser","10x34", 200, 728+i*16, 26,14, "Cruiser"));
+  right.forEach((n,i)=>addSlip(n,"Cruiser","cruiser","10x34", 230, 728+i*16, 26,14, "Cruiser"));
+  addSlip("WB","Work boat","hb2","Work boat", 200, 728+10*16, 56,16, "Work boat");
+})();
+svg.appendChild(el("rect",{x:270,y:820,width:70,height:36,rx:4,fill:"#e7a0b8"}));
+svg.appendChild(el("text",{x:305,y:842,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
+
+/* Houseboat dock 817–840 */
+label(380, 720, "New houseboat dock");
+(function(){
+  seq(817,826).forEach((n,i)=>addSlip(n,"Houseboats","hb","12x38", 380, 728+i*15, 30,13, "Houseboats"));
+  seq(827,830).forEach((n,i)=>addSlip(n,"Houseboats","hb2","12x30", 380, 728+10*15+i*15, 30,13, "Houseboats"));
+  seq(831,838).forEach((n,i)=>addSlip(n,"Houseboats","hb","12x38", 414, 728+i*15, 30,13, "Houseboats"));
+  addSlip(839,"Fuel","fuel","20x87", 380, 728+14*15, 64,22, "Fuel");
+  addSlip(840,"Fuel","fuel","20x87", 380, 728+14*15+24, 64,22, "Fuel");
+})();
+svg.appendChild(el("text",{x:454,y:900,fill:"#c5d8d6","font-size":10},"Emma's Room · 24×100"));
 
 const layer=el("g",{id:"slips"});
 svg.appendChild(layer);
 let selected=null, filter="All";
-function stOf(id){ return (data[id]&&data[id].status)||"vacant"; }
-function match(s,f){ if(!f||f==="All") return true; return s.dock===f || s.special===f; }
+function fillFor(s){
+  const rec=data[s.id];
+  if(rec && rec.status==="occupied") return "#b55a32";
+  if(rec && rec.status==="reserved") return "#d7b45a";
+  return COLORS[s.kind]||COLORS.vacant;
+}
+function match(s,f){
+  if(!f||f==="All") return true;
+  return s.filter===f || s.dock===f;
+}
 function redraw(){
   layer.innerHTML="";
   slips.forEach(s=>{
-    const r=el("rect",{class:"slip "+stOf(s.id), x:s.x,y:s.y,width:s.w,height:s.h, rx:1.4, "data-id":s.id});
-    if(!match(s,filter)) r.classList.add("dim");
-    if(selected===s.id) r.classList.add("on");
-    layer.appendChild(r);
+    const g=el("g",{"data-id":s.id, class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim")});
+    g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:1.5,fill:fillFor(s),stroke:"#3d4443","stroke-width":.4}));
+    const t=el("text",{x:s.x+s.w/2, y:s.y+s.h/2+3, "text-anchor":"middle", fill:"#1c2423", "font-size": Math.max(6, Math.min(8,s.w/3))}, String(s.num).replace(/^F|^C/,""));
+    g.appendChild(t);
+    layer.appendChild(g);
   });
 }
+document.getElementById("count").textContent = slips.filter(s=>String(s.num).match(/^\d+$/)).length + " numbered slips";
 const chips=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Work boat","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
 chips.forEach(c=>{
   const b=document.createElement("button");
   b.className="chip"+(c==="All"?" on":"");
   b.textContent=c;
-  b.onclick=()=>{ filter=c; [...chipsEl.children].forEach(x=>x.classList.toggle("on", x.textContent===c)); redraw(); };
+  b.onclick=()=>{filter=c;[...chipsEl.children].forEach(x=>x.classList.toggle("on",x.textContent===c));redraw();};
   chipsEl.appendChild(b);
 });
 redraw();
-
-svg.addEventListener("click", e=>{
+svg.addEventListener("click",e=>{
   const t=e.target.closest("[data-id]"); if(!t) return;
   select(t.getAttribute("data-id"));
 });
@@ -252,10 +294,11 @@ function select(id){
   const s=slips.find(x=>x.id===id);
   const rec=data[id]||{status:"vacant",boat:"",notes:""};
   document.getElementById("slip-detail").hidden=false;
-  document.getElementById("slip-title").textContent=s.label;
+  document.getElementById("slip-title").textContent = (String(s.num).match(/^\d+$/)?"Slip ":"") + s.num;
+  document.getElementById("slip-meta").textContent = "Dock "+s.dock+" · "+s.size;
   document.getElementById("boat").value=rec.boat||"";
   document.getElementById("notes").value=rec.notes||"";
-  document.querySelectorAll(".st button").forEach(b=>b.classList.toggle("on", b.dataset.st===rec.status));
+  document.querySelectorAll(".st button").forEach(b=>b.classList.toggle("on", b.dataset.st===(rec.status||"vacant")));
   showTab("slip"); redraw();
 }
 document.querySelectorAll(".st button").forEach(b=>b.onclick=()=>{
@@ -272,7 +315,7 @@ document.querySelectorAll(".st button").forEach(b=>b.onclick=()=>{
 });
 document.getElementById("q").addEventListener("input", function(){
   const v=this.value.trim().toLowerCase(); if(!v) return;
-  const hit=slips.find(s=>s.label.toLowerCase().includes(v)||s.id.toLowerCase().includes(v)||String(s.n)===v);
+  const hit=slips.find(s=>String(s.num)===v || String(s.num).includes(v) || ("dock "+s.dock).includes(v) || s.dock.toLowerCase()===v);
   if(hit) select(hit.id);
 });
 function showTab(name){
@@ -284,32 +327,22 @@ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dat
 function renderDir(){
   const list=document.getElementById("dir-list");
   const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));
-  if(!rows.length){ list.innerHTML="<p>No marked slips yet.</p>"; return; }
-  list.innerHTML=rows.map(r=>{
-    const lab=(slips.find(s=>s.id===r.id)||{}).label||r.id;
-    return `<div class="dir-item" data-jump="${r.id}"><b>${lab}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`;
-  }).join("");
+  if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}
+  list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");
   list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));
 }
 renderDir();
-
 let scale=1,tx=0,ty=0;
 const apply=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
 const chart=document.getElementById("chart");
-chart.addEventListener("wheel", e=>{
-  e.preventDefault();
-  scale=Math.min(3.2, Math.max(.45, scale*(e.deltaY<0?1.08:0.92))); apply();
-},{passive:false});
+chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.4,Math.max(.4,scale*(e.deltaY<0?1.08:0.92)));apply();},{passive:false});
 let drag=null;
-chart.addEventListener("pointerdown", e=>{
-  if(e.target.closest("[data-id]")) return;
-  drag={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId);
-});
-chart.addEventListener("pointermove", e=>{ if(!drag) return; tx=e.clientX-drag.x; ty=e.clientY-drag.y; apply(); });
-chart.addEventListener("pointerup", ()=>drag=null);
+chart.addEventListener("pointerdown",e=>{if(e.target.closest("[data-id]"))return;drag={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);});
+chart.addEventListener("pointermove",e=>{if(!drag)return;tx=e.clientX-drag.x;ty=e.clientY-drag.y;apply();});
+chart.addEventListener("pointerup",()=>drag=null);
 const fit=()=>{scale=1;tx=0;ty=0;apply();};
-document.getElementById("z-in").onclick=()=>{scale=Math.min(3.2,scale*1.15);apply();};
-document.getElementById("z-out").onclick=()=>{scale=Math.max(.45,scale/1.15);apply();};
+document.getElementById("z-in").onclick=()=>{scale=Math.min(3.4,scale*1.15);apply();};
+document.getElementById("z-out").onclick=()=>{scale=Math.max(.4,scale/1.15);apply();};
 document.getElementById("z-full").onclick=fit;
 document.getElementById("btn-fit").onclick=fit;
 document.getElementById("btn-print").onclick=()=>window.print();
