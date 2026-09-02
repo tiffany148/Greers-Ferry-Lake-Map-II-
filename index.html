@@ -37,6 +37,16 @@
   .pin-form.open { display:block; }
   .pin-form input { width:100%; margin:8px 0 12px; border:0; border-radius:10px; padding:10px; background:#123447; color:var(--ink); }
   .pin-form .actions { display:flex; gap:8px; justify-content:flex-end; }
+
+  .opacity-box {
+    position:absolute; right:10px; bottom:calc(78px + var(--safe-bot)); z-index:800;
+    background:#fff; color:#123; border-radius:10px; padding:8px 12px;
+    display:flex; align-items:center; gap:10px; box-shadow:0 4px 16px #0005;
+    font-size:13px; font-weight:600;
+  }
+  .opacity-box.hidden { display:none; }
+  .opacity-box input[type=range] { width:120px; accent-color:#3b82f6; }
+
 </style>
 </head>
 <body>
@@ -55,6 +65,8 @@
   <label class="row"><input type="radio" name="base" value="satellite" checked /> Satellite</label>
   <label class="row"><input type="radio" name="base" value="streets" /> Streets</label>
   <label class="row"><input type="radio" name="base" value="topo" /> Topo</label>
+  <h2>Historical overlay</h2>
+  <label class="row"><input type="checkbox" id="hist-on" checked /> USGS historic topo</label>
   <h2>Pins</h2>
   <div id="cats"></div>
 </div>
@@ -65,6 +77,10 @@
     <button type="button" id="pin-cancel">Cancel</button>
     <button type="button" id="pin-save" class="fab" style="width:auto;height:auto;border-radius:12px;padding:8px 14px;">Save</button>
   </div>
+</div>
+<div id="opacity-box" class="opacity-box">
+  <span>Opacity</span>
+  <input id="hist-opacity" type="range" min="0" max="100" value="55" />
 </div>
 <div class="fabs">
   <button class="fab ghost" id="btn-north" type="button" title="Reset north">N</button>
@@ -112,6 +128,20 @@ const layers = {
 };
 let base = "satellite";
 layers.satellite.addTo(map);
+
+const hist = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom:15, opacity:0.55, attribution:"Esri / USGS historic topo"
+}).addTo(map);
+const histOn = document.getElementById("hist-on");
+const opacityBox = document.getElementById("opacity-box");
+const opacitySlider = document.getElementById("hist-opacity");
+function setHist(on){
+  if (on) { if (!map.hasLayer(hist)) hist.addTo(map); opacityBox.classList.remove("hidden"); }
+  else { if (map.hasLayer(hist)) map.removeLayer(hist); opacityBox.classList.add("hidden"); }
+}
+histOn.onchange = function(){ setHist(this.checked); };
+opacitySlider.oninput = function(){ hist.setOpacity(this.value / 100); };
+
 
 const groups = {};
 ALL.forEach(function(p){
