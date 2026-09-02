@@ -9,32 +9,66 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-  :root { --bg:#071822; --ink:#e8f2f7; --accent:#c49a58; --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px); }
+  :root { --bg:#071822; --ink:#e8f2f7; --accent:#c49a58; --panel:#0e2a3a; --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px); }
   * { box-sizing:border-box; }
   html,body,#map { height:100%; margin:0; }
   body { font-family:-apple-system,system-ui,sans-serif; background:var(--bg); color:var(--ink); }
   header { position:absolute; top:0; left:0; right:0; z-index:800; display:flex; gap:8px; align-items:center; padding:calc(8px + var(--safe-top)) 10px 8px; background:linear-gradient(180deg,#071822ee,#07182200); }
-  h1 { font-size:15px; margin:0; flex:1; }
+  h1 { font-size:15px; margin:0; white-space:nowrap; }
   header button, header input { border:0; border-radius:12px; padding:10px 12px; font-size:14px; background:#123447; color:var(--ink); }
-  header input { flex:1.4; min-width:0; }
+  #search-wrap { position:relative; flex:1; min-width:0; }
+  header input { width:100%; }
+  #hits { display:none; position:absolute; left:0; right:0; top:100%; margin:4px 0 0; max-height:40vh; overflow:auto; background:var(--panel); border-radius:12px; list-style:none; padding:6px; box-shadow:0 8px 24px #0008; }
+  #hits button { display:block; width:100%; text-align:left; background:transparent; border:0; color:var(--ink); padding:8px 10px; border-radius:8px; font-size:14px; }
+  #hits button:hover, #hits button:focus { background:#123447; }
+  .hits-meta { font-size:11px; color:#9bb4c4; margin-left:6px; }
+  .sheet { display:none; position:absolute; z-index:900; right:10px; top:calc(56px + var(--safe-top)); width:min(280px, calc(100% - 20px)); background:var(--panel); border-radius:16px; padding:14px; box-shadow:0 12px 32px #0009; }
+  .sheet.open { display:block; }
+  .sheet h2 { font-size:13px; margin:0 0 10px; letter-spacing:.04em; text-transform:uppercase; color:#9bb4c4; }
+  .row { display:flex; align-items:center; gap:8px; margin:8px 0; font-size:14px; }
+  .row input { accent-color:var(--accent); }
+  .swatch { width:10px; height:10px; border-radius:50%; border:1px solid #fff8; }
   .fabs { position:absolute; right:10px; bottom:calc(18px + var(--safe-bot)); z-index:800; display:flex; flex-direction:column; gap:8px; }
   .fab { width:48px; height:48px; border-radius:50%; border:0; background:#c49a58; color:#071822; font-weight:700; }
   .ghost { background:#123447; color:var(--ink); }
   .leaflet-popup-content-wrapper, .leaflet-popup-tip { background:#0e2a3a; color:#e8f2f7; }
-  .note { position:absolute; left:10px; bottom:calc(14px + var(--safe-bot)); z-index:700; font-size:10px; color:#9bb4c4; max-width:55%; }
+  .note { position:absolute; left:10px; bottom:calc(14px + var(--safe-bot)); z-index:700; font-size:10px; color:#9bb4c4; max-width:52%; }
+  .pin-form { display:none; position:absolute; z-index:950; left:50%; top:40%; transform:translate(-50%,-50%); width:min(300px,90vw); background:var(--panel); border-radius:16px; padding:16px; }
+  .pin-form.open { display:block; }
+  .pin-form input { width:100%; margin:8px 0 12px; border:0; border-radius:10px; padding:10px; background:#123447; color:var(--ink); }
+  .pin-form .actions { display:flex; gap:8px; justify-content:flex-end; }
 </style>
 </head>
 <body>
 <header>
   <h1>Greers Ferry Lake</h1>
-  <input id="q" type="search" placeholder="Search dam, marina…" />
+  <div id="search-wrap">
+    <input id="q" type="search" placeholder="Search dam, marina, cove…" autocomplete="off" />
+    <ul id="hits"></ul>
+  </div>
   <button id="btn-layers" type="button">Layers</button>
   <button id="btn-locate" type="button">Me</button>
 </header>
 <div id="map"></div>
+<div id="sheet" class="sheet" role="dialog" aria-label="Map layers">
+  <h2>Base map</h2>
+  <label class="row"><input type="radio" name="base" value="satellite" checked /> Satellite</label>
+  <label class="row"><input type="radio" name="base" value="streets" /> Streets</label>
+  <label class="row"><input type="radio" name="base" value="topo" /> Topo</label>
+  <h2>Pins</h2>
+  <div id="cats"></div>
+</div>
+<div id="pin-form" class="pin-form">
+  <strong>Drop a pin here</strong>
+  <input id="pin-name" type="text" placeholder="Name this spot" />
+  <div class="actions">
+    <button type="button" id="pin-cancel">Cancel</button>
+    <button type="button" id="pin-save" class="fab" style="width:auto;height:auto;border-radius:12px;padding:8px 14px;">Save</button>
+  </div>
+</div>
 <div class="fabs">
-  <button class="fab ghost" id="btn-north" type="button">N</button>
-  <button class="fab" id="btn-pin" type="button">+</button>
+  <button class="fab ghost" id="btn-north" type="button" title="Reset north">N</button>
+  <button class="fab" id="btn-pin" type="button" title="Pin map center">+</button>
 </div>
 <p class="note">Not a navigation chart. USACE / public map data.</p>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -62,7 +96,12 @@ const PINS = [
   {name:"Devil's Fork Launch",lat:35.5919,lng:-92.1801,cat:"Park",fact:"North-arm public ramp."}
 ];
 const extra = (typeof COVE_PINS !== "undefined") ? COVE_PINS : [];
-const ALL = PINS.concat(extra.map(function(p){ return {name:p.name,lat:p.lat,lng:p.lng,cat:p.category||"Cove",fact:p.fact||""}; }));
+const ALL = PINS.concat(extra.map(function(p){
+  return {name:p.name,lat:p.lat,lng:p.lng,cat:p.category||"Cove",fact:p.fact||"",tip:p.tip||""};
+}));
+const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6"};
+function colorFor(cat){ return COLORS[cat] || "#c49a58"; }
+
 const map = L.map("map", { zoomControl:false }).fitBounds([[35.48,-92.36],[35.66,-91.97]]);
 L.control.zoom({ position:"bottomleft" }).addTo(map);
 L.control.scale({ imperial:true, metric:false }).addTo(map);
@@ -73,20 +112,42 @@ const layers = {
 };
 let base = "satellite";
 layers.satellite.addTo(map);
-function colorFor(cat){
-  return ({Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6"})[cat] || "#c49a58";
-}
+
+const groups = {};
 ALL.forEach(function(p){
+  if (!groups[p.cat]) groups[p.cat] = L.layerGroup();
   L.circleMarker([p.lat,p.lng], { radius:7, color:"#fff", weight:1, fillColor:colorFor(p.cat), fillOpacity:0.95 })
-    .bindPopup("<b>"+p.name+"</b><br>"+(p.cat||"")+"<br>"+(p.fact||""))
-    .addTo(map);
+    .bindPopup("<b>"+p.name+"</b><br>"+(p.cat||"")+"<br>"+(p.fact||"")+(p.tip?"<br><i>"+p.tip+"</i>":""))
+    .addTo(groups[p.cat]);
 });
+const catsEl = document.getElementById("cats");
+Object.keys(groups).sort().forEach(function(cat){
+  groups[cat].addTo(map);
+  const id = "cat-"+cat.replace(/\s+/g,"-");
+  const row = document.createElement("label");
+  row.className = "row";
+  row.innerHTML = '<input type="checkbox" checked id="'+id+'" /> <span class="swatch" style="background:'+colorFor(cat)+'"></span> '+cat+' <span class="hits-meta">'+groups[cat].getLayers().length+'</span>';
+  catsEl.appendChild(row);
+  row.querySelector("input").onchange = function(){
+    if (this.checked) map.addLayer(groups[cat]); else map.removeLayer(groups[cat]);
+  };
+});
+
+document.querySelectorAll('input[name="base"]').forEach(function(r){
+  r.onchange = function(){
+    map.removeLayer(layers[base]);
+    base = this.value;
+    layers[base].addTo(map);
+  };
+});
+
+const sheet = document.getElementById("sheet");
 document.getElementById("btn-layers").onclick = function(){
-  var order = ["satellite","streets","topo"];
-  map.removeLayer(layers[base]);
-  base = order[(order.indexOf(base)+1)%3];
-  layers[base].addTo(map);
+  sheet.classList.toggle("open");
 };
+map.on("click", function(){ sheet.classList.remove("open"); hideHits(); });
+
+document.getElementById("btn-north").onclick = function(){ map.setBearing ? map.setBearing(0) : map.setView(map.getCenter(), map.getZoom()); };
 document.getElementById("btn-locate").onclick = function(){
   navigator.geolocation.getCurrentPosition(function(pos){
     var ll = [pos.coords.latitude, pos.coords.longitude];
@@ -94,23 +155,69 @@ document.getElementById("btn-locate").onclick = function(){
     map.setView(ll, 14);
   });
 };
-document.getElementById("q").onchange = function(){
-  var s = this.value.toLowerCase();
-  var hit = ALL.find(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; });
-  if (hit) map.setView([hit.lat, hit.lng], 15);
-};
+
+const q = document.getElementById("q");
+const hits = document.getElementById("hits");
+function hideHits(){ hits.style.display = "none"; hits.innerHTML = ""; }
+function showHits(list){
+  hits.innerHTML = "";
+  list.slice(0,12).forEach(function(p){
+    const li = document.createElement("li");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = p.name+' <span class="hits-meta">'+p.cat+"</span>";
+    b.onclick = function(){
+      map.setView([p.lat, p.lng], 15);
+      hideHits();
+      q.value = p.name;
+    };
+    li.appendChild(b);
+    hits.appendChild(li);
+  });
+  hits.style.display = list.length ? "block" : "none";
+}
+q.addEventListener("input", function(){
+  const s = this.value.trim().toLowerCase();
+  if (s.length < 2) { hideHits(); return; }
+  showHits(ALL.filter(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; }));
+});
+q.addEventListener("keydown", function(e){
+  if (e.key === "Enter") {
+    const s = this.value.trim().toLowerCase();
+    const hit = ALL.find(function(p){ return p.name.toLowerCase().indexOf(s) >= 0; });
+    if (hit) { map.setView([hit.lat, hit.lng], 15); hideHits(); }
+  }
+  if (e.key === "Escape") hideHits();
+});
+
+const pinForm = document.getElementById("pin-form");
+const pinName = document.getElementById("pin-name");
 document.getElementById("btn-pin").onclick = function(){
-  var c = map.getCenter();
-  var name = prompt("Pin name?", "My pin");
-  if (!name) return;
-  L.circleMarker([c.lat,c.lng], { radius:8, color:"#fff", fillColor:"#e07a5f", fillOpacity:1 }).bindPopup(name).addTo(map);
-  var saved = JSON.parse(localStorage.getItem("gfl-user-pins")||"[]");
-  saved.push({name:name,lat:c.lat,lng:c.lng});
+  pinForm.classList.add("open");
+  pinName.value = "";
+  pinName.focus();
+};
+document.getElementById("pin-cancel").onclick = function(){ pinForm.classList.remove("open"); };
+function savePin(name, lat, lng){
+  L.circleMarker([lat,lng], { radius:8, color:"#fff", fillColor:"#e07a5f", fillOpacity:1 }).bindPopup(name).addTo(map);
+  const saved = JSON.parse(localStorage.getItem("gfl-user-pins")||"[]");
+  saved.push({name:name,lat:lat,lng:lng});
   localStorage.setItem("gfl-user-pins", JSON.stringify(saved));
+}
+document.getElementById("pin-save").onclick = function(){
+  const name = pinName.value.trim();
+  if (!name) return;
+  const c = map.getCenter();
+  savePin(name, c.lat, c.lng);
+  pinForm.classList.remove("open");
 };
 JSON.parse(localStorage.getItem("gfl-user-pins")||"[]").forEach(function(pin){
   L.circleMarker([pin.lat,pin.lng], { radius:8, color:"#fff", fillColor:"#e07a5f", fillOpacity:1 }).bindPopup(pin.name).addTo(map);
 });
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(function(){});
+}
 </script>
 </body>
 </html>
