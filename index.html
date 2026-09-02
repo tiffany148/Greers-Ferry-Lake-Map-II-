@@ -96,6 +96,7 @@
   <textarea id="pin-fact" placeholder="Note (optional)"></textarea>
   <div class="actions">
     <button type="button" id="pin-delete" class="danger grow" hidden>Delete</button>
+    <button type="button" id="pin-move" hidden>Move</button>
     <button type="button" id="pin-cancel">Cancel</button>
     <button type="button" id="pin-save" class="fab" style="width:auto;height:auto;border-radius:12px;padding:8px 14px;">Save</button>
   </div>
@@ -208,15 +209,17 @@ let groups = {};
 const catsEl = document.getElementById("cats");
 const catOn = {};
 function popupHtml(p){
-  return "<b>"+esc(p.name)+"</b><br>"+esc(p.cat||"")+(p.fact?"<br>"+esc(p.fact):"")+(p.tip?"<br><i>"+esc(p.tip)+"</i>":"")+'<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-del">Delete</button></div>';
+  return "<b>"+esc(p.name)+"</b><br>"+esc(p.cat||"")+(p.fact?"<br>"+esc(p.fact):"")+(p.tip?"<br><i>"+esc(p.tip)+"</i>":"")+'<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button></div>';
 }
 function bindPopupActions(marker, p){
   marker.on("popupopen", function(){
     const root = marker.getPopup().getElement();
     if (!root) return;
     const edit = root.querySelector(".pin-edit");
+    const mv = root.querySelector(".pin-move");
     const del = root.querySelector(".pin-del");
     if (edit) edit.onclick = function(){ marker.closePopup(); openPinForm(p); };
+    if (mv) mv.onclick = function(){ marker.closePopup(); beginMove(p); };
     if (del) del.onclick = function(){ marker.closePopup(); if (confirm("Remove "+p.name+"?")) removePin(p); };
   });
 }
@@ -262,6 +265,12 @@ document.getElementById("btn-layers").onclick = function(){
 map.on("click", function(e){
   sheet.classList.remove("open");
   hideHits();
+  if (moving) {
+    movePinTo(moving, e.latlng);
+    moving = null;
+    syncPlaceUi();
+    return;
+  }
   if (placing) {
     placing = false;
     syncPlaceUi();
@@ -321,15 +330,19 @@ const pinFormTitle = document.getElementById("pin-form-title");
 const placeHint = document.getElementById("place-hint");
 const btnPin = document.getElementById("btn-pin");
 let placing = false;
+let moving = null;
 let editing = null;
 function syncPlaceUi(){
-  placeHint.classList.toggle("on", placing);
+  if (moving) placeHint.textContent = "Tap the new spot";
+  else placeHint.textContent = "Tap the map to drop a pin";
+  placeHint.classList.toggle("on", !!(placing || moving));
   btnPin.classList.toggle("placing", placing);
 }
 function closePinForm(){
   pinForm.classList.remove("open");
   editing = null;
   pinDelete.hidden = true;
+  document.getElementById("pin-move").hidden = true;
 }
 function openPinForm(p){
   editing = p;
@@ -341,8 +354,35 @@ function openPinForm(p){
   }
   pinFact.value = p.fact || p.tip || "";
   pinDelete.hidden = p.kind==="new";
+  document.getElementById("pin-move").hidden = p.kind==="new";
   pinForm.classList.add("open");
   pinName.focus();
+}
+function beginMove(p){
+  closePinForm();
+  placing = false;
+  moving = p;
+  syncPlaceUi();
+}
+function movePinTo(p, ll){
+  if (p.kind==="user") {
+    userPins = userPins.map(function(x){
+      if (x.id !== p.id) return x;
+      return Object.assign({}, x, {lat:ll.lat, lng:ll.lng});
+    });
+  } else {
+    const prev = overrides[p.key] || {};
+    overrides[p.key] = {
+      name: prev.name != null ? prev.name : p.name,
+      lat: ll.lat,
+      lng: ll.lng,
+      cat: prev.cat || p.cat,
+      fact: prev.fact != null ? prev.fact : (p.fact || ""),
+      tip: prev.tip != null ? prev.tip : (p.tip || "")
+    };
+  }
+  persistPins();
+  renderPins();
 }
 function removePin(p){
   if (p.kind==="user") userPins = userPins.filter(function(x){ return x.id !== p.id; });
@@ -353,10 +393,15 @@ function removePin(p){
 }
 btnPin.onclick = function(){
   if (pinForm.classList.contains("open")) closePinForm();
+  moving = null;
   placing = !placing;
   syncPlaceUi();
 };
-document.getElementById("pin-cancel").onclick = function(){ closePinForm(); placing=false; syncPlaceUi(); };
+document.getElementById("pin-cancel").onclick = function(){ closePinForm(); placing=false; moving=null; syncPlaceUi(); };
+document.getElementById("pin-move").onclick = function(){
+  if (!editing || editing.kind==="new") return;
+  beginMove(editing);
+};
 pinDelete.onclick = function(){
   if (!editing || editing.kind==="new") return;
   if (confirm("Remove "+(editing.name||"this pin")+"?")) removePin(editing);
