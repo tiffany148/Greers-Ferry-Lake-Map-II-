@@ -127,28 +127,58 @@ function walk(x,y,w,h){svg.appendChild(el("rect",{x,y,width:w,height:h,rx:3,fill
 
 const SW=26, SH=16, GAP=3;
 
-function pairRow(dock, top, bot, x0,y, kind, size){
-  walk(x0-8, y-4, top.length*(SW+GAP)+16, SH*2+14);
-  lab(x0-22, y+SH+6, dock, 15);
-  top.forEach((n,i)=>add(n,dock,kind,size, x0+i*(SW+GAP), y, SW,SH, dock));
-  bot.forEach((n,i)=>add(n,dock,kind,size, x0+i*(SW+GAP), y+SH+6, SW,SH, dock));
+function nsFinger(dock, left, right, x, y, kind, size){
+  const w=40, h=15, g=3;
+  const n=Math.max(left.length, right.length);
+  walk(x+w+2, y-4, 12, n*(h+g)+10);
+  lab(x+w-4, y-14, dock, 15);
+  left.forEach((num,i)=>add(num,dock,kind,size, x, y+i*(h+g), w,h, dock));
+  right.forEach((num,i)=>add(num,dock,kind,size, x+w+16, y+i*(h+g), w,h, dock));
+  return {w: w*2+16, h: n*(h+g)+8};
+}
+function ewFinger(dock, top, bot, x, y, kind, size){
+  const w=16, h=36, g=3;
+  walk(x-4, y+h+2, top.length*(w+g)+10, 12);
+  lab(x, y-12, dock, 15);
+  top.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y, w,h, dock));
+  bot.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y+h+16, w,h, dock));
+  return {w: top.length*(w+g), h: h*2+16};
 }
 
-/* Docks 5 then 4–1 stacked, LEFT of marina store */
-const prefX=50;
+/* Docks 1–3: N–S with E–W slips. Dock 4 is a double that also houses 5. */
+const prefX=50, prefY=248;
 lab(prefX, 228, "10×30 Preferred", 13);
-pairRow("5", seq(282,273), seq(283,292), prefX, 248, "pref", "10×30 Preferred");
-pairRow("4", seq(19,32), seq(14,1), prefX, 318, "pref", "10×30 Preferred");
-pairRow("3", seq(49,64), seq(48,33), prefX, 388, "pref", "10×30 Preferred");
-pairRow("2", seq(261,272), seq(260,249), prefX, 458, "wide", "16×42");
-pairRow("1", seq(237,248), seq(236,225), prefX, 528, "wide", "16×42");
-svg.appendChild(el("rect",{x:prefX+400,y:502,width:58,height:22,rx:4,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:prefX+429,y:517,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
+nsFinger("1", seq(237,248), seq(236,225), prefX, prefY, "wide", "16×42");
+nsFinger("2", seq(261,272), seq(260,249), prefX+110, prefY, "wide", "16×42");
+nsFinger("3", seq(49,64), seq(48,33), prefX+220, prefY, "pref", "10×30 Preferred");
+/* Double dock 4+5: 4 is N–S / E–W slips; 5 is E–W / N–S slips */
+const d4x=prefX+330, d4y=prefY+70;
+lab(d4x, prefY-14, "4 / 5 double", 13);
+ewFinger("5", seq(282,273), seq(283,292), d4x, prefY, "pref", "10×30 Preferred");
+nsFinger("4", seq(19,32), seq(14,1), d4x, d4y, "pref", "10×30 Preferred");
+svg.appendChild(el("rect",{x:prefX+220,y:prefY+16*18+8,width:58,height:22,rx:4,fill:"#2b6d8a"}));
+svg.appendChild(el("text",{x:prefX+249,y:prefY+16*18+23,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
 
-/* Cluster west → east: cruiser E–W, houseboats N–S, sales/fuel N–S, store N–S */
-const clY=620;
+/* Marina store dock — rotated 90° into the gap between 1–4 and cruiser/houseboat */
+const storeY=590;
+const storeX=50;
+svg.appendChild(el("rect",{x:storeX,y:storeY,width:100,height:36,rx:6,fill:"#2b6d8a"}));
+svg.appendChild(el("text",{x:storeX+50,y:storeY+15,"text-anchor":"middle",fill:"#fff","font-size":12,"font-weight":700},"Marina Store"));
+svg.appendChild(el("text",{x:storeX+50,y:storeY+29,"text-anchor":"middle",fill:"#d7eceb","font-size":10},"Wave runners"));
+lab(storeX+110, storeY+14, "Store dock · Sales 10×34", 12);
+const sales=seq(856,841);
+const sW=16, sH=36, sG=3, sy=storeY+44;
+sales.forEach((n,i)=>add(n,"Sales","sales","10×34", storeX+110+i*(sW+sG), sy, sW,sH, "Sales"));
+add("WB","Work boat","hb2","Work boat", storeX+110+sales.length*(sW+sG), sy, 22,sH, "Work boat");
+const storeLen=110+sales.length*(sW+sG)+28;
+walk(storeX+106, sy+sH+2, sales.length*(sW+sG)+30, 12);
+lab(storeX+110, sy+sH+32, "Fuel · courtesy", 11);
+seq(1,4).forEach((i)=>add("F"+i,"Fuel","fuel","Fuel stall", storeX+110+(i-1)*22, sy+sH+16+12, 16,sH, "Fuel"));
+seq(1,6).forEach((i)=>add("C"+i,"Courtesy","courtesy","Courtesy", storeX+110+4*22+(i-1)*22, sy+sH+16+12, 16,sH, "All"));
 
-/* Cruiser — E–W walkway, N–S slips (west, where houseboats were) */
+/* Cruiser + houseboats stay put, just dropped below the store dock */
+const clY=780;
+
 const cruX=50, cruY=clY+20;
 lab(cruX, cruY-12, "Cruiser dock", 12);
 const cruTop=[800,808,809,810,811,812,813,814,815,816];
@@ -160,7 +190,6 @@ cruBot.forEach((n,i)=>add(n,"Cruiser","cruiser","Cruiser", cruX+i*(cW+cG), cruY+
 svg.appendChild(el("rect",{x:cruX,y:cruY+cH*2+22,width:62,height:28,rx:4,fill:"#e7a0b8"}));
 svg.appendChild(el("text",{x:cruX+31,y:cruY+cH*2+40,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
 
-/* Houseboats — N–S walkway, two rows of E–W slips */
 const hbX=cruX+cruTop.length*(cW+cG)+28;
 lab(hbX, clY-10, "Houseboat dock", 12);
 const hbW=42, hbH=16;
@@ -170,28 +199,6 @@ seq(831,838).forEach((n,i)=>add(n,"Houseboats","hb","12×38", hbX+hbW+18, clY+i*
 add(839,"Fuel","fuel","20×87", hbX, clY+14*18+8, hbW*2+18, 22, "Fuel");
 add(840,"Fuel","fuel","20×87", hbX, clY+14*18+34, hbW*2+18, 22, "Fuel");
 svg.appendChild(el("text",{x:hbX,y:clY+14*18+74,fill:"#c5d8d6","font-size":11},"Emma's Room · 24×100"));
-
-/* Sales — VERTICAL, one row of slips, walkway, fuel/courtesy on the other side */
-const salesX=520;
-lab(salesX, clY-10, "Sales 10×34", 12);
-const sales=seq(856,841);
-const sy=clY;
-sales.forEach((n,i)=>add(n,"Sales","sales","10×34", salesX, sy+i*18, 36,16, "Sales"));
-add("WB","Work boat","hb2","Work boat", salesX, sy+sales.length*18, 36,18, "Work boat");
-const walkX=salesX+40, walkH=sales.length*18+24;
-walk(walkX, sy-2, 16, walkH);
-lab(walkX+22, sy-10, "Fuel · courtesy", 11);
-seq(1,4).forEach((i)=>add("F"+i,"Fuel","fuel","Fuel stall", walkX+22, sy+(i-1)*20, 40,18, "Fuel"));
-seq(1,6).forEach((i)=>add("C"+i,"Courtesy","courtesy","Courtesy", walkX+22, sy+4*20+8+(i-1)*20, 40,18, "All"));
-
-/* Marina store dock — VERTICAL (N–S), east of sales */
-const storeX=walkX+80, storeY=240;
-svg.appendChild(el("rect",{x:storeX,y:storeY,width:90,height:48,rx:6,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:storeX+45,y:storeY+20,"text-anchor":"middle",fill:"#fff","font-size":12,"font-weight":700},"Marina Store"));
-svg.appendChild(el("text",{x:storeX+45,y:storeY+36,"text-anchor":"middle",fill:"#d7eceb","font-size":10},"Wave runners"));
-walk(storeX+36, storeY+52, 18, 520);
-svg.appendChild(el("rect",{x:storeX,y:storeY+52,width:90,height:520,rx:6,fill:"#2a6a70",opacity:.35}));
-lab(storeX, storeY+580, "Store dock", 12);
 
 /* Standard 7–13 — along the causeway, RIGHT */
 lab(900, 228, "10×30 Standard", 13);
