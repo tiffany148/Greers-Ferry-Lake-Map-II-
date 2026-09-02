@@ -145,30 +145,31 @@ pairRow("1", seq(237,248), seq(236,225), prefX, 528, "wide", "16×42");
 svg.appendChild(el("rect",{x:prefX+400,y:502,width:58,height:22,rx:4,fill:"#2b6d8a"}));
 svg.appendChild(el("text",{x:prefX+429,y:517,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
 
-/* Cluster from the satellite (west → east): houseboats N–S, cruiser E–W, sales/fuel N–S, store N–S */
+/* Cluster west → east: cruiser E–W, houseboats N–S, sales/fuel N–S, store N–S */
 const clY=620;
 
-/* Houseboats — vertical */
-const hbX=50;
-lab(hbX, clY-10, "Houseboat dock", 12);
-walk(hbX+36, clY, 14, 14*17+70);
-seq(817,830).forEach((n,i)=>add(n,"Houseboats", i<10?"hb":"hb2", i<10?"12×38":"12×30", hbX, clY+i*17, 34,15, "Houseboats"));
-seq(831,838).forEach((n,i)=>add(n,"Houseboats","hb","12×38", hbX+52, clY+i*17, 34,15, "Houseboats"));
-add(839,"Fuel","fuel","20×87", hbX, clY+14*17+8, 86,22, "Fuel");
-add(840,"Fuel","fuel","20×87", hbX, clY+14*17+34, 86,22, "Fuel");
-svg.appendChild(el("text",{x:hbX,y:clY+14*17+74,fill:"#c5d8d6","font-size":11},"Emma's Room · 24×100"));
-
-/* Cruiser — HORIZONTAL (E–W) between houseboats and sales */
-const cruX=160, cruY=clY+40;
+/* Cruiser — E–W walkway, N–S slips (west, where houseboats were) */
+const cruX=50, cruY=clY+20;
 lab(cruX, cruY-12, "Cruiser dock", 12);
 const cruTop=[800,808,809,810,811,812,813,814,815,816];
 const cruBot=[801,802,803,804,805,806,807];
-const cW=28, cH=22, cG=4;
+const cW=18, cH=38, cG=4;
 walk(cruX-6, cruY+cH+2, cruTop.length*(cW+cG)+12, 12);
 cruTop.forEach((n,i)=>add(n,"Cruiser","cruiser","Cruiser", cruX+i*(cW+cG), cruY, cW,cH, "Cruiser"));
 cruBot.forEach((n,i)=>add(n,"Cruiser","cruiser","Cruiser", cruX+i*(cW+cG), cruY+cH+16, cW,cH, "Cruiser"));
 svg.appendChild(el("rect",{x:cruX,y:cruY+cH*2+22,width:62,height:28,rx:4,fill:"#e7a0b8"}));
 svg.appendChild(el("text",{x:cruX+31,y:cruY+cH*2+40,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
+
+/* Houseboats — N–S walkway, two rows of E–W slips */
+const hbX=cruX+cruTop.length*(cW+cG)+28;
+lab(hbX, clY-10, "Houseboat dock", 12);
+const hbW=42, hbH=16;
+walk(hbX+hbW+2, clY, 14, 14*18+70);
+seq(817,830).forEach((n,i)=>add(n,"Houseboats", i<10?"hb":"hb2", i<10?"12×38":"12×30", hbX, clY+i*18, hbW,hbH, "Houseboats"));
+seq(831,838).forEach((n,i)=>add(n,"Houseboats","hb","12×38", hbX+hbW+18, clY+i*18, hbW,hbH, "Houseboats"));
+add(839,"Fuel","fuel","20×87", hbX, clY+14*18+8, hbW*2+18, 22, "Fuel");
+add(840,"Fuel","fuel","20×87", hbX, clY+14*18+34, hbW*2+18, 22, "Fuel");
+svg.appendChild(el("text",{x:hbX,y:clY+14*18+74,fill:"#c5d8d6","font-size":11},"Emma's Room · 24×100"));
 
 /* Sales — VERTICAL, one row of slips, walkway, fuel/courtesy on the other side */
 const salesX=520;
