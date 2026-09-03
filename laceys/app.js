@@ -25,7 +25,7 @@ const DEFAULT_DOCKS=[
   {id:"sales",name:"Sales",type:"col",x:520,y:352,kind:"sales",size:"10x34",a:[851,852,853,854,855,856,841,842,843,844,845,846,847,848,849,850],gap:18,w:40,h:16},
   {id:"fuel",name:"Fuel",type:"col",x:584,y:352,kind:"fuel",size:"Fuel stall",a:["F1","F2","F3","F4"],gap:20,w:40,h:18},
   {id:"courtesy",name:"Courtesy",type:"col",x:584,y:440,kind:"courtesy",size:"Courtesy",a:["C1","C2","C3","C4","C5","C6"],gap:20,w:40,h:18},
-  {id:"cruiser",name:"Cruiser",type:"ew",x:700,y:980,kind:"cruiser",size:"Cruiser",a:[800,808,809,810,811,812,813,814,815,816],b:[801,802,803,804,805,806,807]},
+  {id:"cruiser",name:"Cruiser",type:"ew",x:700,y:980,kind:"cruiser",size:"Cruiser",a:[801,802,803,804,805,806,807],b:[800,808,809,810,811,812,813,814,815,816]},
   {id:"houseboats",name:"Houseboats",type:"ns",x:1100,y:720,kind:"hb",size:"12x38",a:[817,818,819,820,821,822,823,824,825,826,827,828,829,830],b:[831,832,833,834,835,836,837,838],extras:[{num:839,dx:0,dy:260,w:96,h:22,kind:"fuel",size:"20x87",filter:"Fuel"},{num:840,dx:0,dy:286,w:96,h:22,kind:"fuel",size:"20x87",filter:"Fuel"}]}
 ];
 const DEFAULT_MARKS=[
@@ -50,7 +50,7 @@ const DEFAULT_MARKS=[
 ];
 function walkGeomFromDock(d){
   if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
-  if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3;return {x:d.x-4,y:d.y+h+2,w:(d.a||[]).length*(w+g)+10,h:12};}
+  if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
   const n=(d.a||[]).length,g=d.gap||18,h=d.h||16;return {x:d.x+(d.w||40)+4,y:d.y-2,w:10,h:Math.max(20,n*g-g+h+8)};
 }
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
@@ -65,6 +65,9 @@ function loadLayout(){
     const mBy=Object.fromEntries(saved.map(m=>[m.id,m]));
     const marks=DEFAULT_MARKS.map(m=>Object.assign(clone(m), mBy[m.id]||{}));
     saved.forEach(m=>{ if(!marks.find(x=>x.id===m.id)) marks.push(m); });
+    const cruDef=DEFAULT_DOCKS.find(d=>d.id==="cruiser");
+    const cru=docks.find(d=>d.id==="cruiser");
+    if(cru&&cruDef){ cru.a=clone(cruDef.a); cru.b=clone(cruDef.b); }
     return {docks,marks};
   }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS)};}
 }
