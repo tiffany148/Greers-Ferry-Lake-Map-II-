@@ -70,7 +70,7 @@ body.editing .edit-banner{display:block}
     </div>
   </div>
 </header>
-<div class="edit-banner">Edit mode: drag a whole dock to move it. Click a dock to change its slip numbers. Layout saves on this phone. Occupancy notes are unchanged.</div>
+<div class="edit-banner">Edit mode: drag a whole dock to move it. Click a dock to change slip numbers or rotate it. Layout saves on this phone. Occupancy notes are unchanged.</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
@@ -262,8 +262,17 @@ function drawMarks(){
     layerMarks.appendChild(g);
   });
 }
-function dockWalk(d){
-  const g=el("g",{"data-dock":d.id,class:"dock-hit"+(selectedDock===d.id?" on":"")});
+function dockPivot(d){
+  return {cx:d.x, cy:d.y};
+}
+function dockGroupAttrs(d){
+  const rot=Number(d.rot)||0;
+  const {cx,cy}=dockPivot(d);
+  const attrs={"data-dock":d.id,class:"dock-hit"+(selectedDock===d.id?" on":"")};
+  if(rot) attrs.transform=`rotate(${rot} ${cx} ${cy})`;
+  return attrs;
+}
+function appendWalk(g,d){
   if(d.type==="ns"){
     const w=d.sw||40, h=d.sh||15, ggap=d.gap||3;
     const n=Math.max((d.a||[]).length,(d.b||[]).length);
@@ -278,19 +287,25 @@ function dockWalk(d){
     g.appendChild(el("rect",{class:"walk",x:d.x+(d.w||40)+4,y:d.y-2,width:10,height:Math.max(20,n*ggap-ggap+h+8),rx:3,fill:"#bfb9ac"}));
     g.appendChild(el("text",{x:d.x,y:d.y-10,fill:"#d7eceb","font-size":12,"font-weight":700},d.name));
   }
-  return g;
 }
 function redraw(){
   buildSlips();
   drawMarks();
   layerDocks.innerHTML="";
-  docks.forEach(d=>layerDocks.appendChild(dockWalk(d)));
   layerSlips.innerHTML="";
+  const byDock={};
+  docks.forEach(d=>{
+    const g=el("g",dockGroupAttrs(d));
+    appendWalk(g,d);
+    byDock[d.id]=g;
+    layerDocks.appendChild(g);
+  });
   slips.forEach(s=>{
+    const parent=byDock[s.dockId]||layerSlips;
     const g=el("g",{class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim"), "data-id":s.id, "data-dock":s.dockId});
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
     g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+3,"text-anchor":"middle"}, String(s.num).replace(/^F|^C/,"")));
-    layerSlips.appendChild(g);
+    parent.appendChild(g);
   });
   document.getElementById("count").textContent = slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
 }
@@ -336,13 +351,23 @@ function renderDockEditor(){
   const m=marks.find(x=>x.id===selectedMark);
   if(d){
     const labs=sideLabels(d);
-    box.innerHTML=`\n      <h2>Dock ${d.name}</h2>\n      <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>\n      <label>Size label<input id="ed-size" value="${d.size||""}"/></label>\n      <label>Color kind\n        <select id="ed-kind">${Object.keys(COLORS).map(k=>`<option value="${k}" ${k===d.kind?"selected":""}>${k}</option>`).join("")}</select>\n      </label>\n      <div class="row2">\n        <label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label>\n        <label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label>\n      </div>\n      <div class="st">\n        <button type="button" data-nudge="-10,0">←</button>\n        <button type="button" data-nudge="10,0">→</button>\n        <button type="button" data-nudge="0,-10">↑</button>\n        <button type="button" data-nudge="0,10">↓</button>\n      </div>\n      <label>${labs.a}<textarea id="ed-a" rows="4">${(d.a||[]).join(", ")}</textarea></label>\n      ${labs.b?`<label>${labs.b}<textarea id="ed-b" rows="4">${(d.b||[]).join(", ")}</textarea></label>`:""}\n      <p class="hint">Separate numbers with commas or spaces. Occupancy follows the slip number.</p>\n    `;
+    const rot=Number(d.rot)||0;
+    box.innerHTML=`\n      <h2>Dock ${d.name}</h2>\n      <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>\n      <label>Size label<input id="ed-size" value="${d.size||""}"/></label>\n      <label>Color kind\n        <select id="ed-kind">${Object.keys(COLORS).map(k=>`<option value="${k}" ${k===d.kind?"selected":""}>${k}</option>`).join("")}</select>\n      </label>\n      <div class="row2">\n        <label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label>\n        <label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label>\n      </div>\n      <div class="st">\n        <button type="button" data-nudge="-10,0">←</button>\n        <button type="button" data-nudge="10,0">→</button>\n        <button type="button" data-nudge="0,-10">↑</button>\n        <button type="button" data-nudge="0,10">↓</button>\n      </div>\n      <label>Rotation (degrees)\n        <input id="ed-rot" type="range" min="-180" max="180" step="1" value="${rot}"/>\n      </label>\n      <div class="row2">\n        <label>Angle<input id="ed-rot-num" type="number" step="1" value="${rot}"/></label>\n        <div class="st" style="align-self:end">\n          <button type="button" data-rot="-90">−90°</button>\n          <button type="button" data-rot="-15">−15°</button>\n          <button type="button" data-rot="15">+15°</button>\n          <button type="button" data-rot="90">+90°</button>\n          <button type="button" data-rot="0">0°</button>\n        </div>\n      </div>\n      <label>${labs.a}<textarea id="ed-a" rows="4">${(d.a||[]).join(", ")}</textarea></label>\n      ${labs.b?`<label>${labs.b}<textarea id="ed-b" rows="4">${(d.b||[]).join(", ")}</textarea></label>`:""}\n      <p class="hint">Separate numbers with commas or spaces. Occupancy follows the slip number. Rotation spins the whole dock around its origin corner.</p>\n    `;
     const applyPos=()=>{ d.x=+document.getElementById("ed-x").value; d.y=+document.getElementById("ed-y").value; saveLayout(); redraw(); };
+    const applyRot=v=>{ d.rot=((Number(v)%360)+360)%360; if(d.rot>180) d.rot-=360; if(Math.abs(d.rot)<0.01) d.rot=0; saveLayout(); redraw(); renderDockEditor(); };
     document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value; saveLayout(); redraw();};
     document.getElementById("ed-size").oninput=()=>{d.size=document.getElementById("ed-size").value; saveLayout(); redraw();};
     document.getElementById("ed-kind").onchange=()=>{d.kind=document.getElementById("ed-kind").value; saveLayout(); redraw();};
     document.getElementById("ed-x").onchange=applyPos;
     document.getElementById("ed-y").onchange=applyPos;
+    document.getElementById("ed-rot").oninput=e=>{ document.getElementById("ed-rot-num").value=e.target.value; d.rot=+e.target.value; saveLayout(); redraw(); };
+    document.getElementById("ed-rot").onchange=e=>applyRot(e.target.value);
+    document.getElementById("ed-rot-num").onchange=e=>applyRot(e.target.value);
+    box.querySelectorAll("[data-rot]").forEach(btn=>btn.onclick=()=>{
+      const step=+btn.dataset.rot;
+      if(step===0) applyRot(0);
+      else applyRot((Number(d.rot)||0)+step);
+    });
     document.getElementById("ed-a").onchange=()=>{d.a=parseNums(document.getElementById("ed-a").value); saveLayout(); redraw();};
     const eb=document.getElementById("ed-b");
     if(eb) eb.onchange=()=>{d.b=parseNums(eb.value); saveLayout(); redraw();};
