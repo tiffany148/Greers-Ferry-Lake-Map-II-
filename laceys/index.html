@@ -1,1 +1,62 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Lacey's Narrows · slip chart</title>
+<meta name="theme-color" content="#0c3c41"/>
+<style>
+:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
+header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
+.kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
+.top{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{margin:4px 0 0;font-size:28px;font-weight:650}
+.meta{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
+.hdr-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.hdr-actions button,.btn{border:0;border-radius:10px;padding:8px 12px;background:#15565b;color:var(--ink);cursor:pointer;font-size:13px}
+.hdr-actions button.on,.btn.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.search{padding:8px 16px 0}
+.search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
+.chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
+.chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
+.chart:active{cursor:grabbing}
+.chart.editing{cursor:default}
+svg{transform-origin:0 0}
+.slip{cursor:pointer}
+.slip rect{stroke:#3a4342;stroke-width:.5}
+.slip.on rect{stroke:#fff;stroke-width:2}
+.slip.dim{opacity:.2}
+.slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
+.dock-hit{cursor:grab}
+.dock-hit.on .walk{stroke:#fff;stroke-width:2}
+.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173;font-size:18px;cursor:pointer}
+aside{background:#0a3338;padding:16px;overflow:auto}
+.tabs{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
+.tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
+aside h2{font-size:16px;margin:0 0 6px}
+aside p{font-size:13px;color:var(--muted);line-height:1.45}
+aside label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
+aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.st{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
+.st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
+.hint{font-size:12px;color:var(--muted);margin:8px 0}
+.edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
+body.editing .edit-banner{display:block}
+@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}.meta{text-align:left;margin-left:0}}
+@media print{header,.search,.chips,.zoom,.hdr-actions,.edit-banner{display:none!important}aside{display:none}}
+</style>
+</head>
+<body>
+SEE_FILE
+</body>
+</html>
