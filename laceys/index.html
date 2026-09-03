@@ -24,7 +24,6 @@ h1{margin:4px 0 0;font-size:28px;font-weight:650}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
 .chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
-.chart:active{cursor:grabbing}
 .chart.editing{cursor:default}
 svg{transform-origin:0 0}
 .slip{cursor:pointer}
@@ -41,7 +40,7 @@ aside{background:#0a3338;padding:16px;overflow:auto}
 .tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
 .tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
 aside h2{font-size:16px;margin:0 0 6px}
-aside p{font-size:13px;color:var(--muted);line-height:1.45}
+aside p,.hint{font-size:13px;color:var(--muted);line-height:1.45}
 aside label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
 aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -49,14 +48,64 @@ aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;p
 .st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
 .st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
-.hint{font-size:12px;color:var(--muted);margin:8px 0}
 .edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
 body.editing .edit-banner{display:block}
-@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}.meta{text-align:left;margin-left:0}}
-@media print{header,.search,.chips,.zoom,.hdr-actions,.edit-banner{display:none!important}aside{display:none}}
+@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}}
 </style>
 </head>
 <body>
-SEE_FILE
+<header>
+  <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
+  <div class="top">
+    <h1>Lacey's Narrows</h1>
+    <div class="meta">
+      <div id="count"></div>
+      <div id="hint">Click a numbered slip · drag to pan</div>
+      <div class="hdr-actions"><button id="edit-toggle">Edit docks</button></div>
+    </div>
+  </div>
+</header>
+<div class="edit-banner">Edit mode: drag any dock, walkway, building, or label. Click it to rotate, resize, or edit.</div>
+<div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
+<div class="chips" id="chips"></div>
+<div class="layout">
+  <div class="chart" id="chart">
+    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
+    <div class="zoom"><button id="z-in">+</button><button id="z-out">−</button><button id="z-full">⛶</button></div>
+  </div>
+  <aside>
+    <div class="tabs">
+      <button class="on" data-tab="slip">Slip</button>
+      <button data-tab="dir">Directory</button>
+      <button data-tab="layout">Dock</button>
+    </div>
+    <div id="pane-slip">
+      <h2>Find a slip</h2>
+      <p>Click any numbered slip. Occupancy stays on this device.</p>
+      <div id="slip-detail" hidden>
+        <h2 id="slip-title"></h2><p id="slip-meta"></p>
+        <div class="st"><button data-st="vacant">Vacant</button><button data-st="occupied">Occupied</button><button data-st="reserved">Reserved</button></div>
+        <label>Boat name<input id="boat"/></label>
+        <label>Notes<textarea id="notes" rows="3"></textarea></label>
+      </div>
+    </div>
+    <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
+    <div id="pane-layout" hidden>
+      <h2>Move &amp; edit everything</h2>
+      <p class="hint">Drag any piece. Walkways, buildings, and labels move and rotate on their own.</p>
+      <div class="st"><button class="btn" id="add-walk">+ Walkway</button><button class="btn" id="add-box">+ Building</button><button class="btn" id="add-label">+ Label</button></div>
+      <div id="dock-editor"><p>No element selected.</p></div>
+      <div class="st" style="margin-top:16px">
+        <button class="btn" id="export-layout">Copy layout JSON</button>
+        <button class="btn" id="download-layout">Download</button>
+        <button class="btn" id="import-layout">Import</button>
+        <button class="btn" id="reset-layout">Reset positions</button>
+      </div>
+      <label>Align photo opacity<input id="bg-op" type="range" min="0" max="80" value="0"/></label>
+      <input id="import-file" type="file" accept="application/json" hidden/>
+    </div>
+  </aside>
+</div>
+<script src="app.js"></script>
 </body>
 </html>
