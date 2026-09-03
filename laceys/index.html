@@ -11,39 +11,49 @@
 html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
 header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
 .kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
-.top{display:flex;align-items:flex-end;gap:16px}
+.top{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
 h1{margin:4px 0 0;font-size:28px;font-weight:650}
 .meta{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
+.hdr-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.hdr-actions button,.btn{border:0;border-radius:10px;padding:8px 12px;background:#15565b;color:var(--ink);cursor:pointer;font-size:13px}
+.hdr-actions button.on,.btn.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .search{padding:8px 16px 0}
 .search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
 .chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
-.layout{display:grid;grid-template-columns:1fr 300px;height:calc(100% - 168px)}
+.layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
 .chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
 .chart:active{cursor:grabbing}
+.chart.editing{cursor:default}
 svg{transform-origin:0 0}
 .slip{cursor:pointer}
 .slip rect{stroke:#3a4342;stroke-width:.5}
 .slip.on rect{stroke:#fff;stroke-width:2}
 .slip.dim{opacity:.2}
 .slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
+.dock-hit{cursor:grab}
+.dock-hit.on .walk{stroke:#fff;stroke-width:2}
 .zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
 .zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173;font-size:18px;cursor:pointer}
 aside{background:#0a3338;padding:16px;overflow:auto}
-.tabs{display:flex;gap:16px;margin-bottom:12px}
+.tabs{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
 .tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
 aside h2{font-size:16px;margin:0 0 6px}
 aside p{font-size:13px;color:var(--muted);line-height:1.45}
 aside label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
-aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
+aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .st{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
 .st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
 .st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
-@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}}
-@media print{header,.search,.chips,.zoom{display:none!important}aside{display:none}}
+.hint{font-size:12px;color:var(--muted);margin:8px 0}
+.edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
+body.editing .edit-banner{display:block}
+@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}.meta{text-align:left;margin-left:0}}
+@media print{header,.search,.chips,.zoom,.hdr-actions,.edit-banner{display:none!important}aside{display:none}}
 </style>
 </head>
 <body>
@@ -53,10 +63,14 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
     <h1>Lacey's Narrows</h1>
     <div class="meta">
       <div id="count"></div>
-      <div>Click a numbered slip · drag to pan</div>
+      <div id="hint">Click a numbered slip · drag to pan</div>
+      <div class="hdr-actions">
+        <button id="edit-toggle">Edit docks</button>
+      </div>
     </div>
   </div>
 </header>
+<div class="edit-banner">Edit mode: drag a whole dock to move it. Click a dock to change its slip numbers. Layout saves on this phone. Occupancy notes are unchanged.</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
@@ -72,6 +86,7 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
     <div class="tabs">
       <button class="on" data-tab="slip">Slip</button>
       <button data-tab="dir">Directory</button>
+      <button data-tab="layout">Dock</button>
     </div>
     <div id="pane-slip">
       <h2>Find a slip</h2>
@@ -92,10 +107,28 @@ aside input,aside textarea{width:100%;border:0;border-radius:10px;padding:9px;ma
       <h2>Directory</h2>
       <div id="dir-list"></div>
     </div>
+    <div id="pane-layout" hidden>
+      <h2>Move & edit docks</h2>
+      <p class="hint">Turn on <b>Edit docks</b>, then drag a dock. Numbers below are west/north first.</p>
+      <div id="dock-editor">
+        <p>No dock selected.</p>
+      </div>
+      <div class="st" style="margin-top:16px">
+        <button class="btn" id="export-layout">Copy layout JSON</button>
+        <button class="btn" id="download-layout">Download</button>
+        <button class="btn" id="import-layout">Import</button>
+        <button class="btn" id="reset-layout">Reset positions</button>
+      </div>
+      <label>Align photo (dock-map.jpg) opacity
+        <input id="bg-op" type="range" min="0" max="80" value="0"/>
+      </label>
+      <input id="import-file" type="file" accept="application/json" hidden/>
+    </div>
   </aside>
 </div>
 <script>
 const STORE="laceys-slips-v5";
+const LAYOUT_STORE="laceys-layout-v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
@@ -103,114 +136,100 @@ const svg=document.getElementById("svg");
 const NS="http://www.w3.org/2000/svg";
 const el=(n,a,t)=>{const e=document.createElementNS(NS,n);Object.entries(a||{}).forEach(([k,v])=>e.setAttribute(k,v));if(t!=null)e.textContent=t;return e;};
 const COLORS={pref:"#d2b48c",std:"#c9896a",wide:"#5aa0c4",sales:"#e39a7a",cruiser:"#e8c4b4",hb:"#6dad6a",hb2:"#4f9ea3",fuel:"#e3c35c",courtesy:"#f3efe6"};
-const slips=[];
-function add(num,dock,kind,size,x,y,w,h,filter){
-  slips.push({id:String(num),num,dock,kind,size,x,y,w,h,filter:filter||dock});
+function clone(o){return JSON.parse(JSON.stringify(o));}
+function parseNums(str){
+  return String(str||"").split(/[\s,]+/).map(s=>s.trim()).filter(Boolean).map(s=>/^\d+$/.test(s)?Number(s):s);
 }
-function lab(x,y,t,s){svg.appendChild(el("text",{x,y,fill:"#d7eceb","font-size":s||13,"font-weight":700},t));}
-function walk(x,y,w,h){svg.appendChild(el("rect",{x,y,width:w,height:h,rx:3,fill:"#bfb9ac"}));}
-
-/* N–S walkway, E–W slips (wide, short) */
-function nsFinger(dock, west, east, x, y, kind, size){
-  const w=40, h=15, g=3;
-  const n=Math.max(west.length, east.length);
-  walk(x+w+2, y-4, 12, n*(h+g)+10);
-  lab(x+w-2, y-12, dock, 14);
-  west.forEach((num,i)=>add(num,dock,kind,size, x, y+i*(h+g), w,h, dock));
-  east.forEach((num,i)=>add(num,dock,kind,size, x+w+16, y+i*(h+g), w,h, dock));
+const DEFAULT_DOCKS=[
+  {id:"7",name:"7",type:"ns",x:1020,y:110,kind:"std",size:"10×30 Standard",a:[65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80],b:[96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81]},
+  {id:"8",name:"8",type:"ns",x:1170,y:110,kind:"std",size:"10×30 Standard",a:[97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112],b:[128,127,126,125,124,123,122,121,120,119,118,117,116,115,114,113]},
+  {id:"9",name:"9",type:"ns",x:1320,y:110,kind:"std",size:"10×30 Standard",a:[129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144],b:[160,159,158,157,156,155,154,153,152,151,150,149,148,147,146,145]},
+  {id:"10",name:"10",type:"ns",x:1470,y:110,kind:"std",size:"10×30 Standard",a:[161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176],b:[192,191,190,189,188,187,186,185,184,183,182,181,180,179,178,177]},
+  {id:"11",name:"11",type:"ns",x:1620,y:110,kind:"std",size:"10×30 Standard",a:[193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208],b:[224,223,222,221,220,219,218,217,216,215,214,213,212,211,210,209]},
+  {id:"12",name:"12",type:"ns",x:1770,y:110,kind:"std",size:"10×30 Standard",a:[293,294,295,296,297,298,299,300,301,302,303,304,305,306,307,308],b:[324,323,322,321,320,319,318,317,316,315,314,313,312,311,310,309]},
+  {id:"13",name:"13",type:"ns",x:1920,y:110,kind:"std",size:"10×30 Standard",a:[325,326,327,328,329,330,331,332,333,334,335,336,337,338,339,340],b:[356,355,354,353,352,351,350,349,348,347,346,345,344,343,342,341]},
+  {id:"4",name:"4",type:"ns",x:40,y:290,kind:"pref",size:"10×30 Preferred",a:[32,31,30,29,28,27,26,25,24,23,22,21,20,19],b:[1,2,3,4,5,6,7,8,9,10,11,12,13,14]},
+  {id:"3",name:"3",type:"ns",x:150,y:290,kind:"pref",size:"10×30 Preferred",a:[64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49],b:[33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48]},
+  {id:"2",name:"2",type:"ns",x:260,y:290,kind:"wide",size:"16×42",a:[272,271,270,269,268,267,266,265,264,263,262,261],b:[249,250,251,252,253,254,255,256,257,258,259,260]},
+  {id:"1",name:"1",type:"ns",x:370,y:290,kind:"wide",size:"16×42",a:[248,247,246,245,244,243,242,241,240,239,238,237],b:[225,226,227,228,229,230,231,232,233,234,235,236]},
+  {id:"5",name:"5",type:"ew",x:40,y:600,kind:"pref",size:"10×30 Preferred",a:[283,284,285,286,287,288,289,290,291,292],b:[273,274,275,276,277,278,279,280,281,282]},
+  {id:"sales",name:"Sales",type:"col",x:520,y:352,kind:"sales",size:"10×34",a:[851,852,853,854,855,856,841,842,843,844,845,846,847,848,849,850],gap:18,w:40,h:16},
+  {id:"fuel",name:"Fuel",type:"col",x:584,y:352,kind:"fuel",size:"Fuel stall",a:["F1","F2","F3","F4"],gap:20,w:40,h:18},
+  {id:"courtesy",name:"Courtesy",type:"col",x:584,y:440,kind:"courtesy",size:"Courtesy",a:["C1","C2","C3","C4","C5","C6"],gap:20,w:40,h:18},
+  {id:"cruiser",name:"Cruiser",type:"ew",x:700,y:980,kind:"cruiser",size:"Cruiser",a:[800,808,809,810,811,812,813,814,815,816],b:[801,802,803,804,805,806,807]},
+  {id:"houseboats",name:"Houseboats",type:"ns",x:1100,y:720,kind:"hb",size:"12×38",a:[817,818,819,820,821,822,823,824,825,826,827,828,829,830],b:[831,832,833,834,835,836,837,838],extras:[{num:839,dx:0,dy:260,w:96,h:22,kind:"fuel",size:"20×87",filter:"Fuel"},{num:840,dx:0,dy:286,w:96,h:22,kind:"fuel",size:"20×87",filter:"Fuel"}]}
+];
+const DEFAULT_MARKS=[
+  {id:"shop",kind:"box",x:40,y:40,w:220,h:70,fill:"#8a8f62",t1:"SHOP / Service Dept.",t2:"Office"},
+  {id:"parking",kind:"p",x:150,y:150},
+  {id:"restroom",kind:"pill",x:318,y:262,w:58,h:20,label:"Restroom"},
+  {id:"store",kind:"box",x:520,y:280,w:100,h:44,fill:"#2b6d8a",t1:"Marina Store",t2:"Wave runners",ink:"#fff"},
+  {id:"picnic-store",kind:"pill",x:520,y:652,w:72,h:28,label:"Picnic",fill:"#e7a0b8",ink:"#4a2430"},
+  {id:"picnic-cru",kind:"pill",x:900,y:1072,w:62,h:26,label:"Picnic",fill:"#e7a0b8",ink:"#4a2430"},
+  {id:"picnic-hb",kind:"pill",x:1210,y:1022,w:62,h:26,label:"Picnic",fill:"#e7a0b8",ink:"#4a2430"},
+  {id:"bridge",kind:"bridge",x:980,y:36,w:1100,h:22},
+  {id:"label-pref",kind:"text",x:40,y:268,text:"10×30 Preferred",size:13},
+  {id:"label-std",kind:"text",x:1000,y:78,text:"10×30 Standard",size:13},
+  {id:"label-d5",kind:"text",x:40,y:190,text:"Dock 5 access",size:11},
+  {id:"label-walk",kind:"text",x:280,y:70,text:"Main walkway · Dock 10 access",size:11},
+  {id:"label-sales",kind:"text",x:520,y:340,text:"Sales 10×34",size:12},
+  {id:"label-fuel",kind:"text",x:584,y:342,text:"Fuel · courtesy",size:11},
+  {id:"label-emma",kind:"text",x:1100,y:1046,text:"Emma's Room · 24×100",size:11},
+  {id:"std-walk",kind:"bar",x:990,y:88,w:1080,h:14}
+];
+function loadLayout(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
+    if(!raw||!raw.docks) return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS)};
+    const byId=Object.fromEntries(raw.docks.map(d=>[d.id,d]));
+    const docks=DEFAULT_DOCKS.map(d=>Object.assign(clone(d), byId[d.id]||{}));
+    raw.docks.forEach(d=>{ if(!docks.find(x=>x.id===d.id)) docks.push(d); });
+    const mBy=Object.fromEntries((raw.marks||[]).map(m=>[m.id,m]));
+    const marks=DEFAULT_MARKS.map(m=>Object.assign(clone(m), mBy[m.id]||{}));
+    return {docks,marks};
+  }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS)};}
 }
-/* E–W walkway, N–S slips (narrow, tall) */
-function ewFinger(dock, north, south, x, y, kind, size){
-  const w=16, h=36, g=3;
-  walk(x-4, y+h+2, north.length*(w+g)+10, 12);
-  lab(x, y-12, dock, 14);
-  north.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y, w,h, dock));
-  south.forEach((n,i)=>add(n,dock,kind,size, x+i*(w+g), y+h+16, w,h, dock));
+function saveLayout(){ localStorage.setItem(LAYOUT_STORE, JSON.stringify({docks,marks})); }
+let {docks,marks}=loadLayout();
+let slips=[];
+let selected=null, selectedDock=null, selectedMark=null, filter="All";
+let editing=false;
+function buildSlips(){
+  slips=[];
+  docks.forEach(d=>{
+    if(d.type==="ns"){
+      const w=d.sw||40, h=d.sh||15, g=d.gap||3;
+      (d.a||[]).forEach((num,i)=>slips.push({id:String(num),num,dock:d.name,dockId:d.id,kind:d.kind,size:d.size,x:d.x,y:d.y+i*(h+g),w,h,filter:d.name}));
+      (d.b||[]).forEach((num,i)=>slips.push({id:String(num),num,dock:d.name,dockId:d.id,kind:d.kind,size:d.size,x:d.x+w+16,y:d.y+i*(h+g),w,h,filter:d.name}));
+    }else if(d.type==="ew"){
+      const w=d.sw||16, h=d.sh||36, g=d.gap||3;
+      (d.a||[]).forEach((num,i)=>slips.push({id:String(num),num,dock:d.name,dockId:d.id,kind:d.kind,size:d.size,x:d.x+i*(w+g),y:d.y,w,h,filter:d.name}));
+      (d.b||[]).forEach((num,i)=>slips.push({id:String(num),num,dock:d.name,dockId:d.id,kind:d.kind,size:d.size,x:d.x+i*(w+g),y:d.y+h+16,w,h,filter:d.name}));
+    }else if(d.type==="col"){
+      const w=d.w||40, h=d.h||16, g=d.gap||18;
+      (d.a||[]).forEach((num,i)=>{
+        const size = d.id==="sales" && i>=6 ? "10×34 · Work boat" : d.size;
+        slips.push({id:String(num),num,dock:d.name,dockId:d.id,kind:d.kind,size,x:d.x,y:d.y+i*g,w,h,filter:d.name});
+      });
+    }
+    (d.extras||[]).forEach(ex=>{
+      slips.push({id:String(ex.num),num:ex.num,dock:d.name,dockId:d.id,kind:ex.kind||d.kind,size:ex.size||d.size,x:d.x+(ex.dx||0),y:d.y+(ex.dy||0),w:ex.w,h:ex.h,filter:ex.filter||d.name});
+    });
+  });
 }
-
+const layerBg=el("g",{id:"bg"});
+const layerMarks=el("g",{id:"marks"});
+const layerDocks=el("g",{id:"docks"});
+const layerSlips=el("g",{id:"slips"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0,preserveAspectRatio:"xMidYMid meet"});
+layerBg.appendChild(bgImg);
+svg.appendChild(layerBg);
 svg.appendChild(el("text",{x:1200,y:24,"text-anchor":"middle",fill:"#c5d8d6","font-size":13,"letter-spacing":4},"NORTH"));
 svg.appendChild(el("text",{x:2288,y:860,fill:"#c5d8d6","font-size":14,"letter-spacing":3,transform:"rotate(90 2288 860)"},"NARROWS CHANNEL"));
-
-/* Shop + parking — NW, as on the drawing */
-svg.appendChild(el("rect",{x:40,y:40,width:220,height:70,rx:8,fill:"#8a8f62"}));
-svg.appendChild(el("text",{x:150,y:70,"text-anchor":"middle",fill:"#243018","font-size":13,"font-weight":700},"SHOP / Service Dept."));
-svg.appendChild(el("text",{x:150,y:90,"text-anchor":"middle",fill:"#243018","font-size":11},"Office"));
-svg.appendChild(el("ellipse",{cx:150,cy:150,rx:70,ry:26,fill:"none",stroke:"#9ad","stroke-width":3}));
-svg.appendChild(el("text",{x:150,y:156,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));
-lab(40, 190, "Dock 5 access", 11);
-lab(280, 70, "Main walkway · Dock 10 access", 11);
-svg.appendChild(el("rect",{x:980,y:36,width:1100,height:22,fill:"#8a8a84"}));
-svg.appendChild(el("text",{x:1530,y:52,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge"));
-
-/* Docks 7–13 — NE grid, N–S fingers, E–W slips (drawing: the big block) */
-lab(1000, 78, "10×30 Standard", 13);
-walk(990, 88, 1080, 14);
-const east=[
-  ["7", [65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80], [96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81]],
-  ["8", [97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112], [128,127,126,125,124,123,122,121,120,119,118,117,116,115,114,113]],
-  ["9", [129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144], [160,159,158,157,156,155,154,153,152,151,150,149,148,147,146,145]],
-  ["10",[161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176], [192,191,190,189,188,187,186,185,184,183,182,181,180,179,178,177]],
-  ["11",[193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208], [224,223,222,221,220,219,218,217,216,215,214,213,212,211,210,209]],
-  ["12",[293,294,295,296,297,298,299,300,301,302,303,304,305,306,307,308], [324,323,322,321,320,319,318,317,316,315,314,313,312,311,310,309]],
-  ["13",[325,326,327,328,329,330,331,332,333,334,335,336,337,338,339,340], [356,355,354,353,352,351,350,349,348,347,346,345,344,343,342,341]]
-];
-east.forEach((d,di)=>{
-  const x=1020+di*150, y=88;
-  nsFinger(d[0], d[1].map(n=>n), d[2], x, y+22, "std", "10×30 Standard");
-});
-
-/* WEST cluster — drawing: 4, 3, 2, 1 are N–S with E–W slips */
-lab(40, 268, "10×30 Preferred", 13);
-const yF=290;
-nsFinger("4", [32,31,30,29,28,27,26,25,24,23,22,21,20,19], [1,2,3,4,5,6,7,8,9,10,11,12,13,14], 40, yF, "pref", "10×30 Preferred");
-nsFinger("3", [64,63,62,61,60,59,58,57,56,55,54,53,52,51,50,49], [33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48], 150, yF, "pref", "10×30 Preferred");
-nsFinger("2", [272,271,270,269,268,267,266,265,264,263,262,261], [249,250,251,252,253,254,255,256,257,258,259,260], 260, yF, "wide", "16×42");
-nsFinger("1", [248,247,246,245,244,243,242,241,240,239,238,237], [225,226,227,228,229,230,231,232,233,234,235,236], 370, yF, "wide", "16×42");
-svg.appendChild(el("rect",{x:318,y:yF-28,width:58,height:20,rx:4,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:347,y:yF-14,"text-anchor":"middle",fill:"#fff","font-size":10},"Restroom"));
-
-/* Dock 5 — drawing: SW, E–W with N–S slips */
-ewFinger("5", [283,284,285,286,287,288,289,290,291,292], [273,274,275,276,277,278,279,280,281,282], 40, 600, "pref", "10×30 Preferred");
-
-/* Marina store dock — N–S, between 1–4 and cruiser/houseboat, sales one row + walkway + fuel/courtesy */
-const storeX=520, storeY=280;
-svg.appendChild(el("rect",{x:storeX,y:storeY,width:100,height:44,rx:6,fill:"#2b6d8a"}));
-svg.appendChild(el("text",{x:storeX+50,y:storeY+18,"text-anchor":"middle",fill:"#fff","font-size":12,"font-weight":700},"Marina Store"));
-svg.appendChild(el("text",{x:storeX+50,y:storeY+34,"text-anchor":"middle",fill:"#d7eceb","font-size":10},"Wave runners"));
-lab(storeX, storeY+60, "Sales 10×34", 12);
-const sales=[851,852,853,854,855,856,841,842,843,844,845,846,847,848,849,850];
-const sy=storeY+72;
-sales.forEach((n,i)=>add(n,"Sales","sales", i>=6?"10×34 · Work boat":"10×34", storeX, sy+i*18, 40,16, "Sales"));
-walk(storeX+44, sy-2, 14, sales.length*18+8);
-lab(storeX+64, sy-10, "Fuel · courtesy", 11);
-[1,2,3,4].forEach((i,idx)=>add("F"+i,"Fuel","fuel","Fuel stall", storeX+64, sy+idx*20, 40,18, "Fuel"));
-[1,2,3,4,5,6].forEach((i,idx)=>add("C"+i,"Courtesy","courtesy","Courtesy", storeX+64, sy+4*20+8+idx*20, 40,18, "All"));
-svg.appendChild(el("rect",{x:storeX,y:sy+sales.length*18+12,width:72,height:28,rx:4,fill:"#e7a0b8"}));
-svg.appendChild(el("text",{x:storeX+36,y:sy+sales.length*18+30,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
-
-/* Cruiser — E–W, N–S slips, west of houseboats (drawing: channel cluster) */
-const cruX=700, cruY=980;
-lab(cruX, cruY-12, "Cruiser dock", 12);
-const cruN=[800,808,809,810,811,812,813,814,815,816];
-const cruS=[801,802,803,804,805,806,807];
-ewFinger("Cruiser", cruN, cruS, cruX, cruY, "cruiser", "Cruiser");
-svg.appendChild(el("rect",{x:cruX+200,y:cruY+92,width:62,height:26,rx:4,fill:"#e7a0b8"}));
-svg.appendChild(el("text",{x:cruX+231,y:cruY+109,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
-
-/* Houseboat — N–S, E–W slips, along Narrows Channel */
-const hbX=1100, hbY=720;
-lab(hbX, hbY-12, "Houseboat dock", 12);
-nsFinger("Houseboats", [817,818,819,820,821,822,823,824,825,826,827,828,829,830], [831,832,833,834,835,836,837,838], hbX, hbY, "hb", "12×38");
-add(839,"Fuel","fuel","20×87", hbX, hbY+14*18+8, 96,22, "Fuel");
-add(840,"Fuel","fuel","20×87", hbX, hbY+14*18+34, 96,22, "Fuel");
-svg.appendChild(el("text",{x:hbX,y:hbY+14*18+74,fill:"#c5d8d6","font-size":11},"Emma's Room · 24×100"));
-svg.appendChild(el("rect",{x:hbX+110,y:hbY+14*18+50,width:62,height:26,rx:4,fill:"#e7a0b8"}));
-svg.appendChild(el("text",{x:hbX+141,y:hbY+14*18+67,"text-anchor":"middle",fill:"#4a2430","font-size":10},"Picnic"));
-
-const layer=el("g",{id:"slips"});
-svg.appendChild(layer);
-let selected=null, filter="All";
+svg.appendChild(layerMarks);
+svg.appendChild(layerDocks);
+svg.appendChild(layerSlips);
 function fill(s){
   const rec=data[s.id];
   if(rec&&rec.status==="occupied") return "#b55a32";
@@ -218,16 +237,63 @@ function fill(s){
   return COLORS[s.kind]||"#e4dcc8";
 }
 function match(s,f){ if(!f||f==="All") return true; return s.filter===f || s.dock===f; }
-function redraw(){
-  layer.innerHTML="";
-  slips.forEach(s=>{
-    const g=el("g",{class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim"), "data-id":s.id});
-    g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
-    g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+3,"text-anchor":"middle"}, String(s.num).replace(/^F|^C/,"")));
-    layer.appendChild(g);
+function drawMarks(){
+  layerMarks.innerHTML="";
+  marks.forEach(m=>{
+    const g=el("g",{"data-mark":m.id,class:"dock-hit"+(selectedMark===m.id?" on":"")});
+    if(m.kind==="box"){
+      g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:8,fill:m.fill||"#2b6d8a"}));
+      g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2-6,"text-anchor":"middle",fill:m.ink||"#243018","font-size":13,"font-weight":700},m.t1||""));
+      if(m.t2) g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+12,"text-anchor":"middle",fill:m.ink||"#243018","font-size":11},m.t2));
+    }else if(m.kind==="p"){
+      g.appendChild(el("ellipse",{cx:m.x,cy:m.y,rx:70,ry:26,fill:"none",stroke:"#9ad","stroke-width":3}));
+      g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));
+    }else if(m.kind==="pill"){
+      g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));
+      g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:m.ink||"#fff","font-size":10},m.label||""));
+    }else if(m.kind==="bridge"){
+      g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));
+      g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge"));
+    }else if(m.kind==="bar"){
+      g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,fill:"#bfb9ac",class:"walk"}));
+    }else if(m.kind==="text"){
+      g.appendChild(el("text",{x:m.x,y:m.y,fill:"#d7eceb","font-size":m.size||13,"font-weight":700},m.text||""));
+    }
+    layerMarks.appendChild(g);
   });
 }
-document.getElementById("count").textContent = slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
+function dockWalk(d){
+  const g=el("g",{"data-dock":d.id,class:"dock-hit"+(selectedDock===d.id?" on":"")});
+  if(d.type==="ns"){
+    const w=d.sw||40, h=d.sh||15, ggap=d.gap||3;
+    const n=Math.max((d.a||[]).length,(d.b||[]).length);
+    g.appendChild(el("rect",{class:"walk",x:d.x+w+2,y:d.y-4,width:12,height:n*(h+ggap)+10,rx:3,fill:"#bfb9ac"}));
+    g.appendChild(el("text",{x:d.x+w-2,y:d.y-12,fill:"#d7eceb","font-size":14,"font-weight":700},d.name));
+  }else if(d.type==="ew"){
+    const w=d.sw||16, h=d.sh||36, ggap=d.gap||3;
+    g.appendChild(el("rect",{class:"walk",x:d.x-4,y:d.y+h+2,width:(d.a||[]).length*(w+ggap)+10,height:12,rx:3,fill:"#bfb9ac"}));
+    g.appendChild(el("text",{x:d.x,y:d.y-12,fill:"#d7eceb","font-size":14,"font-weight":700},d.name));
+  }else if(d.type==="col"){
+    const n=(d.a||[]).length, ggap=d.gap||18, h=d.h||16;
+    g.appendChild(el("rect",{class:"walk",x:d.x+(d.w||40)+4,y:d.y-2,width:10,height:Math.max(20,n*ggap-ggap+h+8),rx:3,fill:"#bfb9ac"}));
+    g.appendChild(el("text",{x:d.x,y:d.y-10,fill:"#d7eceb","font-size":12,"font-weight":700},d.name));
+  }
+  return g;
+}
+function redraw(){
+  buildSlips();
+  drawMarks();
+  layerDocks.innerHTML="";
+  docks.forEach(d=>layerDocks.appendChild(dockWalk(d)));
+  layerSlips.innerHTML="";
+  slips.forEach(s=>{
+    const g=el("g",{class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim"), "data-id":s.id, "data-dock":s.dockId});
+    g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
+    g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+3,"text-anchor":"middle"}, String(s.num).replace(/^F|^C/,"")));
+    layerSlips.appendChild(g);
+  });
+  document.getElementById("count").textContent = slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
+}
 const chips=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
 chips.forEach(c=>{
@@ -238,13 +304,17 @@ chips.forEach(c=>{
   chipsEl.appendChild(b);
 });
 redraw();
-svg.addEventListener("click",e=>{
-  const t=e.target.closest("[data-id]"); if(!t) return;
-  select(t.getAttribute("data-id"));
-});
+function svgPoint(e){
+  const pt=svg.createSVGPoint();
+  pt.x=e.clientX; pt.y=e.clientY;
+  const ctm=svg.getScreenCTM();
+  if(!ctm) return {x:0,y:0};
+  return pt.matrixTransform(ctm.inverse());
+}
 function select(id){
-  selected=id;
+  selected=id; selectedDock=null; selectedMark=null;
   const s=slips.find(x=>x.id===id);
+  if(!s) return;
   const rec=data[id]||{status:"vacant",boat:"",notes:""};
   document.getElementById("slip-detail").hidden=false;
   document.getElementById("slip-title").textContent = (/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;
@@ -252,9 +322,75 @@ function select(id){
   document.getElementById("boat").value=rec.boat||"";
   document.getElementById("notes").value=rec.notes||"";
   document.querySelectorAll(".st button").forEach(b=>b.classList.toggle("on", b.dataset.st===(rec.status||"vacant")));
-  showTab("slip"); redraw();
+  if(!editing) showTab("slip");
+  redraw();
 }
-document.querySelectorAll(".st button").forEach(b=>b.onclick=()=>{
+function sideLabels(d){
+  if(d.type==="ns") return {a:"West / left (top → bottom)", b:"East / right (top → bottom)"};
+  if(d.type==="ew") return {a:"North / top (left → right)", b:"South / bottom (left → right)"};
+  return {a:"Slips (top → bottom)", b:null};
+}
+function renderDockEditor(){
+  const box=document.getElementById("dock-editor");
+  const d=docks.find(x=>x.id===selectedDock);
+  const m=marks.find(x=>x.id===selectedMark);
+  if(d){
+    const labs=sideLabels(d);
+    box.innerHTML=`\n      <h2>Dock ${d.name}</h2>\n      <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>\n      <label>Size label<input id="ed-size" value="${d.size||""}"/></label>\n      <label>Color kind\n        <select id="ed-kind">${Object.keys(COLORS).map(k=>`<option value="${k}" ${k===d.kind?"selected":""}>${k}</option>`).join("")}</select>\n      </label>\n      <div class="row2">\n        <label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label>\n        <label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label>\n      </div>\n      <div class="st">\n        <button type="button" data-nudge="-10,0">←</button>\n        <button type="button" data-nudge="10,0">→</button>\n        <button type="button" data-nudge="0,-10">↑</button>\n        <button type="button" data-nudge="0,10">↓</button>\n      </div>\n      <label>${labs.a}<textarea id="ed-a" rows="4">${(d.a||[]).join(", ")}</textarea></label>\n      ${labs.b?`<label>${labs.b}<textarea id="ed-b" rows="4">${(d.b||[]).join(", ")}</textarea></label>`:""}\n      <p class="hint">Separate numbers with commas or spaces. Occupancy follows the slip number.</p>\n    `;
+    const applyPos=()=>{ d.x=+document.getElementById("ed-x").value; d.y=+document.getElementById("ed-y").value; saveLayout(); redraw(); };
+    document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value; saveLayout(); redraw();};
+    document.getElementById("ed-size").oninput=()=>{d.size=document.getElementById("ed-size").value; saveLayout(); redraw();};
+    document.getElementById("ed-kind").onchange=()=>{d.kind=document.getElementById("ed-kind").value; saveLayout(); redraw();};
+    document.getElementById("ed-x").onchange=applyPos;
+    document.getElementById("ed-y").onchange=applyPos;
+    document.getElementById("ed-a").onchange=()=>{d.a=parseNums(document.getElementById("ed-a").value); saveLayout(); redraw();};
+    const eb=document.getElementById("ed-b");
+    if(eb) eb.onchange=()=>{d.b=parseNums(eb.value); saveLayout(); redraw();};
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{
+      const [dx,dy]=btn.dataset.nudge.split(",").map(Number);
+      d.x+=dx; d.y+=dy; saveLayout(); redraw(); renderDockEditor();
+    });
+  }else if(m){
+    box.innerHTML=`\n      <h2>Label / building</h2>\n      <p class="hint">${m.id}</p>\n      <div class="row2">\n        <label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label>\n        <label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label>\n      </div>\n      ${m.text!=null?`<label>Text<input id="ed-text" value="${m.text||""}"/></label>`:""}\n      ${m.t1!=null?`<label>Title<input id="ed-t1" value="${m.t1||""}"/></label>`:""}\n      ${m.label!=null?`<label>Label<input id="ed-label" value="${m.label||""}"/></label>`:""}\n      <div class="st">\n        <button type="button" data-nudge="-10,0">←</button>\n        <button type="button" data-nudge="10,0">→</button>\n        <button type="button" data-nudge="0,-10">↑</button>\n        <button type="button" data-nudge="0,10">↓</button>\n      </div>\n    `;
+    const apply=()=>{ m.x=+document.getElementById("ed-x").value; m.y=+document.getElementById("ed-y").value; saveLayout(); redraw(); };
+    document.getElementById("ed-x").onchange=apply;
+    document.getElementById("ed-y").onchange=apply;
+    const t=document.getElementById("ed-text"); if(t) t.oninput=()=>{m.text=t.value; saveLayout(); redraw();};
+    const t1=document.getElementById("ed-t1"); if(t1) t1.oninput=()=>{m.t1=t1.value; saveLayout(); redraw();};
+    const lb=document.getElementById("ed-label"); if(lb) lb.oninput=()=>{m.label=lb.value; saveLayout(); redraw();};
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{
+      const [dx,dy]=btn.dataset.nudge.split(",").map(Number);
+      m.x+=dx; m.y+=dy; saveLayout(); redraw(); renderDockEditor();
+    });
+  }else{
+    box.innerHTML="<p>Click a dock on the chart to edit it.</p>";
+  }
+}
+function selectDock(id){
+  selectedDock=id; selectedMark=null; selected=null;
+  showTab("layout");
+  renderDockEditor();
+  redraw();
+}
+function selectMark(id){
+  selectedMark=id; selectedDock=null; selected=null;
+  showTab("layout");
+  renderDockEditor();
+  redraw();
+}
+svg.addEventListener("click",e=>{
+  if(dockDrag && dockDrag.moved) return;
+  if(editing){
+    const d=e.target.closest("[data-dock]");
+    const m=e.target.closest("[data-mark]");
+    if(d){ selectDock(d.getAttribute("data-dock")); return; }
+    if(m){ selectMark(m.getAttribute("data-mark")); return; }
+    return;
+  }
+  const t=e.target.closest("[data-id]"); if(!t) return;
+  select(t.getAttribute("data-id"));
+});
+document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{
   if(!selected) return;
   data[selected]=data[selected]||{};
   data[selected].status=b.dataset.st; save(data); select(selected);
@@ -275,6 +411,7 @@ function showTab(name){
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===name));
   document.getElementById("pane-slip").hidden=name!=="slip";
   document.getElementById("pane-dir").hidden=name!=="dir";
+  document.getElementById("pane-layout").hidden=name!=="layout";
 }
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){
@@ -289,14 +426,106 @@ let scale=1,tx=0,ty=0;
 const apply=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
 const chart=document.getElementById("chart");
 chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.5,Math.max(.35,scale*(e.deltaY<0?1.08:0.92)));apply();},{passive:false});
-let drag=null;
-chart.addEventListener("pointerdown",e=>{if(e.target.closest("[data-id]"))return;drag={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);});
-chart.addEventListener("pointermove",e=>{if(!drag)return;tx=e.clientX-drag.x;ty=e.clientY-drag.y;apply();});
-chart.addEventListener("pointerup",()=>drag=null);
+let pan=null, dockDrag=null;
+chart.addEventListener("pointerdown",e=>{
+  if(editing){
+    const dEl=e.target.closest("[data-dock]");
+    const mEl=e.target.closest("[data-mark]");
+    const p=svgPoint(e);
+    if(dEl){
+      const d=docks.find(x=>x.id===dEl.getAttribute("data-dock"));
+      if(d){
+        dockDrag={kind:"dock",id:d.id,x:d.x,y:d.y,px:p.x,py:p.y,moved:false};
+        selectDock(d.id);
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    if(mEl){
+      const m=marks.find(x=>x.id===mEl.getAttribute("data-mark"));
+      if(m){
+        dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false};
+        selectMark(m.id);
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    pan={x:e.clientX-tx,y:e.clientY-ty};
+    chart.setPointerCapture(e.pointerId);
+    return;
+  }
+  if(e.target.closest("[data-id]")) return;
+  pan={x:e.clientX-tx,y:e.clientY-ty};
+  chart.setPointerCapture(e.pointerId);
+});
+chart.addEventListener("pointermove",e=>{
+  if(dockDrag){
+    const p=svgPoint(e);
+    const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
+    if(Math.abs(dx)+Math.abs(dy)>2) dockDrag.moved=true;
+    if(dockDrag.kind==="dock"){
+      const d=docks.find(x=>x.id===dockDrag.id);
+      if(d){ d.x=Math.round(dockDrag.x+dx); d.y=Math.round(dockDrag.y+dy); redraw(); }
+    }else{
+      const m=marks.find(x=>x.id===dockDrag.id);
+      if(m){ m.x=Math.round(dockDrag.x+dx); m.y=Math.round(dockDrag.y+dy); redraw(); }
+    }
+    return;
+  }
+  if(!pan) return;
+  tx=e.clientX-pan.x; ty=e.clientY-pan.y; apply();
+});
+chart.addEventListener("pointerup",()=>{
+  if(dockDrag){ saveLayout(); renderDockEditor(); }
+  dockDrag=null; pan=null;
+});
 const fit=()=>{scale=1;tx=0;ty=0;apply();};
 document.getElementById("z-in").onclick=()=>{scale=Math.min(3.5,scale*1.15);apply();};
 document.getElementById("z-out").onclick=()=>{scale=Math.max(.35,scale/1.15);apply();};
 document.getElementById("z-full").onclick=fit;
+document.getElementById("edit-toggle").onclick=()=>{
+  editing=!editing;
+  document.body.classList.toggle("editing", editing);
+  chart.classList.toggle("editing", editing);
+  document.getElementById("edit-toggle").classList.toggle("on", editing);
+  document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
+  document.getElementById("hint").textContent=editing?"Drag a whole dock · click to edit numbers":"Click a numbered slip · drag to pan";
+  if(editing) showTab("layout");
+};
+document.getElementById("bg-op").oninput=function(){
+  bgImg.setAttribute("opacity", String((+this.value)/100));
+};
+document.getElementById("export-layout").onclick=async()=>{
+  const json=JSON.stringify({docks,marks},null,2);
+  try{ await navigator.clipboard.writeText(json); alert("Layout JSON copied."); }
+  catch{ prompt("Copy this layout JSON:", json); }
+};
+document.getElementById("download-layout").onclick=()=>{
+  const blob=new Blob([JSON.stringify({docks,marks},null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="laceys-layout.json";
+  a.click();
+};
+document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
+document.getElementById("import-file").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const raw=JSON.parse(r.result);
+      if(!raw.docks) throw new Error("no docks");
+      localStorage.setItem(LAYOUT_STORE, JSON.stringify(raw));
+      ({docks,marks}=loadLayout());
+      saveLayout(); redraw(); renderDockEditor();
+    }catch{ alert("Could not read that JSON file."); }
+  };
+  r.readAsText(f);
+};
+document.getElementById("reset-layout").onclick=()=>{
+  if(!confirm("Reset all dock positions and numbers to the original chart?")) return;
+  docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); saveLayout(); redraw(); renderDockEditor();
+};
 </script>
 </body>
 </html>
