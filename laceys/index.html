@@ -65,7 +65,7 @@ body.editing .edit-banner{display:block}
     </div>
   </div>
 </header>
-<div class="edit-banner">Edit mode: drag any dock, walkway, building, or label. Click it to rotate, resize, or edit.</div>
+<div class="edit-banner">Edit mode: drag a whole dock with its slips, or a main walkway, building, or label.</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
@@ -91,8 +91,8 @@ body.editing .edit-banner{display:block}
     </div>
     <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
     <div id="pane-layout" hidden>
-      <h2>Move &amp; edit everything</h2>
-      <p class="hint">Drag any piece. Walkways, buildings, and labels move and rotate on their own.</p>
+      <h2>Move & edit</h2>
+      <p class="hint">A dock moves with its slips and its own walkway. Main walkways, buildings, and labels move separately.</p>
       <div class="st"><button class="btn" id="add-walk">+ Walkway</button><button class="btn" id="add-box">+ Building</button><button class="btn" id="add-label">+ Label</button></div>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
@@ -106,6 +106,6 @@ body.editing .edit-banner{display:block}
     </div>
   </aside>
 </div>
-<script src="app.js"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
