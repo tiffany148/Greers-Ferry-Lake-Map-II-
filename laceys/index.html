@@ -61,11 +61,15 @@ body.editing .edit-banner{display:block}
     <div class="meta">
       <div id="count"></div>
       <div id="hint">Click a numbered slip · drag to pan</div>
-      <div class="hdr-actions"><button id="edit-toggle">Edit docks</button></div>
+      <div class="hdr-actions">
+        <button id="btn-undo" type="button" title="Undo">Undo</button>
+        <button id="btn-redo" type="button" title="Redo">Redo</button>
+        <button id="edit-toggle">Edit docks</button>
+      </div>
     </div>
   </div>
 </header>
-<div class="edit-banner">Edit mode: unlock a dock to move slips one by one. Locked docks, walkways, and buildings move as whole pieces. Resize anything in the side panel.</div>
+<div class="edit-banner">Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
@@ -99,7 +103,11 @@ body.editing .edit-banner{display:block}
         <button class="btn" id="add-walk">+ Walkway</button>
         <button class="btn" id="add-box">+ Building</button>
         <button class="btn" id="add-label">+ Label</button>
+        <button class="btn" id="btn-dup">Duplicate</button>
+        <button class="btn" id="btn-group">Group selected</button>
+        <button class="btn" id="btn-ungroup">Ungroup</button>
       </div>
+      <p class="hint" id="sel-hint">Shift-click docks or labels to select several, then Group.</p>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
         <button class="btn" id="export-layout">Copy layout JSON</button>
@@ -113,7 +121,7 @@ body.editing .edit-banner{display:block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=34"></script>
-<script src="app.js?v=34"></script>
+<script src="app-data.js?v=38"></script>
+<script src="app.js?v=38"></script>
 </body>
 </html>

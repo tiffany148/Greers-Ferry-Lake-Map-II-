@@ -50,5 +50,3 @@ const DEFAULT_MARKS=[
   {id:"north",kind:"text",x:1200,y:24,text:"NORTH",size:13},
   {id:"channel",kind:"text",x:2288,y:860,text:"NARROWS CHANNEL",size:14,rot:90}
 ];
-
-Fresh3
