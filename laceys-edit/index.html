@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Lacey's Narrows · edit lab</title>
+<meta name="theme-color" content="#0c3c41"/>
+<style>
+:root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
+header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
+.kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
+.top{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{margin:4px 0 0;font-size:28px;font-weight:650}
+.meta{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
+.hdr-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+.hdr-actions button,.btn{border:0;border-radius:10px;padding:8px 12px;background:#15565b;color:var(--ink);cursor:pointer;font-size:13px}
+.hdr-actions button.on,.btn.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.search{padding:8px 16px 0}
+.search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
+.chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
+.chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
+.chart.editing{cursor:default}
+svg{transform-origin:0 0}
+.slip{cursor:pointer}
+.slip rect{stroke:#3a4342;stroke-width:.5}
+.slip.on rect{stroke:#fff;stroke-width:2}
+.slip.dim{opacity:.2}
+.slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
+.dock-hit{cursor:grab}
+.dock-hit.on .walk{stroke:#fff;stroke-width:2}
+.dock-hit.multi .walk{stroke:#7fe0ff;stroke-width:2;stroke-dasharray:4 3}
+.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173;font-size:18px;cursor:pointer}
+aside{background:#0a3338;padding:16px;overflow:auto}
+.tabs{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
+.tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
+aside h2{font-size:16px;margin:0 0 6px}
+aside p,.hint{font-size:13px;color:var(--muted);line-height:1.45}
+aside label{display:block;font-size:12px;color:var(--muted);margin-top:8px}
+aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;padding:9px;margin-top:4px;background:#15565b;color:var(--ink);font:inherit}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.st{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
+.st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
+.edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
+body.editing .edit-banner{display:block}
+@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
+  <div class="top">
+    <h1>Lacey's Narrows</h1>
+    <div class="meta">
+      <div id="count"></div>
+      <div id="hint">Click a numbered slip · drag to pan</div>
+      <div class="hdr-actions">
+        <button id="btn-undo" title="Undo last change">Undo</button>
+        <button id="btn-redo" title="Redo">Redo</button>
+        <button id="edit-toggle">Edit docks</button>
+      </div>
+    </div>
+  </div>
+</header>
+<div class="edit-banner">Edit lab: Undo / Redo · Shift-click to multi-select · Group moves together · Color any item · Duplicate or Delete anything.</div>
+<div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
+<div class="chips" id="chips"></div>
+<div class="layout">
+  <div class="chart" id="chart">
+    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
+    <div class="zoom"><button id="z-in">+</button><button id="z-out">−</button><button id="z-full">⛶</button></div>
+  </div>
+  <aside>
+    <div class="tabs">
+      <button class="on" data-tab="slip">Slip</button>
+      <button data-tab="dir">Directory</button>
+      <button data-tab="layout">Dock</button>
+    </div>
+    <div id="pane-slip">
+      <h2>Find a slip</h2>
+      <p>Click any numbered slip. Occupancy stays on this device.</p>
+      <div id="slip-detail" hidden>
+        <h2 id="slip-title"></h2><p id="slip-meta"></p>
+        <div class="st"><button data-st="vacant">Vacant</button><button data-st="occupied">Occupied</button><button data-st="reserved">Reserved</button></div>
+        <label>Boat name<input id="boat"/></label>
+        <label>Notes<textarea id="notes" rows="3"></textarea></label>
+      </div>
+    </div>
+    <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
+    <div id="pane-layout" hidden>
+      <h2>Move & edit</h2>
+      <p class="hint">Cruiser and houseboat docks start unlocked. Use Lock / Unlock on any dock.</p>
+      <div class="st">
+        <button class="btn" id="add-dock">+ Dock</button>
+        <button class="btn" id="add-slip-free">+ Slip</button>
+        <button class="btn" id="add-walk">+ Walkway</button>
+        <button class="btn" id="add-box">+ Building</button>
+        <button class="btn" id="add-label">+ Label</button>
+        <button class="btn" id="btn-dup">Duplicate</button>
+        <button class="btn" id="btn-group">Group selected</button>
+        <button class="btn" id="btn-ungroup">Ungroup</button>
+      </div>
+      <p class="hint" id="sel-hint">Shift-click docks or labels to select several, then Group.</p>
+      <div id="dock-editor"><p>No element selected.</p></div>
+      <div class="st" style="margin-top:16px">
+        <button class="btn" id="export-layout">Copy layout JSON</button>
+        <button class="btn" id="download-layout">Download</button>
+        <button class="btn" id="import-layout">Import</button>
+        <button class="btn" id="reset-layout">Reset positions</button>
+      </div>
+      <label>Align photo opacity<input id="bg-op" type="range" min="0" max="80" value="0"/></label>
+      <input id="import-file" type="file" accept="application/json" hidden/>
+    </div>
+  </aside>
+</div>
+<script src="app-data.js?v=30"></script>
+<script src="app.js?v=30"></script>
+</body>
+</html>
