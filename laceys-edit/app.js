@@ -27,7 +27,7 @@ function moveDockSlips(d,dx,dy){
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
 function loadLayout(){
   try{
-    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||localStorage.getItem("laceys-layout-v2")||localStorage.getItem("laceys-layout-v1")||"null");
+    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
     if(!raw||!raw.docks) return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[]};
     const byId=Object.fromEntries(raw.docks.map(d=>[d.id,d]));
     const docks=DEFAULT_DOCKS.map(d=>{
@@ -58,7 +58,8 @@ function undo(){ if(!hist.length) return; future.push(snap()); restoreSnap(hist.
 function redo(){ if(!future.length) return; hist.push(snap()); restoreSnap(future.pop()); }
 function updateUndoBtns(){
   const u=document.getElementById("btn-undo"), r=document.getElementById("btn-redo");
-  if(u) u.disabled=!hist.length; if(r) r.disabled=!future.length;
+  if(u){ u.disabled=!hist.length; u.style.opacity=hist.length?1:.45; }
+  if(r){ r.disabled=!future.length; r.style.opacity=future.length?1:.45; }
 }
 function saveLayout(record){
   if(record!==false){
@@ -127,7 +128,7 @@ function drawMarks(){
 function appendWalk(g,d){
   const geom=walkGeomFromDock(d);
   g.appendChild(el("rect",{class:"walk",x:geom.x,y:geom.y,width:geom.w,height:geom.h,rx:3,fill:"#bfb9ac"}));
-  g.appendChild(el("text",{x:d.x,y:d.y-12,fill:"#d7eceb","font-size":14,"font-weight":700},d.name+(isLocked(d)?"":" • unlocked")));
+  g.appendChild(el("text",{x:d.x,y:d.y-12,fill:"#d7eceb","font-size":14,"font-weight":700},d.name));
 }
 function redraw(){
   buildSlips();drawMarks();layerDocks.innerHTML="";layerSlips.innerHTML="";
@@ -376,7 +377,7 @@ chart.addEventListener("pointermove",e=>{
   if(!pan) return;
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
-chart.addEventListener("pointerup",()=>{if(dockDrag){saveLayout();renderDockEditor();}dockDrag=null;pan=null;});
+chart.addEventListener("pointerup",()=>{if(dockDrag){if(dockDrag.moved)saveLayout();renderDockEditor();}dockDrag=null;pan=null;});
 chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.5,Math.max(.35,scale*(e.deltaY<0?1.08:0.92)));applyZoom();},{passive:false});
 document.getElementById("z-in").onclick=()=>{scale=Math.min(3.5,scale*1.15);applyZoom();};
 document.getElementById("z-out").onclick=()=>{scale=Math.max(.35,scale/1.15);applyZoom();};
@@ -393,7 +394,7 @@ document.getElementById("export-layout").onclick=async()=>{const json=JSON.strin
 document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
 document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;localStorage.setItem(LAYOUT_STORE,JSON.stringify(raw));({docks,marks,groups}=loadLayout());saveLayout(false);redraw();renderDockEditor();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
-document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset all positions?"))return;docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];saveLayout();redraw();renderDockEditor();};
+document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the clean chart layout? This clears your edit-lab layout on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();};
 document.getElementById("add-walk").onclick=()=>{const m={id:uid("mainwalk"),kind:"bar",x:200,y:200,w:14,h:220,title:"Walkway",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-box").onclick=()=>{const m={id:uid("box"),kind:"box",x:80,y:80,w:140,h:50,fill:"#2b6d8a",t1:"Building",t2:"",ink:"#fff",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-label").onclick=()=>{const m={id:uid("label"),kind:"text",x:200,y:80,text:"Label",size:13,rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
@@ -414,7 +415,7 @@ document.getElementById("add-slip-free").onclick=()=>{
   const num=prompt("Slip number?", String(nextSlipNumber())); if(num==null||!String(num).trim()) return;
   let dock=docks.find(x=>x.id===selectedDock);
   if(!dock){
-    dock={id:uid("dock"),name:"Loose slips",type:"col",x:80,y:80,kind:"std",size:"Custom",locked:false,gap:22,w:40,h:16,a:[],b:[],extras:[]};
+    dock={id:uid("dock"),name:"Extra slips",type:"col",x:80,y:80,kind:"std",size:"Custom",locked:true,gap:22,w:40,h:16,a:[],b:[],extras:[]};
     docks.push(dock);
   }
   dock.extras=dock.extras||[];
