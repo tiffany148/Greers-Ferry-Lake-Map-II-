@@ -45,6 +45,54 @@ function loadLayout(){
 }
 function saveLayout(){ localStorage.setItem(LAYOUT_STORE, JSON.stringify({docks,marks})); }
 let {docks,marks}=loadLayout();
+function sanitizeLayout(){
+  let changed=false;
+  // drop accidental free-float docks that cover the chart
+  const before=docks.length;
+  docks=docks.filter(d=>{
+    const name=(d.name||"").toLowerCase();
+    if(name==="loose slips"||name==="extra slips") return false;
+    // absurd dock origin / size
+    if(d.x<-200||d.y<-200||d.x>3000||d.y>2500) return false;
+    return true;
+  });
+  if(docks.length!==before) changed=true;
+  docks.forEach(d=>{
+    // fix giant fuel extras
+    (d.extras||[]).forEach(ex=>{
+      if(String(ex.num)==="839"||String(ex.num)==="840"){
+        if((ex.h||0)>40 && (ex.w||0)<40){ ex.w=96; ex.h=22; changed=true; }
+      }
+      if((ex.w||0)>160){ ex.w=Math.min(ex.w,96); changed=true; }
+      if((ex.h||0)>160){ ex.h=Math.min(ex.h,40); changed=true; }
+    });
+    if(d.placed){
+      Object.keys(d.placed).forEach(id=>{
+        const p=d.placed[id];
+        if(!p) return;
+        if((p.w||0)>140 || (p.h||0)>140){
+          // reset absurd resize — keep position, restore default slip size
+          const defW=d.sw||d.w||40, defH=d.sh||d.h||16;
+          p.w=defW; p.h=defH; changed=true;
+        }
+        if(p.fill && /^#([eE][0-9a-fA-F]{2}|ff|[fF][4-9a-fA-F])/i.test(p.fill) && ((p.w||0)>100||(p.h||0)>100)){
+          p.w=d.sw||d.w||40; p.h=d.sh||d.h||16; changed=true;
+        }
+      });
+    }
+    if((d.sw||0)>120){ d.sw=40; changed=true; }
+    if((d.sh||0)>120){ d.sh=36; changed=true; }
+    if((d.w||0)>200 && d.type==="col"){ d.w=40; changed=true; }
+    if((d.h||0)>200 && d.type==="col"){ d.h=16; changed=true; }
+  });
+  marks=marks.filter(m=>{
+    if((m.w||0)>1500 && (m.h||0)>800) return false; // full-chart blocker
+    if((m.w||0)>1800 || (m.h||0)>1600) return false;
+    return true;
+  });
+  return changed;
+}
+if(sanitizeLayout()) saveLayout();
 let slips=[], selected=null, selectedDock=null, selectedMark=null, filter="All", editing=false;
 function buildSlips(){
   slips=[];
@@ -325,3 +373,10 @@ document.getElementById("add-slip-free").onclick=()=>{
   dock.locked=false; selectedDock=dock.id; selected=String(num).trim(); selectedMark=null;
   saveLayout(); showTab("layout"); redraw(); renderDockEditor();
 };
+
+
+document.getElementById("strip-cover")?.addEventListener("click",()=>{
+  if(!confirm("Remove oversized / covering pieces (keeps your dock layout)?")) return;
+  if(sanitizeLayout()){ saveLayout(); redraw(); renderDockEditor(); alert("Cleared oversized covers."); }
+  else alert("Nothing oversized found. Select the orange piece and Delete it in the Dock tab.");
+});
