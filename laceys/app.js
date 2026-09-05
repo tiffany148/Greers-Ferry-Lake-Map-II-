@@ -111,19 +111,37 @@ let slips=[], selected=null, selectedDock=null, selectedMark=null, filter="All",
 const multi=new Set(); // "dock:id" or "mark:id"
 function updateSelHint(){
   const el=document.getElementById("sel-hint"); if(!el) return;
-  el.textContent = multi.size ? (multi.size+" selected · Group to move together") : "Shift-click docks or labels to select several, then Group.";
+  el.textContent = multi.size ? (multi.size+" selected · drag any one to move all, or Group") : "Select / group all, or Shift-click several, then Group.";
 }
 function memberKey(kind,id){ return kind+":"+id; }
 function findGroupFor(kind,id){
   const k=memberKey(kind,id);
   return groups.find(g=> (g.members||[]).includes(k));
 }
-function moveGroupMembers(g,dx,dy){
-  (g.members||[]).forEach(k=>{
-    const [kind,id]=k.split(":");
+function parseMemberKey(k){
+  const i=String(k).indexOf(":");
+  if(i<0) return {kind:"",id:k};
+  return {kind:k.slice(0,i), id:k.slice(i+1)};
+}
+function moveMembersByKeys(keys,dx,dy){
+  (keys||[]).forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
     if(kind==="dock"){ const d=docks.find(x=>x.id===id); if(d){ if(isLocked(d)) moveDockSlips(d,dx,dy); d.x+=dx; d.y+=dy; } }
     else if(kind==="mark"){ const m=marks.find(x=>x.id===id); if(m){ m.x+=dx; m.y+=dy; } }
   });
+}
+function moveGroupMembers(g,dx,dy){ moveMembersByKeys(g.members||[], dx, dy); }
+function selectAllLayout(){
+  multi.clear();
+  docks.forEach(d=>multi.add("dock:"+d.id));
+  marks.forEach(m=>multi.add("mark:"+m.id));
+  updateSelHint(); redraw();
+}
+function groupAllLayout(){
+  selectAllLayout();
+  groups=groups.filter(g=>g.name!=="Entire map");
+  groups.push({id:uid("grp"),name:"Entire map",members:[...multi]});
+  updateSelHint(); saveLayout(); redraw();
 }
 
 function buildSlips(){
@@ -389,9 +407,13 @@ chart.addEventListener("pointermove",e=>{
       if(d){
         const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
         const mdx=nx-d.x, mdy=ny-d.y;
-        const g=findGroupFor("dock", d.id);
-        if(g){ moveGroupMembers(g, mdx, mdy); }
-        else { if(isLocked(d)) moveDockSlips(d,mdx,mdy); d.x=nx; d.y=ny; }
+        const key="dock:"+d.id;
+        if(multi.has(key) && multi.size>1){ moveMembersByKeys([...multi], mdx, mdy); }
+        else {
+          const g=findGroupFor("dock", d.id);
+          if(g){ moveGroupMembers(g, mdx, mdy); }
+          else { if(isLocked(d)) moveDockSlips(d,mdx,mdy); d.x=nx; d.y=ny; }
+        }
         redraw();
       }
     }else{
@@ -399,9 +421,13 @@ chart.addEventListener("pointermove",e=>{
       if(m){
         const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
         const mdx=nx-m.x, mdy=ny-m.y;
-        const g=findGroupFor("mark", m.id);
-        if(g) moveGroupMembers(g, mdx, mdy);
-        else { m.x=nx; m.y=ny; }
+        const key="mark:"+m.id;
+        if(multi.has(key) && multi.size>1){ moveMembersByKeys([...multi], mdx, mdy); }
+        else {
+          const g=findGroupFor("mark", m.id);
+          if(g) moveGroupMembers(g, mdx, mdy);
+          else { m.x=nx; m.y=ny; }
+        }
         redraw();
       }
     }
@@ -459,6 +485,8 @@ document.getElementById("add-slip-free").onclick=()=>{
 
 document.getElementById("btn-undo").onclick=()=>undo();
 document.getElementById("btn-redo").onclick=()=>redo();
+document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } selectAllLayout(); };
+document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } groupAllLayout(); };
 document.getElementById("btn-group").onclick=()=>{
   if(multi.size<2){ alert("Shift-click at least two docks or labels first."); return; }
   const name=prompt("Group name?","Group "+(groups.length+1));
