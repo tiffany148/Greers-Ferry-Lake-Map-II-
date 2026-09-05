@@ -1,5 +1,5 @@
 const STORE="laceys-slips-v5";
-const LAYOUT_STORE="laceys-layout-edit-v2";
+const LAYOUT_STORE="laceys-layout-edit-v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
@@ -27,8 +27,8 @@ const DEFAULT_DOCKS=[
   {id:"sales",name:"Sales",type:"col",x:520,y:352,kind:"sales",size:"10x34",locked:true,gap:18,w:40,h:16,a:[851,852,853,854,855,856,841,842,843,844,845,846,847,848,849,850]},
   {id:"fuel",name:"Fuel",type:"col",x:584,y:352,kind:"fuel",size:"Fuel stall",locked:true,gap:20,w:40,h:18,a:["F1","F2","F3","F4"]},
   {id:"courtesy",name:"Courtesy",type:"col",x:584,y:440,kind:"courtesy",size:"Courtesy",locked:true,gap:20,w:40,h:18,a:["C1","C2","C3","C4","C5","C6"]},
-  {id:"cruiser",name:"Cruiser",type:"ew",x:700,y:980,kind:"cruiser",size:"Cruiser",locked:true,sw:16,sh:36,gap:3,a:[801,802,803,804,805,806,807],b:[800,808,809,810,811,812,813,814,815,816]},
-  {id:"houseboats",name:"Houseboats",type:"ns",x:1100,y:720,kind:"hb",size:"12x38",locked:true,sw:40,sh:15,gap:3,a:[817,818,819,820,821,822,823,824,825,826,827,828,829,830],b:[831,832,833,834,835,836,837,838],extras:[{num:839,dx:0,dy:248,w:22,h:96,kind:"fuel",size:"20x87",filter:"Fuel"},{num:840,dx:26,dy:248,w:22,h:96,kind:"fuel",size:"20x87",filter:"Fuel"}]}
+  {id:"cruiser",name:"Cruiser",type:"ew",x:700,y:980,kind:"cruiser",size:"Cruiser",locked:false,sw:16,sh:36,gap:3,a:[801,802,803,804,805,806,807],b:[800,808,809,810,811,812,813,814,815,816]},
+  {id:"houseboats",name:"Houseboats",type:"ns",x:1100,y:720,kind:"hb",size:"12x38",locked:false,sw:40,sh:15,gap:3,a:[817,818,819,820,821,822,823,824,825,826,827,828,829,830],b:[831,832,833,834,835,836,837,838],extras:[{num:839,dx:0,dy:248,w:22,h:96,kind:"fuel",size:"20x87",filter:"Fuel"},{num:840,dx:26,dy:248,w:22,h:96,kind:"fuel",size:"20x87",filter:"Fuel"}]}
 ];
 const DEFAULT_MARKS=[
   {id:"shop",kind:"box",x:40,y:40,w:220,h:70,fill:"#8a8f62",t1:"SHOP / Service Dept.",t2:"Office"},

@@ -27,7 +27,7 @@ function moveDockSlips(d,dx,dy){
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
 function loadLayout(){
   try{
-    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
+    const raw=JSON.parse(localStorage.getItem("laceys-layout-edit-v1")||localStorage.getItem("laceys-layout-edit-v2")||localStorage.getItem("laceys-layout-v2")||localStorage.getItem(LAYOUT_STORE)||"null");
     if(!raw||!raw.docks) return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[]};
     const byId=Object.fromEntries(raw.docks.map(d=>[d.id,d]));
     const docks=DEFAULT_DOCKS.map(d=>{
