@@ -92,22 +92,20 @@ function sanitizeLayout(){
       d.x=nx; d.y=ny; changed=true;
     }
     (d.extras||[]).forEach(ex=>{
-      if(String(ex.num)==="839"||String(ex.num)==="840"){
-        if((ex.h||0)>40 && (ex.w||0)<40){ ex.w=96; ex.h=22; changed=true; }
-      }
-      if((ex.w||0)>160){ ex.w=Math.min(ex.w,96); changed=true; }
-      if((ex.h||0)>160){ ex.h=Math.min(ex.h,40); changed=true; }
+      // Only stop absurd cover-the-map sizes — do NOT shrink intentional tall slips (e.g. 839/840 at 40x300)
+      if((ex.w||0)>900 && (ex.h||0)>900){ ex.w=Math.min(ex.w,120); ex.h=Math.min(ex.h,40); changed=true; }
     });
     if(d.placed){
       Object.keys(d.placed).forEach(id=>{
         const p=d.placed[id]; if(!p) return;
-        if((p.w||0)>140 || (p.h||0)>140){
+        if((p.w||0)>900 && (p.h||0)>900){
           p.w=d.sw||d.w||40; p.h=d.sh||d.h||16; changed=true;
         }
       });
     }
-    if((d.sw||0)>120){ d.sw=40; changed=true; }
-    if((d.sh||0)>120){ d.sh=36; changed=true; }
+    // Keep dock default slip sizes reasonable, but allow large individual extras/placed above
+    if((d.sw||0)>400){ d.sw=40; changed=true; }
+    if((d.sh||0)>400){ d.sh=36; changed=true; }
   });
   const before=docks.length;
   docks=docks.filter(d=>{
@@ -501,7 +499,42 @@ function selectEditSlip(id){
 }
 let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
 const chart=document.getElementById("chart");
+const WORLD_W=2400, WORLD_H=1700;
 const applyZoom=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+function chartSize(){
+  const r=chart.getBoundingClientRect();
+  return {w:Math.max(320, r.width||800), h:Math.max(240, r.height||560)};
+}
+function minFitScale(){
+  const {w,h}=chartSize();
+  return Math.min(w/WORLD_W, h/WORLD_H)*0.96;
+}
+function minZoomScale(){
+  // Allow zooming out well past "fit whole map" for more range
+  return Math.max(0.06, minFitScale()*0.28);
+}
+function maxZoomScale(){ return 5; }
+function fitWholeMap(){
+  const {w,h}=chartSize();
+  scale=Math.max(minZoomScale(), Math.min(maxZoomScale(), minFitScale()));
+  tx=(w-WORLD_W*scale)/2;
+  ty=(h-WORLD_H*scale)/2;
+  applyZoom();
+}
+function zoomToward(cx,cy,factor){
+  const s1=Math.min(maxZoomScale(), Math.max(minZoomScale(), scale*factor));
+  const k=s1/scale;
+  tx=cx-(cx-tx)*k;
+  ty=cy-(cy-ty)*k;
+  scale=s1;
+  applyZoom();
+}
+function defaultMarinaZoom(){
+  // Start fit-to-page, then zoom in so docks are readable; ⛶ still fits the whole map
+  fitWholeMap();
+  const {w,h}=chartSize();
+  zoomToward(w/2, h/2, 1.9);
+}
 svg.addEventListener("click",e=>{
   if(dockDrag&&dockDrag.moved)return;
   if(editing){
@@ -634,10 +667,21 @@ chart.addEventListener("pointerup",()=>{
   }
   dockDrag=null; pan=null;
 });
-chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.5,Math.max(.35,scale*(e.deltaY<0?1.08:0.92)));applyZoom();},{passive:false});
-document.getElementById("z-in").onclick=()=>{scale=Math.min(3.5,scale*1.15);applyZoom();};
-document.getElementById("z-out").onclick=()=>{scale=Math.max(.35,scale/1.15);applyZoom();};
-document.getElementById("z-full").onclick=()=>{scale=1;tx=0;ty=0;applyZoom();};
+chart.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const r=chart.getBoundingClientRect();
+  const cx=e.clientX-r.left, cy=e.clientY-r.top;
+  zoomToward(cx, cy, e.deltaY<0?1.08:0.92);
+},{passive:false});
+document.getElementById("z-in").onclick=()=>{ const {w,h}=chartSize(); zoomToward(w/2,h/2,1.15); };
+document.getElementById("z-out").onclick=()=>{ const {w,h}=chartSize(); zoomToward(w/2,h/2,1/1.15); };
+document.getElementById("z-full").onclick=()=>fitWholeMap();
+// Initial view: zoomed in for reading slips; use ⛶ to see whole map on one page
+requestAnimationFrame(()=>requestAnimationFrame(defaultMarinaZoom));
+window.addEventListener("resize",()=>{
+  // Keep current relative zoom band sane after rotate/resize
+  if(scale<minZoomScale()) { scale=minZoomScale(); applyZoom(); }
+});
 document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return;data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
 ["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return;data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
 document.getElementById("q").addEventListener("input",function(){const hit=slips.find(s=>String(s.num)===this.value.trim());if(hit)select(hit.id);});
