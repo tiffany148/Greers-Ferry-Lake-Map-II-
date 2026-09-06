@@ -52,6 +52,10 @@ aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;p
 .layer-card h3{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .layer-card .opt{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
 .layer-card .opt input[type="color"]{width:42px;height:32px;padding:0;border:0;background:transparent}
+.eye{min-width:36px;opacity:.95}
+.eye.off{opacity:.4;text-decoration:line-through}
+.chip.hidden-opt{opacity:.45;text-decoration:line-through}
+.slip.layer-hidden{display:none}
 .chip.layer-on{outline:2px solid #b8f5c5}
 .edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
 body.editing .edit-banner{display:block}
@@ -104,7 +108,7 @@ body.editing .edit-banner{display:block}
     <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
     <div id="pane-layers" hidden>
       <h2>Color layers</h2>
-      <p class="hint">Create layers (Power, Lease, etc.). Each option has a color. Turn a layer On to recolor slips; pick an option on a slip to assign it.</p>
+      <p class="hint">Create layers (Power, Lease, etc.). Use to color recolors slips. Eye icons hide/show a whole layer or each option. Assign options on a slip, then Save.</p>
       <div class="st"><button class="btn" id="add-layer">+ Add layer</button></div>
       <div id="layers-editor"></div>
     </div>
@@ -138,7 +142,7 @@ body.editing .edit-banner{display:block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=44"></script>
-<script src="app.js?v=44"></script>
+<script src="app-data.js?v=45"></script>
+<script src="app.js?v=45"></script>
 </body>
 </html>
