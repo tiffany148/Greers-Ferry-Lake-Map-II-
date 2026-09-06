@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -49,6 +48,11 @@ aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;p
 .st button{border:0;border-radius:999px;padding:7px 10px;background:#15565b;color:var(--ink);cursor:pointer;font-size:12px}
 .st button.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .dir-item{padding:8px 0;border-bottom:1px solid #165156;font-size:13px;cursor:pointer}
+.layer-card{border:1px solid #165156;border-radius:12px;padding:10px;margin:10px 0;background:#0f3f44}
+.layer-card h3{margin:0 0 8px;font-size:15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.layer-card .opt{display:flex;gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap}
+.layer-card .opt input[type="color"]{width:42px;height:32px;padding:0;border:0;background:transparent}
+.chip.layer-on{outline:2px solid #b8f5c5}
 .edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
 body.editing .edit-banner{display:block}
 @media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}}
@@ -65,6 +69,7 @@ body.editing .edit-banner{display:block}
       <div class="hdr-actions">
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
+        <button id="btn-save" type="button" title="Save current layout on this device">Save</button>
         <button id="edit-toggle">Edit docks</button>
       </div>
     </div>
@@ -82,6 +87,7 @@ body.editing .edit-banner{display:block}
     <div class="tabs">
       <button class="on" data-tab="slip">Slip</button>
       <button data-tab="dir">Directory</button>
+      <button data-tab="layers">Layers</button>
       <button data-tab="layout">Dock</button>
     </div>
     <div id="pane-slip">
@@ -90,11 +96,18 @@ body.editing .edit-banner{display:block}
       <div id="slip-detail" hidden>
         <h2 id="slip-title"></h2><p id="slip-meta"></p>
         <div class="st"><button data-st="vacant">Vacant</button><button data-st="occupied">Occupied</button><button data-st="reserved">Reserved</button></div>
+        <div id="slip-layer-assigns"></div>
         <label>Boat name<input id="boat"/></label>
         <label>Notes<textarea id="notes" rows="3"></textarea></label>
       </div>
     </div>
     <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
+    <div id="pane-layers" hidden>
+      <h2>Color layers</h2>
+      <p class="hint">Create layers (Power, Lease, etc.). Each option has a color. Turn a layer On to recolor slips; pick an option on a slip to assign it.</p>
+      <div class="st"><button class="btn" id="add-layer">+ Add layer</button></div>
+      <div id="layers-editor"></div>
+    </div>
     <div id="pane-layout" hidden>
       <h2>Move & edit</h2>
       <p class="hint">Cruiser and houseboat docks start unlocked. Use Lock / Unlock on any dock.</p>
@@ -113,6 +126,7 @@ body.editing .edit-banner{display:block}
       <p class="hint" id="sel-hint">Select / group all, then drag anywhere on the map to move the whole chart.</p>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
+        <button class="btn" id="btn-save-layout">Save layout</button>
         <button class="btn" id="export-layout">Copy layout JSON</button>
         <button class="btn" id="download-layout">Download</button>
         <button class="btn" id="import-layout">Import</button>
@@ -124,7 +138,7 @@ body.editing .edit-banner{display:block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=41"></script>
-<script src="app.js?v=41"></script>
+<script src="app-data.js?v=44"></script>
+<script src="app.js?v=44"></script>
 </body>
 </html>

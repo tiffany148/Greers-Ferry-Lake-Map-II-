@@ -1,4 +1,3 @@
-
 function walkGeomFromDock(d){
   if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
   if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
@@ -26,34 +25,37 @@ function moveDockSlips(d,dx,dy){
   Object.keys(d.placed).forEach(id=>{d.placed[id].x+=dx;d.placed[id].y+=dy;});
 }
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
+function loadLayersStandalone(){
+  try{
+    const raw=JSON.parse(localStorage.getItem("laceys-layers-v1")||"null");
+    return Array.isArray(raw)?raw:[];
+  }catch{return [];}
+}
 function loadLayout(){
   try{
     const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||localStorage.getItem("laceys-layout-v2")||localStorage.getItem("laceys-layout-v1")||"null");
-    if(!raw||!raw.docks) return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[]};
-    const byId=Object.fromEntries(raw.docks.map(d=>[d.id,d]));
-    const docks=DEFAULT_DOCKS.map(d=>{
-      const merged=Object.assign(clone(d), byId[d.id]||{});
-      if(byId[d.id] && byId[d.id].locked===undefined && (d.id==="cruiser"||d.id==="houseboats")) merged.locked=false;
-      return merged;
-    });
-    raw.docks.forEach(d=>{ if(!docks.find(x=>x.id===d.id)) docks.push(d); });
-    const saved=(raw.marks||[]).filter(m=>!isDockPieceMark(m.id));
-    const mBy=Object.fromEntries(saved.map(m=>[m.id,m]));
-    const marks=DEFAULT_MARKS.map(m=>Object.assign(clone(m), mBy[m.id]||{}));
-    saved.forEach(m=>{ if(!marks.find(x=>x.id===m.id)) marks.push(m); });
-    return {docks,marks,groups:raw.groups||[]};
-  }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[]};}
+    if(!raw||!Array.isArray(raw.docks)||!raw.docks.length){
+      return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};
+    }
+    // Saved layout is authoritative so deletes (parking oval, etc.) and positions stick.
+    const docks=clone(raw.docks);
+    const marks=clone((raw.marks||[]).filter(m=>m && !isDockPieceMark(m.id)));
+    const layers=Array.isArray(raw.layers)?clone(raw.layers):loadLayersStandalone();
+    return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers};
+  }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};}
 }
 const hist=[], future=[];
 let lastSnap=null;
-function snap(){ return JSON.stringify({docks,marks,groups}); }
+function snap(){ return JSON.stringify({docks,marks,groups,layers}); }
 function restoreSnap(s){
   const raw=JSON.parse(s);
   docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
+  if(Array.isArray(raw.layers)) layers=raw.layers;
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
+  try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
-  redraw(); renderDockEditor(); updateUndoBtns(); updateSelHint();
+  redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); renderLayersEditor(); renderChips();
 }
 function undo(){ if(!hist.length) return; future.push(snap()); restoreSnap(hist.pop()); }
 function redo(){ if(!future.length) return; hist.push(snap()); restoreSnap(future.pop()); }
@@ -73,18 +75,22 @@ function saveLayout(record){
   localStorage.setItem(LAYOUT_STORE, snap());
   updateUndoBtns();
 }
-let {docks,marks,groups}=loadLayout();
+let {docks,marks,groups,layers}=loadLayout();
+if(!Array.isArray(layers)) layers=[];
+let activeLayerId=null;
+let layerOptFilter="All";
 function sanitizeLayout(){
   let changed=false;
-  const before=docks.length;
-  docks=docks.filter(d=>{
-    const name=(d.name||"").toLowerCase();
-    if(name==="loose slips"||name==="extra slips") return false;
-    if(d.x<-200||d.y<-200||d.x>3000||d.y>2500) return false;
-    return true;
-  });
-  if(docks.length!==before) changed=true;
+  // Never delete docks just for being off-canvas (whole-chart drag used to wipe the map on reload).
+  // Clamp them back into a usable range instead.
   docks.forEach(d=>{
+    const nx=Math.max(-50, Math.min(2800, Number(d.x)||0));
+    const ny=Math.max(-50, Math.min(2000, Number(d.y)||0));
+    if(nx!==d.x || ny!==d.y){
+      const dx=nx-d.x, dy=ny-d.y;
+      if(isLocked(d)) moveDockSlips(d,dx,dy);
+      d.x=nx; d.y=ny; changed=true;
+    }
     (d.extras||[]).forEach(ex=>{
       if(String(ex.num)==="839"||String(ex.num)==="840"){
         if((ex.h||0)>40 && (ex.w||0)<40){ ex.w=96; ex.h=22; changed=true; }
@@ -103,7 +109,26 @@ function sanitizeLayout(){
     if((d.sw||0)>120){ d.sw=40; changed=true; }
     if((d.sh||0)>120){ d.sh=36; changed=true; }
   });
+  const before=docks.length;
+  docks=docks.filter(d=>{
+    const name=(d.name||"").toLowerCase();
+    if(name==="loose slips"||name==="extra slips") return false;
+    return true;
+  });
+  if(docks.length!==before) changed=true;
+  marks.forEach(m=>{
+    const nx=Math.max(-50, Math.min(2800, Number(m.x)||0));
+    const ny=Math.max(-50, Math.min(2000, Number(m.y)||0));
+    if(nx!==m.x || ny!==m.y){ m.x=nx; m.y=ny; changed=true; }
+  });
   marks=marks.filter(m=>!((m.w||0)>1800 || (m.h||0)>1600));
+  // If a bad save wiped almost everything, restore the baked main layout.
+  if(docks.length < Math.min(8, DEFAULT_DOCKS.length)){
+    docks=clone(DEFAULT_DOCKS);
+    marks=clone(DEFAULT_MARKS);
+    groups=[];
+    changed=true;
+  }
   return changed;
 }
 if(sanitizeLayout()) saveLayout(false);
@@ -177,8 +202,36 @@ svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
 const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
 svg.appendChild(layerBg);svg.appendChild(layerMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);
-function fill(s){const rec=data[s.id];if(rec&&rec.status==="occupied")return "#b55a32";if(rec&&rec.status==="reserved")return "#d7b45a";if(s.fill)return s.fill;const dock=docks.find(x=>x.id===s.dockId);if(dock&&dock.fill)return dock.fill;return COLORS[s.kind]||"#e4dcc8";}
-function match(s,f){ if(!f||f==="All") return true; return s.filter===f || s.dock===f; }
+function layerOptionFor(slipId, layerId){
+  const rec=data[slipId];
+  if(!rec||!rec.layerOpts) return null;
+  return rec.layerOpts[layerId]||null;
+}
+function fill(s){
+  if(activeLayerId){
+    const layer=layers.find(l=>l.id===activeLayerId);
+    const optId=layerOptionFor(s.id, activeLayerId);
+    const opt=layer && (layer.options||[]).find(o=>o.id===optId);
+    if(opt&&opt.color) return opt.color;
+    return "#5a6866"; // unassigned under active layer
+  }
+  const rec=data[s.id];
+  if(rec&&rec.status==="occupied")return "#b55a32";
+  if(rec&&rec.status==="reserved")return "#d7b45a";
+  if(s.fill)return s.fill;
+  const dock=docks.find(x=>x.id===s.dockId);
+  if(dock&&dock.fill)return dock.fill;
+  return COLORS[s.kind]||"#e4dcc8";
+}
+function match(s,f){
+  if(activeLayerId){
+    if(!layerOptFilter||layerOptFilter==="All") return true;
+    if(layerOptFilter==="__none__") return !layerOptionFor(s.id, activeLayerId);
+    return layerOptionFor(s.id, activeLayerId)===layerOptFilter;
+  }
+  if(!f||f==="All") return true;
+  return s.filter===f || s.dock===f;
+}
 function drawMarks(){
   layerMarks.innerHTML="";
   marks.forEach(m=>{
@@ -216,12 +269,39 @@ function redraw(){
   });
   document.getElementById("count").textContent=slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
 }
-const chips=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
+const DOCK_CHIPS=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
-chips.forEach(c=>{const b=document.createElement("button");b.className="chip"+(c==="All"?" on":"");b.textContent=c;b.onclick=()=>{filter=c;[...chipsEl.children].forEach(x=>x.classList.toggle("on",x.textContent===c));redraw();};chipsEl.appendChild(b);});
+function renderChips(){
+  chipsEl.innerHTML="";
+  if(activeLayerId){
+    const layer=layers.find(l=>l.id===activeLayerId);
+    const opts=[{id:"All",name:"All"},{id:"__none__",name:"Unassigned"}].concat((layer&&layer.options)||[]);
+    opts.forEach(o=>{
+      const b=document.createElement("button");
+      b.className="chip"+(layerOptFilter===o.id?" on":"")+" layer-on";
+      b.textContent=o.name||o.id;
+      if(o.color){ b.style.boxShadow="inset 0 -3px 0 "+o.color; }
+      b.onclick=()=>{ layerOptFilter=o.id; renderChips(); redraw(); };
+      chipsEl.appendChild(b);
+    });
+    const clear=document.createElement("button");
+    clear.className="chip"; clear.textContent="Exit layer colors";
+    clear.onclick=()=>{ activeLayerId=null; layerOptFilter="All"; renderChips(); renderLayersEditor(); redraw(); };
+    chipsEl.appendChild(clear);
+  }else{
+    DOCK_CHIPS.forEach(c=>{
+      const b=document.createElement("button");
+      b.className="chip"+(filter===c?" on":"");
+      b.textContent=c;
+      b.onclick=()=>{ filter=c; renderChips(); redraw(); };
+      chipsEl.appendChild(b);
+    });
+  }
+}
+renderChips();
 redraw();
 function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const ctm=svg.getScreenCTM();return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};}
-function showTab(name){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));document.getElementById("pane-slip").hidden=name!=="slip";document.getElementById("pane-dir").hidden=name!=="dir";document.getElementById("pane-layout").hidden=name!=="layout";}
+function showTab(name){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));document.getElementById("pane-slip").hidden=name!=="slip";document.getElementById("pane-dir").hidden=name!=="dir";const pl=document.getElementById("pane-layers"); if(pl) pl.hidden=name!=="layers";document.getElementById("pane-layout").hidden=name!=="layout"; if(name==="layers") renderLayersEditor();}
 function rotCtrl(val){return `<label>Rotation (degrees)<input id="ed-rot" type="range" min="-180" max="180" step="1" value="${val}"/></label><div class="row2"><label>Angle<input id="ed-rot-num" type="number" step="1" value="${val}"/></label><div class="st"><button type="button" data-rot="-90">-90</button><button type="button" data-rot="-15">-15</button><button type="button" data-rot="15">+15</button><button type="button" data-rot="90">+90</button><button type="button" data-rot="0">0</button></div></div>`;}
 function bindRot(obj,after){const apply=v=>{obj.rot=((Number(v)%360)+360)%360;if(obj.rot>180)obj.rot-=360;if(Math.abs(obj.rot)<0.01)obj.rot=0;saveLayout();redraw();if(after)after();};document.getElementById("ed-rot").oninput=e=>{document.getElementById("ed-rot-num").value=e.target.value;obj.rot=+e.target.value;saveLayout();redraw();};document.getElementById("ed-rot").onchange=e=>apply(e.target.value);document.getElementById("ed-rot-num").onchange=e=>apply(e.target.value);document.querySelectorAll("[data-rot]").forEach(btn=>btn.onclick=()=>{const s=+btn.dataset.rot;apply(s===0?0:(Number(obj.rot)||0)+s);});}
 function nextSlipNumber(){
@@ -353,7 +433,29 @@ function renderDockEditor(){
     document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));selectedMark=null;saveLayout();redraw();renderDockEditor();};
   }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label.</p>";
 }
-function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));if(!editing)showTab("slip");redraw();}
+function renderSlipLayerAssigns(slipId){
+  const box=document.getElementById("slip-layer-assigns");
+  if(!box) return;
+  if(!layers.length){ box.innerHTML=""; return; }
+  const rec=data[slipId]||{};
+  const opts=rec.layerOpts||{};
+  box.innerHTML="<p class=\"hint\" style=\"margin-top:10px\">Layer colors</p>"+layers.map(layer=>{
+    const cur=opts[layer.id]||"";
+    const options=["<option value=\"\">Unassigned</option>"].concat((layer.options||[]).map(o=>"<option value=\""+o.id+"\""+(cur===o.id?" selected":"")+">"+o.name+"</option>"));
+    return "<label>"+layer.name+"<select data-layer-assign=\""+layer.id+"\">"+options.join("")+"</select></label>";
+  }).join("");
+  box.querySelectorAll("[data-layer-assign]").forEach(sel=>{
+    sel.onchange=()=>{
+      data[slipId]=data[slipId]||{status:"vacant"};
+      data[slipId].layerOpts=data[slipId].layerOpts||{};
+      const v=sel.value;
+      if(!v) delete data[slipId].layerOpts[sel.dataset.layerAssign];
+      else data[slipId].layerOpts[sel.dataset.layerAssign]=v;
+      save(data); redraw();
+    };
+  });
+}
+function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
 function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");renderDockEditor();redraw();}
 function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");renderDockEditor();redraw();}
 function selectEditSlip(id){
@@ -480,7 +582,11 @@ chart.addEventListener("pointerup",()=>{
     if(dockDrag.kind==="chart"){
       clearLayerNudge();
       if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
-        moveMembersByKeys(dockDrag.keys, dockDrag.sx, dockDrag.sy);
+        // Cap a single drag so a bad pointer event cannot fling the chart into oblivion
+        const sx=Math.max(-1500, Math.min(1500, dockDrag.sx));
+        const sy=Math.max(-1500, Math.min(1500, dockDrag.sy));
+        moveMembersByKeys(dockDrag.keys, sx, sy);
+        sanitizeLayout();
         saveLayout();
         redraw();
       }
@@ -504,10 +610,10 @@ function renderDir(){const list=document.getElementById("dir-list");const rows=O
 renderDir();
 document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";document.getElementById("hint").textContent=editing?(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Select / group all to move everything"):"Click a numbered slip · drag to pan";if(editing)showTab("layout");redraw();};
 document.getElementById("bg-op").oninput=function(){bgImg.setAttribute("opacity",String((+this.value)/100));};
-document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
-document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
+document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
+document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
-document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;localStorage.setItem(LAYOUT_STORE,JSON.stringify(raw));({docks,marks,groups}=loadLayout());saveLayout(false);redraw();renderDockEditor();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
+document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;if(Array.isArray(raw.layers)) layers=raw.layers; localStorage.setItem(LAYOUT_STORE,JSON.stringify({docks:raw.docks,marks:raw.marks||[],groups:raw.groups||[],layers})); saveLayersStore(); ({docks,marks,groups,layers}=loadLayout()); if(!Array.isArray(layers)) layers=[]; saveLayout(false);redraw();renderDockEditor();renderLayersEditor();renderChips();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
 document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
 document.getElementById("add-walk").onclick=()=>{const m={id:uid("mainwalk"),kind:"bar",x:200,y:200,w:14,h:220,title:"Walkway",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-box").onclick=()=>{const m={id:uid("box"),kind:"box",x:80,y:80,w:140,h:50,fill:"#2b6d8a",t1:"Building",t2:"",ink:"#fff",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
@@ -538,8 +644,130 @@ document.getElementById("add-slip-free").onclick=()=>{
   saveLayout(); showTab("layout"); redraw(); renderDockEditor();
 };
 
+
+function flashSave(msg){
+  const hint=document.getElementById("hint");
+  const prev=hint?hint.textContent:"";
+  if(hint){ hint.textContent=msg; hint.style.color="#b8f5c5"; }
+  const b=document.getElementById("btn-save");
+  if(b){ b.textContent="Saved"; b.classList.add("on"); }
+  setTimeout(()=>{
+    if(hint){ hint.textContent=prev; hint.style.color=""; }
+    if(b){ b.textContent="Save"; b.classList.remove("on"); }
+  }, 1800);
+}
+function saveNow(){
+  // Persist exact current docks/marks/groups/layers (deletes included)
+  const s=snap();
+  localStorage.setItem(LAYOUT_STORE, s);
+  try{ localStorage.setItem("laceys-layout-v2", s); }catch(e){}
+  saveLayersStore();
+  lastSnap=s;
+  flashSave("Saved on this device · Download JSON for a backup copy");
+}
+
+function saveLayersStore(){
+  try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
+}
+function renderLayersEditor(){
+  const box=document.getElementById("layers-editor");
+  if(!box) return;
+  if(!layers.length){
+    box.innerHTML="<p class=\"hint\">No custom layers yet. Add one to color-code slips (Power, Lease, Season, …).</p>";
+    return;
+  }
+  box.innerHTML=layers.map(layer=>{
+    const on=activeLayerId===layer.id;
+    const opts=(layer.options||[]).map((o,idx)=>`
+      <div class="opt" data-layer="${layer.id}" data-opt="${o.id}">
+        <input type="color" value="${o.color||"#e4dcc8"}" data-k="color"/>
+        <input type="text" value="${(o.name||"").replace(/"/g,"&quot;")}" data-k="name" placeholder="Option name" style="flex:1;min-width:100px"/>
+        <button type="button" class="btn" data-del-opt>Remove</button>
+      </div>`).join("");
+    return `<div class="layer-card" data-layer-card="${layer.id}">
+      <h3>
+        <input type="text" value="${(layer.name||"").replace(/"/g,"&quot;")}" data-layer-name style="flex:1;min-width:120px"/>
+        <button type="button" class="btn ${on?"on":""}" data-use-layer>${on?"Coloring on":"Use to color"}</button>
+        <button type="button" class="btn" data-del-layer>Delete layer</button>
+      </h3>
+      ${opts}
+      <div class="st"><button type="button" class="btn" data-add-opt>+ Option</button></div>
+    </div>`;
+  }).join("");
+
+  box.querySelectorAll("[data-layer-name]").forEach(inp=>{
+    inp.onchange=()=>{
+      const id=inp.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.name=inp.value.trim()||"Layer";
+      saveLayersStore(); saveLayout(false); renderChips();
+    };
+  });
+  box.querySelectorAll("[data-use-layer]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      activeLayerId = activeLayerId===id ? null : id;
+      layerOptFilter="All";
+      renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-del-layer]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      if(!confirm("Delete this layer? Slip assignments for it will be ignored.")) return;
+      layers=layers.filter(l=>l.id!==id);
+      if(activeLayerId===id) activeLayerId=null;
+      saveLayersStore(); saveLayout(); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-add-opt]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.options=layer.options||[];
+      const colors=["#5aa0c4","#6dad6a","#e3c35c","#e39a7a","#c9896a","#9b7bb8","#d2b48c"];
+      layer.options.push({id:uid("opt"), name:"Option "+(layer.options.length+1), color:colors[layer.options.length%colors.length]});
+      saveLayersStore(); saveLayout(); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll(".opt").forEach(row=>{
+    const layerId=row.dataset.layer, optId=row.dataset.opt;
+    row.querySelectorAll("[data-k]").forEach(inp=>{
+      const apply=()=>{
+        const layer=layers.find(l=>l.id===layerId); if(!layer) return;
+        const opt=(layer.options||[]).find(o=>o.id===optId); if(!opt) return;
+        if(inp.dataset.k==="color") opt.color=inp.value;
+        else opt.name=inp.value.trim()||"Option";
+        saveLayersStore(); saveLayout(false); renderChips(); redraw();
+      };
+      inp.onchange=apply; inp.oninput=()=>{ if(inp.dataset.k==="color"){ apply(); } };
+    });
+    const del=row.querySelector("[data-del-opt]");
+    if(del) del.onclick=()=>{
+      const layer=layers.find(l=>l.id===layerId); if(!layer) return;
+      layer.options=(layer.options||[]).filter(o=>o.id!==optId);
+      saveLayersStore(); saveLayout(); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+}
+document.getElementById("add-layer").onclick=()=>{
+  const name=prompt("Layer name?","Power");
+  if(name==null) return;
+  layers.push({
+    id:uid("layer"),
+    name:String(name).trim()||"Layer",
+    options:[
+      {id:uid("opt"), name:"Option A", color:"#5aa0c4"},
+      {id:uid("opt"), name:"Option B", color:"#6dad6a"},
+      {id:uid("opt"), name:"Option C", color:"#e3c35c"}
+    ]
+  });
+  saveLayersStore(); saveLayout(); showTab("layers"); renderLayersEditor(); renderChips(); redraw();
+};
 document.getElementById("btn-undo").onclick=()=>undo();
 document.getElementById("btn-redo").onclick=()=>redo();
+document.getElementById("btn-save").onclick=()=>saveNow();
+const _btnSaveLayout=document.getElementById("btn-save-layout"); if(_btnSaveLayout) _btnSaveLayout.onclick=()=>saveNow();
 document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } selectAllLayout(); };
 document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } groupAllLayout(); };
 document.getElementById("btn-group").onclick=()=>{
