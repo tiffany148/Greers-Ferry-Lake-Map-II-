@@ -1,3 +1,4 @@
+
 const STORE="laceys-slips-v5";
 const LAYOUT_STORE="laceys-layout-v2";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
