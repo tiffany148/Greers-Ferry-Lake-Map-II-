@@ -1,3 +1,4 @@
+
 function walkGeomFromDock(d){
   if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
   if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
@@ -51,7 +52,7 @@ function restoreSnap(s){
   docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
-  selected=null; selectedDock=null; selectedMark=null; multi.clear();
+  selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
   redraw(); renderDockEditor(); updateUndoBtns(); updateSelHint();
 }
 function undo(){ if(!hist.length) return; future.push(snap()); restoreSnap(hist.pop()); }
@@ -109,9 +110,10 @@ if(sanitizeLayout()) saveLayout(false);
 lastSnap=snap();
 let slips=[], selected=null, selectedDock=null, selectedMark=null, filter="All", editing=false;
 const multi=new Set(); // "dock:id" or "mark:id"
+let moveWholeChart=false;
 function updateSelHint(){
   const el=document.getElementById("sel-hint"); if(!el) return;
-  el.textContent = multi.size ? (multi.size+" selected · drag any one to move all, or Group") : "Select / group all, or Shift-click several, then Group.";
+  el.textContent = moveWholeChart || multi.size>1 ? ((multi.size||"All")+" selected · drag the chart to move everything") : "Select / group all, then drag on the map to move everything.";
 }
 function memberKey(kind,id){ return kind+":"+id; }
 function findGroupFor(kind,id){
@@ -131,17 +133,34 @@ function moveMembersByKeys(keys,dx,dy){
   });
 }
 function moveGroupMembers(g,dx,dy){ moveMembersByKeys(g.members||[], dx, dy); }
+function allLayoutKeys(){ return docks.map(d=>"dock:"+d.id).concat(marks.map(m=>"mark:"+m.id)); }
+function clearLayerNudge(){
+  [layerBg, layerMarks, layerDocks, layerSlips].forEach(L=>{ if(L) L.removeAttribute("transform"); });
+}
+function nudgeLayers(dx,dy){
+  const t=`translate(${dx} ${dy})`;
+  [layerBg, layerMarks, layerDocks, layerSlips].forEach(L=>{ if(L) L.setAttribute("transform", t); });
+}
+function keysForDrag(kind,id){
+  const key=kind+":"+id;
+  if(multi.has(key) && multi.size>1) return [...multi];
+  const g=findGroupFor(kind,id);
+  if(g && (g.members||[]).length>1) return [...(g.members||[])];
+  if(moveWholeChart) return allLayoutKeys();
+  return null;
+}
 function selectAllLayout(){
   multi.clear();
-  docks.forEach(d=>multi.add("dock:"+d.id));
-  marks.forEach(m=>multi.add("mark:"+m.id));
+  allLayoutKeys().forEach(k=>multi.add(k));
+  moveWholeChart=true;
   updateSelHint(); redraw();
 }
 function groupAllLayout(){
   selectAllLayout();
   groups=groups.filter(g=>g.name!=="Entire map");
   groups.push({id:uid("grp"),name:"Entire map",members:[...multi]});
-  updateSelHint(); saveLayout(); redraw();
+  moveWholeChart=true;
+  updateSelHint(); saveLayout(false); lastSnap=snap(); redraw();
 }
 
 function buildSlips(){
@@ -372,9 +391,23 @@ chart.addEventListener("pointerdown",e=>{
     const dEl=e.target.closest("[data-dock]");
     const mEl=e.target.closest("[data-mark]");
     const p=svgPoint(e);
+    // Whole-chart move: after Select/group all, drag anywhere (including slips) moves everything
+    if(moveWholeChart || multi.size>1){
+      const keys=multi.size>1 ? [...multi] : allLayoutKeys();
+      dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false};
+      chart.style.cursor="grabbing";
+      chart.setPointerCapture(e.pointerId);
+      return;
+    }
     if(sEl){
       const dock=docks.find(x=>x.id===sEl.getAttribute("data-dock"));
       const slip=slips.find(x=>x.id===sEl.getAttribute("data-id"));
+      const bundle=dock ? keysForDrag("dock", dock.id) : null;
+      if(bundle){
+        dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false};
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
       if(dock && slip && !isLocked(dock)){
         dockDrag={kind:"slip",dockId:dock.id,id:slip.id,x:slip.x,y:slip.y,px:p.x,py:p.y,moved:false};
         selectEditSlip(slip.id);
@@ -384,11 +417,19 @@ chart.addEventListener("pointerdown",e=>{
     }
     if(dEl){
       const d=docks.find(x=>x.id===dEl.getAttribute("data-dock"));
-      if(d){dockDrag={kind:"dock",id:d.id,x:d.x,y:d.y,px:p.x,py:p.y,moved:false};selectDock(d.id);chart.setPointerCapture(e.pointerId);return;}
+      if(d){
+        const bundle=keysForDrag("dock", d.id);
+        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false}; chart.setPointerCapture(e.pointerId); return; }
+        dockDrag={kind:"dock",id:d.id,x:d.x,y:d.y,px:p.x,py:p.y,moved:false};selectDock(d.id);chart.setPointerCapture(e.pointerId);return;
+      }
     }
     if(mEl){
       const m=marks.find(x=>x.id===mEl.getAttribute("data-mark"));
-      if(m){dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false};selectMark(m.id);chart.setPointerCapture(e.pointerId);return;}
+      if(m){
+        const bundle=keysForDrag("mark", m.id);
+        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false}; chart.setPointerCapture(e.pointerId); return; }
+        dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false};selectMark(m.id);chart.setPointerCapture(e.pointerId);return;
+      }
     }
     pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);return;
   }
@@ -399,6 +440,12 @@ chart.addEventListener("pointermove",e=>{
   if(dockDrag){
     const p=svgPoint(e); const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
     if(Math.abs(dx)+Math.abs(dy)>2) dockDrag.moved=true;
+    if(dockDrag.kind==="chart"){
+      dockDrag.sx=Math.round(dx); dockDrag.sy=Math.round(dy);
+      // Live nudge via SVG transform (no full redraw — keeps it smooth)
+      nudgeLayers(dockDrag.sx, dockDrag.sy);
+      return;
+    }
     if(dockDrag.kind==="slip"){
       const d=docks.find(x=>x.id===dockDrag.dockId);
       if(d){ setPlaced(d,dockDrag.id,{x:Math.round(dockDrag.x+dx),y:Math.round(dockDrag.y+dy)}); redraw(); }
@@ -407,13 +454,9 @@ chart.addEventListener("pointermove",e=>{
       if(d){
         const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
         const mdx=nx-d.x, mdy=ny-d.y;
-        const key="dock:"+d.id;
-        if(multi.has(key) && multi.size>1){ moveMembersByKeys([...multi], mdx, mdy); }
-        else {
-          const g=findGroupFor("dock", d.id);
-          if(g){ moveGroupMembers(g, mdx, mdy); }
-          else { if(isLocked(d)) moveDockSlips(d,mdx,mdy); d.x=nx; d.y=ny; }
-        }
+        const g=findGroupFor("dock", d.id);
+        if(g){ moveGroupMembers(g, mdx, mdy); }
+        else { if(isLocked(d)) moveDockSlips(d,mdx,mdy); d.x=nx; d.y=ny; }
         redraw();
       }
     }else{
@@ -421,13 +464,9 @@ chart.addEventListener("pointermove",e=>{
       if(m){
         const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
         const mdx=nx-m.x, mdy=ny-m.y;
-        const key="mark:"+m.id;
-        if(multi.has(key) && multi.size>1){ moveMembersByKeys([...multi], mdx, mdy); }
-        else {
-          const g=findGroupFor("mark", m.id);
-          if(g) moveGroupMembers(g, mdx, mdy);
-          else { m.x=nx; m.y=ny; }
-        }
+        const g=findGroupFor("mark", m.id);
+        if(g) moveGroupMembers(g, mdx, mdy);
+        else { m.x=nx; m.y=ny; }
         redraw();
       }
     }
@@ -436,7 +475,23 @@ chart.addEventListener("pointermove",e=>{
   if(!pan) return;
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
-chart.addEventListener("pointerup",()=>{if(dockDrag){if(dockDrag.moved)saveLayout();renderDockEditor();}dockDrag=null;pan=null;});
+chart.addEventListener("pointerup",()=>{
+  if(dockDrag){
+    if(dockDrag.kind==="chart"){
+      clearLayerNudge();
+      if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
+        moveMembersByKeys(dockDrag.keys, dockDrag.sx, dockDrag.sy);
+        saveLayout();
+        redraw();
+      }
+      chart.style.cursor="";
+      renderDockEditor();
+    }else if(dockDrag.moved){
+      saveLayout(); renderDockEditor();
+    }
+  }
+  dockDrag=null; pan=null;
+});
 chart.addEventListener("wheel",e=>{e.preventDefault();scale=Math.min(3.5,Math.max(.35,scale*(e.deltaY<0?1.08:0.92)));applyZoom();},{passive:false});
 document.getElementById("z-in").onclick=()=>{scale=Math.min(3.5,scale*1.15);applyZoom();};
 document.getElementById("z-out").onclick=()=>{scale=Math.max(.35,scale/1.15);applyZoom();};
@@ -447,13 +502,13 @@ document.getElementById("q").addEventListener("input",function(){const hit=slips
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
 renderDir();
-document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";document.getElementById("hint").textContent=editing?"Unlocked docks: drag slips · locked docks move as one":"Click a numbered slip · drag to pan";if(editing)showTab("layout");redraw();};
+document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";document.getElementById("hint").textContent=editing?(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Select / group all to move everything"):"Click a numbered slip · drag to pan";if(editing)showTab("layout");redraw();};
 document.getElementById("bg-op").oninput=function(){bgImg.setAttribute("opacity",String((+this.value)/100));};
 document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
 document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
 document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;localStorage.setItem(LAYOUT_STORE,JSON.stringify(raw));({docks,marks,groups}=loadLayout());saveLayout(false);redraw();renderDockEditor();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
-document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();};
+document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
 document.getElementById("add-walk").onclick=()=>{const m={id:uid("mainwalk"),kind:"bar",x:200,y:200,w:14,h:220,title:"Walkway",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-box").onclick=()=>{const m={id:uid("box"),kind:"box",x:80,y:80,w:140,h:50,fill:"#2b6d8a",t1:"Building",t2:"",ink:"#fff",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-label").onclick=()=>{const m={id:uid("label"),kind:"text",x:200,y:80,text:"Label",size:13,rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
@@ -500,7 +555,7 @@ document.getElementById("btn-ungroup").onclick=()=>{
   if(selectedMark) keys.push("mark:"+selectedMark);
   if(!keys.length){ alert("Select a grouped item (or multi-select) first."); return; }
   groups=groups.filter(g=>!(g.members||[]).some(k=>keys.includes(k)));
-  multi.clear(); updateSelHint(); saveLayout(); redraw();
+  multi.clear(); moveWholeChart=false; updateSelHint(); saveLayout(); redraw();
 };
 document.getElementById("btn-dup").onclick=()=>{
   if(selectedDock){
