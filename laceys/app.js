@@ -736,6 +736,46 @@ function flashSave(msg){
     if(b){ b.textContent="Save"; b.classList.remove("on"); }
   }, 1800);
 }
+
+function printChart(){
+  // Snapshot current SVG (includes layer colors / hidden slips as drawn)
+  const clone=svg.cloneNode(true);
+  clone.removeAttribute("style");
+  clone.setAttribute("width","2400");
+  clone.setAttribute("height","1700");
+  clone.setAttribute("viewBox","0 0 2400 1700");
+  // Light paper-friendly water background (first big rect)
+  const bgRect=clone.querySelector("rect");
+  if(bgRect) bgRect.setAttribute("fill","#e8f2f1");
+  // Soften white-ish label fills for print contrast if needed
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Lacey's Narrows · printable chart</title>
+<style>
+  @page{ size:landscape; margin:0.35in; }
+  html,body{ margin:0; padding:0; background:#fff; }
+  .wrap{ padding:8px 12px; }
+  h1{ font:650 18px -apple-system,system-ui,sans-serif; margin:0 0 4px; color:#123; }
+  .sub{ font:12px -apple-system,system-ui,sans-serif; color:#456; margin:0 0 8px; }
+  svg{ width:100%; height:auto; max-height:7.2in; display:block; }
+  .actions{ margin-top:10px; }
+  @media print{ .actions{ display:none; } }
+</style></head><body>
+<div class="wrap">
+  <h1>Lacey's Narrows</h1>
+  <p class="sub">Greers Ferry Lake · Higden, AR · North up · Printed from live slip chart</p>
+  ${clone.outerHTML}
+  <div class="actions"><button onclick="window.print()">Print</button>
+  <button onclick="window.close()">Close</button></div>
+</div>
+<script>window.onload=function(){ setTimeout(function(){ window.print(); }, 250); };</script>
+</body></html>`;
+  const w=window.open("", "_blank");
+  if(!w){ alert("Allow pop-ups to open the printable chart."); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
 function saveNow(){
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
@@ -886,6 +926,7 @@ document.getElementById("add-layer").onclick=()=>{
 document.getElementById("btn-undo").onclick=()=>undo();
 document.getElementById("btn-redo").onclick=()=>redo();
 document.getElementById("btn-save").onclick=()=>saveNow();
+document.getElementById("btn-print").onclick=()=>printChart();
 const _btnSaveLayout=document.getElementById("btn-save-layout"); if(_btnSaveLayout) _btnSaveLayout.onclick=()=>saveNow();
 document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } selectAllLayout(); };
 document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } groupAllLayout(); };
