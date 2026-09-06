@@ -224,6 +224,7 @@ function fill(s){
   return COLORS[s.kind]||"#e4dcc8";
 }
 function match(s,f){
+  if(slipHiddenByLayer(s)) return false;
   if(activeLayerId){
     if(!layerOptFilter||layerOptFilter==="All") return true;
     if(layerOptFilter==="__none__") return !layerOptionFor(s.id, activeLayerId);
@@ -231,6 +232,16 @@ function match(s,f){
   }
   if(!f||f==="All") return true;
   return s.filter===f || s.dock===f;
+}
+function activeLayer(){ return layers.find(l=>l.id===activeLayerId)||null; }
+function slipHiddenByLayer(s){
+  const layer=activeLayer();
+  if(!layer) return false;
+  if(layer.hidden) return true; // whole layer hidden → hide all slips while this layer is the active view
+  const optId=layerOptionFor(s.id, layer.id);
+  if(!optId) return !!layer.hideUnassigned;
+  const opt=(layer.options||[]).find(o=>o.id===optId);
+  return !!(opt && opt.hidden);
 }
 function drawMarks(){
   layerMarks.innerHTML="";
@@ -260,7 +271,9 @@ function redraw(){
   slips.forEach(s=>{
     const parent=byDock[s.dockId]||layerSlips;
     const rot=Number(s.rot)||0;
-    const attrs={class:"slip"+(selected===s.id?" on":"")+(match(s,filter)?"":" dim"),"data-id":s.id,"data-dock":s.dockId};
+    const hidden=slipHiddenByLayer(s);
+    const dim=!hidden && !match(s,filter);
+    const attrs={class:"slip"+(selected===s.id?" on":"")+(dim?" dim":"")+(hidden?" layer-hidden":""),"data-id":s.id,"data-dock":s.dockId};
     if(rot) attrs.transform=`rotate(${rot} ${s.x+s.w/2} ${s.y+s.h/2})`;
     const g=el("g",attrs);
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
@@ -275,14 +288,37 @@ function renderChips(){
   chipsEl.innerHTML="";
   if(activeLayerId){
     const layer=layers.find(l=>l.id===activeLayerId);
-    const opts=[{id:"All",name:"All"},{id:"__none__",name:"Unassigned"}].concat((layer&&layer.options)||[]);
+    if(layer && layer.hidden){
+      const note=document.createElement("button");
+      note.className="chip"; note.textContent="Layer hidden — click to show";
+      note.onclick=()=>{ layer.hidden=false; saveLayersStore(); saveLayout(false); renderChips(); renderLayersEditor(); redraw(); };
+      chipsEl.appendChild(note);
+    }
+    const opts=[{id:"All",name:"All",color:null},{id:"__none__",name:"Unassigned",color:null,isNone:true}].concat((layer&&layer.options)||[]);
     opts.forEach(o=>{
+      const wrap=document.createElement("span");
+      wrap.style.display="inline-flex"; wrap.style.gap="2px"; wrap.style.alignItems="center";
       const b=document.createElement("button");
-      b.className="chip"+(layerOptFilter===o.id?" on":"")+" layer-on";
+      const isHidden = o.id==="__none__" ? !!(layer&&layer.hideUnassigned) : !!(o.hidden);
+      b.className="chip"+(layerOptFilter===o.id?" on":"")+" layer-on"+(isHidden?" hidden-opt":"");
       b.textContent=o.name||o.id;
       if(o.color){ b.style.boxShadow="inset 0 -3px 0 "+o.color; }
       b.onclick=()=>{ layerOptFilter=o.id; renderChips(); redraw(); };
-      chipsEl.appendChild(b);
+      wrap.appendChild(b);
+      if(o.id!=="All"){
+        const eye=document.createElement("button");
+        eye.className="chip eye"+(isHidden?" off":"");
+        eye.title=isHidden?"Show":"Hide";
+        eye.textContent=isHidden?"🙈":"👁";
+        eye.onclick=e=>{
+          e.stopPropagation();
+          if(o.id==="__none__"){ layer.hideUnassigned=!layer.hideUnassigned; }
+          else { o.hidden=!o.hidden; }
+          saveLayersStore(); saveLayout(false); renderChips(); renderLayersEditor(); redraw();
+        };
+        wrap.appendChild(eye);
+      }
+      chipsEl.appendChild(wrap);
     });
     const clear=document.createElement("button");
     clear.className="chip"; clear.textContent="Exit layer colors";
@@ -680,16 +716,23 @@ function renderLayersEditor(){
     const on=activeLayerId===layer.id;
     const opts=(layer.options||[]).map((o,idx)=>`
       <div class="opt" data-layer="${layer.id}" data-opt="${o.id}">
+        <button type="button" class="btn eye ${o.hidden?"off":""}" data-hide-opt title="${o.hidden?"Show":"Hide"}">${o.hidden?"🙈":"👁"}</button>
         <input type="color" value="${o.color||"#e4dcc8"}" data-k="color"/>
         <input type="text" value="${(o.name||"").replace(/"/g,"&quot;")}" data-k="name" placeholder="Option name" style="flex:1;min-width:100px"/>
         <button type="button" class="btn" data-del-opt>Remove</button>
       </div>`).join("");
-    return `<div class="layer-card" data-layer-card="${layer.id}">
+    const layerHidden=!!layer.hidden;
+    return `<div class="layer-card" data-layer-card="${layer.id}" style="${layerHidden?"opacity:.55":""}">
       <h3>
+        <button type="button" class="btn eye ${layerHidden?"off":""}" data-hide-layer title="${layerHidden?"Show layer":"Hide layer"}">${layerHidden?"🙈 Hide":"👁 Show"}</button>
         <input type="text" value="${(layer.name||"").replace(/"/g,"&quot;")}" data-layer-name style="flex:1;min-width:120px"/>
         <button type="button" class="btn ${on?"on":""}" data-use-layer>${on?"Coloring on":"Use to color"}</button>
         <button type="button" class="btn" data-del-layer>Delete layer</button>
       </h3>
+      <div class="opt" data-unassigned="${layer.id}">
+        <span style="flex:1">Unassigned slips</span>
+        <button type="button" class="btn eye ${layer.hideUnassigned?"off":""}" data-hide-unassigned>${layer.hideUnassigned?"🙈 Hidden":"👁 Visible"}</button>
+      </div>
       ${opts}
       <div class="st"><button type="button" class="btn" data-add-opt>+ Option</button></div>
     </div>`;
@@ -706,9 +749,41 @@ function renderLayersEditor(){
   box.querySelectorAll("[data-use-layer]").forEach(btn=>{
     btn.onclick=()=>{
       const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id);
+      if(layer && layer.hidden){ layer.hidden=false; }
       activeLayerId = activeLayerId===id ? null : id;
       layerOptFilter="All";
+      saveLayersStore(); saveLayout(false);
       renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-hide-layer]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.hidden=!layer.hidden;
+      activeLayerId=id;
+      layerOptFilter="All";
+      saveLayersStore(); saveLayout(false); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-hide-unassigned]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-unassigned]").dataset.unassigned;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.hideUnassigned=!layer.hideUnassigned;
+      if(activeLayerId!==id){ activeLayerId=id; layerOptFilter="All"; }
+      saveLayersStore(); saveLayout(false); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-hide-opt]").forEach(btn=>{
+    btn.onclick=()=>{
+      const row=btn.closest(".opt");
+      const layer=layers.find(l=>l.id===row.dataset.layer); if(!layer) return;
+      const opt=(layer.options||[]).find(o=>o.id===row.dataset.opt); if(!opt) return;
+      opt.hidden=!opt.hidden;
+      if(activeLayerId!==layer.id){ activeLayerId=layer.id; layerOptFilter="All"; }
+      saveLayersStore(); saveLayout(false); renderLayersEditor(); renderChips(); redraw();
     };
   });
   box.querySelectorAll("[data-del-layer]").forEach(btn=>{
