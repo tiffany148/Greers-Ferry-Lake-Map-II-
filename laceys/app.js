@@ -287,7 +287,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0,preserveAspectRatio:"xMidYMid meet"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.35,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
 svg.appendChild(layerBg);svg.appendChild(layerMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);
 function layerOptionFor(slipId, layerId){
