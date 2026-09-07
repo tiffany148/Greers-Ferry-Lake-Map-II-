@@ -46,12 +46,22 @@ function loadLayout(){
     const docks=clone(raw.docks);
     const marks=clone((raw.marks||[]).filter(m=>m && !isDockPieceMark(m.id)));
     const layers=Array.isArray(raw.layers)?clone(raw.layers):loadLayersStandalone();
+    if(raw.photoAlign){
+      photoAlign={
+        x:Number(raw.photoAlign.x)||0,
+        y:Number(raw.photoAlign.y)||0,
+        scale:Math.max(0.2, Math.min(3, Number(raw.photoAlign.scale)||1)),
+        rot:Number(raw.photoAlign.rot)||0
+      };
+      savePhotoAlign();
+    }
+    if(raw.photoMax!=null){ photoMax=Math.max(0, Math.min(1, Number(raw.photoMax))); }
     return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers};
   }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};}
 }
 const hist=[], future=[];
 let lastSnap=null;
-function snap(){ return JSON.stringify({docks,marks,groups,layers}); }
+function snap(){ return JSON.stringify({docks,marks,groups,layers,photoAlign,photoMax}); }
 function restoreSnap(s){
   const raw=JSON.parse(s);
   docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
@@ -241,11 +251,11 @@ function moveMembersByKeys(keys,dx,dy){
 function moveGroupMembers(g,dx,dy){ moveMembersByKeys(g.members||[], dx, dy); }
 function allLayoutKeys(){ return docks.map(d=>"dock:"+d.id).concat(marks.map(m=>"mark:"+m.id)); }
 function clearLayerNudge(){
-  [layerBg, layerMarks, layerDocks, layerSlips].forEach(L=>{ if(L) L.removeAttribute("transform"); });
+  [layerBg, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.removeAttribute("transform"); });
 }
 function nudgeLayers(dx,dy){
   const t=`translate(${dx} ${dy})`;
-  [layerBg, layerMarks, layerDocks, layerSlips].forEach(L=>{ if(L) L.setAttribute("transform", t); });
+  [layerBg, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.setAttribute("transform", t); });
 }
 function keysForDrag(kind,id){
   const key=kind+":"+id;
@@ -285,11 +295,13 @@ function buildSlips(){
     });
   });
 }
-const layerBg=el("g",{id:"bg"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"});
+const layerBg=el("g",{id:"bg"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.35,preserveAspectRatio:"xMidYMid meet"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
-svg.appendChild(layerBg);svg.appendChild(layerMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);
+loadPhotoAlign();
+applyPhotoAlign();
+svg.appendChild(layerBg);svg.appendChild(layerSite);svg.appendChild(layerWalkMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);svg.appendChild(layerLabels);svg.appendChild(layerMarks);
 function layerOptionFor(slipId, layerId){
   const rec=data[slipId];
   if(!rec||!rec.layerOpts) return null;
@@ -332,19 +344,20 @@ function slipHiddenByLayer(s){
   return !!(opt && opt.hidden);
 }
 function drawMarks(){
-  layerMarks.innerHTML="";
+  layerSite.innerHTML=""; layerWalkMarks.innerHTML=""; layerLabels.innerHTML=""; layerMarks.innerHTML="";
   marks.forEach(m=>{
     const rot=Number(m.rot)||0;
     const attrs={"data-mark":m.id,class:"dock-hit"+(selectedMark===m.id?" on":"")+(multi.has("mark:"+m.id)?" multi":"")};
     if(rot) attrs.transform=`rotate(${rot} ${m.x} ${m.y})`;
     const g=el("g",attrs);
-    if(m.kind==="box"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,rx:8,fill:m.fill||"#2b6d8a"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2-6,"text-anchor":"middle",fill:m.ink||"#243018","font-size":13,"font-weight":700},m.t1||""));if(m.t2)g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+12,"text-anchor":"middle",fill:m.ink||"#243018","font-size":11},m.t2));}
-    else if(m.kind==="p"){const rx=m.w?m.w/2:70,ry=m.h?m.h/2:26;g.appendChild(el("ellipse",{class:"walk",cx:m.x,cy:m.y,rx,ry,fill:"none",stroke:"#9ad","stroke-width":3}));g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));}
-    else if(m.kind==="pill"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:m.ink||"#fff","font-size":10},m.label||""));}
-    else if(m.kind==="bridge"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge"));}
-    else if(m.kind==="bar"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w||12,height:m.h||20,rx:3,fill:"#bfb9ac",class:"walk"}));}
-    else if(m.kind==="text"){const fs=m.size||13;const ink=m.ink||"#d7eceb";g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,"font-size":fs,"font-weight":700},m.text||""));}
-    layerMarks.appendChild(g);
+    let bucket=layerSite;
+    if(m.kind==="box"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,rx:8,fill:m.fill||"#2b6d8a"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2-6,"text-anchor":"middle",fill:m.ink||"#243018","font-size":13,"font-weight":700},m.t1||""));if(m.t2)g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+12,"text-anchor":"middle",fill:m.ink||"#243018","font-size":11},m.t2)); bucket=layerSite;}
+    else if(m.kind==="p"){const rx=m.w?m.w/2:70,ry=m.h?m.h/2:26;g.appendChild(el("ellipse",{class:"walk",cx:m.x,cy:m.y,rx,ry,fill:"none",stroke:"#9ad","stroke-width":3}));g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P")); bucket=layerSite;}
+    else if(m.kind==="bridge"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge")); bucket=layerSite;}
+    else if(m.kind==="bar"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w||12,height:m.h||20,rx:3,fill:"#bfb9ac",class:"walk"})); bucket=layerWalkMarks;}
+    else if(m.kind==="pill"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:m.ink||"#fff","font-size":10},m.label||"")); bucket=layerLabels;}
+    else if(m.kind==="text"){const fs=m.size||13;const ink=m.ink||"#d7eceb";g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,"font-size":fs,"font-weight":700},m.text||"")); bucket=layerLabels;}
+    bucket.appendChild(g);
   });
 }
 function appendWalk(g,d){
@@ -594,9 +607,82 @@ function selectEditSlip(id){
   showTab("layout"); renderDockEditor(); redraw();
 }
 let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
+let deepZoom=true;
+let photoMax=0.9;
+let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
+const PHOTO_ALIGN_STORE="laceys-photo-align-v1";
+function loadPhotoAlign(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(PHOTO_ALIGN_STORE)||"null");
+    if(raw && typeof raw==="object"){
+      photoAlign={
+        x:Number(raw.x)||0,
+        y:Number(raw.y)||0,
+        scale:Math.max(0.2, Math.min(3, Number(raw.scale)||1)),
+        rot:Number(raw.rot)||0
+      };
+    }
+  }catch(e){}
+}
+function savePhotoAlign(){
+  try{ localStorage.setItem(PHOTO_ALIGN_STORE, JSON.stringify(photoAlign)); }catch(e){}
+}
+function applyPhotoAlign(){
+  if(!bgImg) return;
+  const s=photoAlign.scale||1;
+  const cx=1200, cy=850; // chart center
+  // Scale around center, then translate, then rotate around center
+  const x=(Number(photoAlign.x)||0) + cx*(1-s);
+  const y=(Number(photoAlign.y)||0) + cy*(1-s);
+  bgImg.setAttribute("x", String(x));
+  bgImg.setAttribute("y", String(y));
+  bgImg.setAttribute("width", String(2400*s));
+  bgImg.setAttribute("height", String(1700*s));
+  const rot=Number(photoAlign.rot)||0;
+  if(rot){
+    // rotate around visual center of photo
+    const px=x+1200*s, py=y+850*s;
+    bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
+  }else{
+    bgImg.removeAttribute("transform");
+  }
+  const sv=document.getElementById("photo-scale-val");
+  const rv=document.getElementById("photo-rot-val");
+  const sc=document.getElementById("photo-scale");
+  const rr=document.getElementById("photo-rot");
+  if(sc) sc.value=String(Math.round((photoAlign.scale||1)*100));
+  if(rr) rr.value=String(photoAlign.rot||0);
+  if(sv) sv.textContent=Math.round((photoAlign.scale||1)*100)+"%";
+  if(rv) rv.textContent=(Math.round((photoAlign.rot||0)*10)/10)+"°";
+}
+function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
+function zoomUnit(){ return scale/Math.max(1e-6, minFitScale()); }
+function applyDeepZoomLod(){
+  applyPhotoAlign();
+  const btn=document.getElementById("btn-deep-zoom");
+  if(btn) btn.classList.toggle("on", deepZoom);
+  document.body.classList.toggle("deepzoom", deepZoom);
+  const val=document.getElementById("photo-op-val");
+  if(val) val.textContent=Math.round(photoMax*100)+"%";
+  if(!deepZoom || editing || multiPick){
+    bgImg.setAttribute("opacity", String(photoMax));
+    [layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels].forEach(L=>{ if(L) L.setAttribute("opacity","1"); });
+    return;
+  }
+  const z=zoomUnit();
+  // Photo strong when zoomed out; fades as vectors appear
+  const photo = photoMax * (1 - lodFade(z, 0.95, 2.2));
+  bgImg.setAttribute("opacity", String(Math.max(0, Math.min(1, photo))));
+  if(layerSite) layerSite.setAttribute("opacity", String(lodFade(z, 0.85, 1.35)));
+  const walk = lodFade(z, 1.15, 1.75);
+  if(layerWalkMarks) layerWalkMarks.setAttribute("opacity", String(walk));
+  if(layerDocks) layerDocks.setAttribute("opacity", String(walk));
+  if(layerSlips) layerSlips.setAttribute("opacity", String(lodFade(z, 1.55, 2.35)));
+  if(layerLabels) layerLabels.setAttribute("opacity", String(lodFade(z, 2.0, 2.9)));
+}
 const chart=document.getElementById("chart");
 const WORLD_W=2400, WORLD_H=1700;
-const applyZoom=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); }
 function chartSize(){
   const r=chart.getBoundingClientRect();
   return {w:Math.max(320, r.width||800), h:Math.max(240, r.height||560)};
@@ -609,7 +695,7 @@ function minZoomScale(){
   // Allow zooming out well past "fit whole map" for more range
   return Math.max(0.06, minFitScale()*0.28);
 }
-function maxZoomScale(){ return 5; }
+function maxZoomScale(){ return deepZoom ? 9 : 5; }
 function fitWholeMap(){
   const {w,h}=chartSize();
   scale=Math.max(minZoomScale(), Math.min(maxZoomScale(), minFitScale()));
@@ -862,7 +948,7 @@ bindHold(document.getElementById("pan-down"), ()=>{ const s=panStep(); panBy(0,-
 const panCenter=document.getElementById("pan-center");
 if(panCenter) panCenter.onclick=()=>fitWholeMap();
 // Initial view: zoomed in for reading slips; use ⛶ to see whole map on one page
-requestAnimationFrame(()=>requestAnimationFrame(defaultMarinaZoom));
+requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(deepZoom) fitWholeMap(); else defaultMarinaZoom(); }));
 window.addEventListener("resize",()=>{
   // Keep current relative zoom band sane after rotate/resize
   if(scale<minZoomScale()) { scale=minZoomScale(); applyZoom(); }
@@ -873,8 +959,41 @@ document.getElementById("q").addEventListener("input",function(){const hit=slips
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
 renderDir();
-document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";if(!editing){ multiPick=false; } document.getElementById("hint").textContent=editing?(multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")):"Click a numbered slip · drag to pan";if(editing)showTab("layout");updateSelHint();redraw();};
-document.getElementById("bg-op").oninput=function(){bgImg.setAttribute("opacity",String((+this.value)/100));};
+document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";if(!editing){ multiPick=false; } document.getElementById("hint").textContent=editing?(multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")):"Click a numbered slip · drag to pan";if(editing)showTab("layout");updateSelHint();redraw();applyDeepZoomLod();};
+(function wirePhotoOpacity(){
+  const sl=document.getElementById("photo-op");
+  if(sl){
+    sl.value=String(Math.round(photoMax*100));
+    photoMax=Math.max(0, Math.min(1, (+sl.value)/100));
+    const sync=()=>{ photoMax=Math.max(0, Math.min(1, (+sl.value)/100)); saveLayout(false); applyDeepZoomLod(); };
+    sl.oninput=sync; sl.onchange=sync;
+  }
+  const dz=document.getElementById("btn-deep-zoom");
+  if(dz) dz.onclick=()=>{
+    deepZoom=!deepZoom;
+    document.getElementById("hint").textContent = deepZoom
+      ? "Deep zoom · zoom out = photo, zoom in = walkways → slips → labels"
+      : "Classic view · Photo slider sets fixed overlay opacity";
+    if(deepZoom) fitWholeMap(); else defaultMarinaZoom();
+    redraw(); applyDeepZoomLod();
+  };
+  const stepEl=()=>Math.max(1, +(document.getElementById("photo-step")||{}).value || 20);
+  const nudge=(dx,dy)=>{ photoAlign.x=(Number(photoAlign.x)||0)+dx; photoAlign.y=(Number(photoAlign.y)||0)+dy; savePhotoAlign(); saveLayout(false); applyPhotoAlign(); };
+  const bind= (id, fn)=>{ const b=document.getElementById(id); if(b) b.onclick=fn; };
+  bind("photo-nudge-l", ()=>nudge(-stepEl(),0));
+  bind("photo-nudge-r", ()=>nudge(stepEl(),0));
+  bind("photo-nudge-u", ()=>nudge(0,-stepEl()));
+  bind("photo-nudge-d", ()=>nudge(0,stepEl()));
+  const sc=document.getElementById("photo-scale");
+  if(sc){ sc.oninput=()=>{ photoAlign.scale=Math.max(0.2, Math.min(3, (+sc.value)/100)); savePhotoAlign(); applyPhotoAlign(); }; sc.onchange=()=>saveLayout(false); }
+  const rr=document.getElementById("photo-rot");
+  if(rr){ rr.oninput=()=>{ photoAlign.rot=+rr.value||0; savePhotoAlign(); applyPhotoAlign(); }; rr.onchange=()=>saveLayout(false); }
+  bind("photo-reset-align", ()=>{
+    photoAlign={x:0,y:0,scale:1,rot:0};
+    savePhotoAlign(); saveLayout(false); applyPhotoAlign();
+  });
+  applyDeepZoomLod();
+})();
 document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
 document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();

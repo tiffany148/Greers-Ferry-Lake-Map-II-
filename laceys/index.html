@@ -75,7 +75,7 @@ body.editing .edit-banner{display:block}
 @media print{
   @page{ size: landscape; margin: 0.4in; }
   body{ background:#fff !important; color:#111 !important; }
-  header .kicker,.search,.chips,.zoom,.pan,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
+  header .kicker,.search,.chips,.zoom,.pan,.photo-op,.photo-align,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
   header{ padding:0 0 6px !important; }
   h1{ color:#111 !important; font-size:18px !important; }
   .layout{ display:block !important; height:auto !important; }
@@ -104,6 +104,19 @@ body.editing.multipick .multi-bar{display:flex}
 .pick-section{font-size:12px;letter-spacing:.08em;color:var(--muted);padding:10px 14px 4px;text-transform:uppercase}
 #btn-multi-hdr{display:none}
 body.editing #btn-multi-hdr{display:inline-block}
+
+
+.photo-op{display:flex;align-items:center;gap:10px;margin:6px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
+.photo-op input[type=range]{flex:1;min-width:120px;accent-color:#d5ecea}
+.photo-op b{min-width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
+#btn-deep-zoom{display:inline-block}
+
+
+.photo-align{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 8px;padding:8px 12px;border-radius:12px;background:#0f3f44;font-size:13px}
+.photo-align .btn{min-height:40px;padding:8px 12px}
+.photo-align label{display:flex;align-items:center;gap:6px;margin:0}
+.photo-align input[type=range]{width:110px;accent-color:#d5ecea}
+.photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
 
 </style>
 </head>
@@ -136,6 +149,24 @@ body.editing #btn-multi-hdr{display:inline-block}
 <div class="edit-banner">Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
+<div class="photo-op" id="photo-op-bar" title="Aerial photo overlay">
+  <span>Photo</span>
+  <input id="photo-op" type="range" min="0" max="100" value="90"/>
+  <b id="photo-op-val">90%</b>
+  <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
+</div>
+
+<div class="photo-align" id="photo-align-bar">
+  <span>Align photo</span>
+  <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
+  <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
+  <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
+  <button type="button" class="btn" id="photo-nudge-d" title="Nudge down">↓</button>
+  <label>Scale <input id="photo-scale" type="range" min="50" max="200" value="100"/><span id="photo-scale-val">100%</span></label>
+  <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
+  <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
+  <button type="button" class="btn" id="photo-reset-align" title="Reset photo position">Reset align</button>
+</div>
 <div class="layout">
   <div class="chart" id="chart">
     <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
@@ -200,12 +231,12 @@ body.editing #btn-multi-hdr{display:inline-block}
         <button class="btn" id="strip-cover">Remove covering piece</button>
         <button class="btn" id="reset-layout">Reset positions</button>
       </div>
-      <label>Align photo opacity<input id="bg-op" type="range" min="0" max="80" value="35"/></label>
+      <p class="hint">Photo opacity is the <b>Photo</b> slider above the map (0–100%). Deep zoom uses it as max photo strength.</p>
       <input id="import-file" type="file" accept="application/json" hidden/>
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=55"></script>
-<script src="app.js?v=55"></script>
+<script src="app-data.js?v=57"></script>
+<script src="app.js?v=57"></script>
 </body>
 </html>
