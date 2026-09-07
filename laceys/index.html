@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's Narrows · View-only · layers</title>
+<title>Lacey's Narrows · slip chart</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -85,15 +85,14 @@ body.editing .edit-banner{display:block}
       <div class="hdr-actions">
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
-        <button id="btn-save" type="button" title="Save layer view on this device">Save view</button>
+        <button id="btn-save" type="button" title="Save current layout on this device">Save</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
-        <button id="edit-toggle" hidden>Edit docks</button>
+        <button id="edit-toggle">Edit docks</button>
       </div>
     </div>
   </div>
 </header>
-<div class="share-banner" style="margin:0 16px 8px;padding:8px 12px;border-radius:10px;background:#4a2a1a;font-size:13px">View-only chart — switch layers and hide/show options. Docks and slips are locked.</div>
-<div class="edit-banner" hidden>Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
+<div class="edit-banner">Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="layout">
@@ -106,7 +105,7 @@ body.editing .edit-banner{display:block}
       <button class="on" data-tab="slip">Slip</button>
       <button data-tab="dir">Directory</button>
       <button data-tab="layers">Layers</button>
-      <button data-tab="layout" hidden>Dock</button>
+      <button data-tab="layout">Dock</button>
     </div>
     <div id="pane-slip">
       <h2>Find a slip</h2>
@@ -123,7 +122,7 @@ body.editing .edit-banner{display:block}
     <div id="pane-layers" hidden>
       <h2>Color layers</h2>
       <p class="hint">Create layers (Power, Lease, etc.). Use to color recolors slips. Eye icons hide/show a whole layer or each option. Assign options on a slip, then Save.</p>
-      <div class="st" hidden><button class="btn" id="add-layer">+ Add layer</button></div>
+      <div class="st"><button class="btn" id="add-layer">+ Add layer</button></div>
       <div id="layers-editor"></div>
     </div>
     <div id="pane-layout" hidden>
@@ -156,7 +155,7 @@ body.editing .edit-banner{display:block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=2"></script>
-<script src="app.js?v=2"></script>
+<script src="app-data.js?v=49"></script>
+<script src="app.js?v=49"></script>
 </body>
 </html>
