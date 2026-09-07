@@ -1,0 +1,971 @@
+function walkGeomFromDock(d){
+  if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
+  if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
+  const n=(d.a||[]).length,g=d.gap||18,h=d.h||16;return {x:d.x+(d.w||40)+4,y:d.y-2,w:10,h:Math.max(20,n*g-g+h+8)};
+}
+function generatedSlips(d){
+  const out=[];
+  if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3;(d.a||[]).forEach((num,i)=>out.push({id:String(num),num,x:d.x,y:d.y+i*(h+g),w,h}));(d.b||[]).forEach((num,i)=>out.push({id:String(num),num,x:d.x+w+16,y:d.y+i*(h+g),w,h}));}
+  else if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3;(d.a||[]).forEach((num,i)=>out.push({id:String(num),num,x:d.x+i*(w+g),y:d.y,w,h}));(d.b||[]).forEach((num,i)=>out.push({id:String(num),num,x:d.x+i*(w+g),y:d.y+h+16,w,h}));}
+  else if(d.type==="col"){const w=d.w||40,h=d.h||16,g=d.gap||18;(d.a||[]).forEach((num,i)=>out.push({id:String(num),num,x:d.x,y:d.y+i*g,w,h}));}
+  (d.extras||[]).forEach(ex=>out.push({id:String(ex.num),num:ex.num,x:d.x+(ex.dx||0),y:d.y+(ex.dy||0),w:ex.w,h:ex.h,kind:ex.kind,size:ex.size,filter:ex.filter}));
+  return out;
+}
+function applyPlaced(d,s){
+  const p=(d.placed||{})[s.id];
+  if(!p) return s;
+  return Object.assign({},s,{x:p.x,y:p.y,w:p.w!=null?p.w:s.w,h:p.h!=null?p.h:s.h,rot:p.rot||0,fill:p.fill});
+}
+function setPlaced(d,id,patch){
+  d.placed=d.placed||{};
+  d.placed[id]=Object.assign({},d.placed[id]||{},patch);
+}
+function moveDockSlips(d,dx,dy){
+  if(!d.placed) return;
+  Object.keys(d.placed).forEach(id=>{d.placed[id].x+=dx;d.placed[id].y+=dy;});
+}
+function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
+function loadLayersStandalone(){
+  try{
+    const raw=JSON.parse(localStorage.getItem("laceys-share-layers-v1")||"null");
+    return Array.isArray(raw)?raw:[];
+  }catch{return [];}
+}
+function loadLayout(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
+    if(!raw||!Array.isArray(raw.docks)||!raw.docks.length){
+      return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};
+    }
+    // Saved layout is authoritative so deletes (parking oval, etc.) and positions stick.
+    const docks=clone(raw.docks);
+    const marks=clone((raw.marks||[]).filter(m=>m && !isDockPieceMark(m.id)));
+    const layers=Array.isArray(raw.layers)?clone(raw.layers):loadLayersStandalone();
+    return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers};
+  }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};}
+}
+const hist=[], future=[];
+let lastSnap=null;
+function snap(){ return JSON.stringify({docks,marks,groups,layers}); }
+function restoreSnap(s){
+  const raw=JSON.parse(s);
+  docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
+  if(Array.isArray(raw.layers)) layers=raw.layers;
+  lastSnap=s;
+  localStorage.setItem(LAYOUT_STORE, s);
+  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
+  redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); renderLayersEditor(); renderChips();
+}
+function undo(){ if(!hist.length) return; future.push(snap()); restoreSnap(hist.pop()); }
+function redo(){ if(!future.length) return; hist.push(snap()); restoreSnap(future.pop()); }
+function updateUndoBtns(){
+  const u=document.getElementById("btn-undo"), r=document.getElementById("btn-redo");
+  if(u){ u.disabled=!hist.length; u.style.opacity=hist.length?1:.45; }
+  if(r){ r.disabled=!future.length; r.style.opacity=future.length?1:.45; }
+}
+function saveLayout(record){
+  if(record!==false){
+    if(lastSnap==null) lastSnap=snap();
+    hist.push(lastSnap);
+    if(hist.length>80) hist.shift();
+    future.length=0;
+    lastSnap=snap();
+  }
+  localStorage.setItem(LAYOUT_STORE, snap());
+  updateUndoBtns();
+}
+let {docks,marks,groups,layers}=loadLayout();
+if(!Array.isArray(layers)) layers=[];
+let activeLayerId=null;
+let layerOptFilter="All";
+function sanitizeLayout(){
+  let changed=false;
+  // Never delete docks just for being off-canvas (whole-chart drag used to wipe the map on reload).
+  // Clamp them back into a usable range instead.
+  docks.forEach(d=>{
+    const nx=Math.max(-50, Math.min(2800, Number(d.x)||0));
+    const ny=Math.max(-50, Math.min(2000, Number(d.y)||0));
+    if(nx!==d.x || ny!==d.y){
+      const dx=nx-d.x, dy=ny-d.y;
+      if(isLocked(d)) moveDockSlips(d,dx,dy);
+      d.x=nx; d.y=ny; changed=true;
+    }
+    (d.extras||[]).forEach(ex=>{
+      // Only stop absurd cover-the-map sizes — do NOT shrink intentional tall slips (e.g. 839/840 at 40x300)
+      if((ex.w||0)>900 && (ex.h||0)>900){ ex.w=Math.min(ex.w,120); ex.h=Math.min(ex.h,40); changed=true; }
+    });
+    if(d.placed){
+      Object.keys(d.placed).forEach(id=>{
+        const p=d.placed[id]; if(!p) return;
+        if((p.w||0)>900 && (p.h||0)>900){
+          p.w=d.sw||d.w||40; p.h=d.sh||d.h||16; changed=true;
+        }
+      });
+    }
+    // Keep dock default slip sizes reasonable, but allow large individual extras/placed above
+    if((d.sw||0)>400){ d.sw=40; changed=true; }
+    if((d.sh||0)>400){ d.sh=36; changed=true; }
+  });
+  const before=docks.length;
+  docks=docks.filter(d=>{
+    const name=(d.name||"").toLowerCase();
+    if(name==="loose slips"||name==="extra slips") return false;
+    return true;
+  });
+  if(docks.length!==before) changed=true;
+  marks.forEach(m=>{
+    const nx=Math.max(-50, Math.min(2800, Number(m.x)||0));
+    const ny=Math.max(-50, Math.min(2000, Number(m.y)||0));
+    if(nx!==m.x || ny!==m.y){ m.x=nx; m.y=ny; changed=true; }
+  });
+  marks=marks.filter(m=>!((m.w||0)>1800 || (m.h||0)>1600));
+  // If a bad save wiped almost everything, restore the baked main layout.
+  if(docks.length < Math.min(8, DEFAULT_DOCKS.length)){
+    docks=clone(DEFAULT_DOCKS);
+    marks=clone(DEFAULT_MARKS);
+    groups=[];
+    changed=true;
+  }
+  return changed;
+}
+if(sanitizeLayout()) saveLayout(false);
+lastSnap=snap();
+let slips=[], selected=null, selectedDock=null, selectedMark=null, filter="All", editing=false;
+const multi=new Set(); // "dock:id" or "mark:id"
+let moveWholeChart=false;
+function updateSelHint(){
+  const el=document.getElementById("sel-hint"); if(!el) return;
+  el.textContent = moveWholeChart || multi.size>1 ? ((multi.size||"All")+" selected · drag the chart to move everything") : "Select / group all, then drag on the map to move everything.";
+}
+function memberKey(kind,id){ return kind+":"+id; }
+function findGroupFor(kind,id){
+  const k=memberKey(kind,id);
+  return groups.find(g=> (g.members||[]).includes(k));
+}
+function parseMemberKey(k){
+  const i=String(k).indexOf(":");
+  if(i<0) return {kind:"",id:k};
+  return {kind:k.slice(0,i), id:k.slice(i+1)};
+}
+function moveMembersByKeys(keys,dx,dy){
+  (keys||[]).forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="dock"){ const d=docks.find(x=>x.id===id); if(d){ if(isLocked(d)) moveDockSlips(d,dx,dy); d.x+=dx; d.y+=dy; } }
+    else if(kind==="mark"){ const m=marks.find(x=>x.id===id); if(m){ m.x+=dx; m.y+=dy; } }
+  });
+}
+function moveGroupMembers(g,dx,dy){ moveMembersByKeys(g.members||[], dx, dy); }
+function allLayoutKeys(){ return docks.map(d=>"dock:"+d.id).concat(marks.map(m=>"mark:"+m.id)); }
+function clearLayerNudge(){
+  [layerBg, layerMarks, layerDocks, layerSlips].forEach(L=>{ if(L) L.removeAttribute("transform"); });
+}
+function nudgeLayers(dx,dy){
+  const t=`translate(${dx} ${dy})`;
+  [layerBg, layerMarks, layerDocks, layerSlips].forEach(L=>{ if(L) L.setAttribute("transform", t); });
+}
+function keysForDrag(kind,id){
+  const key=kind+":"+id;
+  if(multi.has(key) && multi.size>1) return [...multi];
+  const g=findGroupFor(kind,id);
+  if(g && (g.members||[]).length>1) return [...(g.members||[])];
+  if(moveWholeChart) return allLayoutKeys();
+  return null;
+}
+function selectAllLayout(){
+  multi.clear();
+  allLayoutKeys().forEach(k=>multi.add(k));
+  moveWholeChart=true;
+  updateSelHint(); redraw();
+}
+function groupAllLayout(){
+  selectAllLayout();
+  groups=groups.filter(g=>g.name!=="Entire map");
+  groups.push({id:uid("grp"),name:"Entire map",members:[...multi]});
+  moveWholeChart=true;
+  updateSelHint(); saveLayout(false); lastSnap=snap(); redraw();
+}
+
+function buildSlips(){
+  slips=[];
+  docks.forEach(d=>{
+    generatedSlips(d).forEach(s=>{
+      const p=applyPlaced(d,s);
+      slips.push({id:p.id,num:p.num,dock:d.name,dockId:d.id,kind:p.kind||d.kind,size:p.size||d.size,x:p.x,y:p.y,w:p.w,h:p.h,rot:p.rot||0,filter:p.filter||d.name,fill:p.fill||d.fill});
+    });
+  });
+}
+const layerBg=el("g",{id:"bg"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"});
+svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0,preserveAspectRatio:"xMidYMid meet"});
+layerBg.appendChild(bgImg);
+svg.appendChild(layerBg);svg.appendChild(layerMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);
+function layerOptionFor(slipId, layerId){
+  const rec=data[slipId];
+  if(!rec||!rec.layerOpts) return null;
+  return rec.layerOpts[layerId]||null;
+}
+function fill(s){
+  if(activeLayerId){
+    const layer=layers.find(l=>l.id===activeLayerId);
+    const optId=layerOptionFor(s.id, activeLayerId);
+    const opt=layer && (layer.options||[]).find(o=>o.id===optId);
+    if(opt&&opt.color) return opt.color;
+    return "#5a6866"; // unassigned under active layer
+  }
+  const rec=data[s.id];
+  if(rec&&rec.status==="occupied")return "#b55a32";
+  if(rec&&rec.status==="reserved")return "#d7b45a";
+  if(s.fill)return s.fill;
+  const dock=docks.find(x=>x.id===s.dockId);
+  if(dock&&dock.fill)return dock.fill;
+  return COLORS[s.kind]||"#e4dcc8";
+}
+function match(s,f){
+  if(slipHiddenByLayer(s)) return false;
+  if(activeLayerId){
+    if(!layerOptFilter||layerOptFilter==="All") return true;
+    if(layerOptFilter==="__none__") return !layerOptionFor(s.id, activeLayerId);
+    return layerOptionFor(s.id, activeLayerId)===layerOptFilter;
+  }
+  if(!f||f==="All") return true;
+  return s.filter===f || s.dock===f;
+}
+function activeLayer(){ return layers.find(l=>l.id===activeLayerId)||null; }
+function slipHiddenByLayer(s){
+  const layer=activeLayer();
+  if(!layer) return false;
+  if(layer.hidden) return true; // whole layer hidden → hide all slips while this layer is the active view
+  const optId=layerOptionFor(s.id, layer.id);
+  if(!optId) return !!layer.hideUnassigned;
+  const opt=(layer.options||[]).find(o=>o.id===optId);
+  return !!(opt && opt.hidden);
+}
+function drawMarks(){
+  layerMarks.innerHTML="";
+  marks.forEach(m=>{
+    const rot=Number(m.rot)||0;
+    const attrs={"data-mark":m.id,class:"dock-hit"+(selectedMark===m.id?" on":"")+(multi.has("mark:"+m.id)?" multi":"")};
+    if(rot) attrs.transform=`rotate(${rot} ${m.x} ${m.y})`;
+    const g=el("g",attrs);
+    if(m.kind==="box"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,rx:8,fill:m.fill||"#2b6d8a"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2-6,"text-anchor":"middle",fill:m.ink||"#243018","font-size":13,"font-weight":700},m.t1||""));if(m.t2)g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+12,"text-anchor":"middle",fill:m.ink||"#243018","font-size":11},m.t2));}
+    else if(m.kind==="p"){const rx=m.w?m.w/2:70,ry=m.h?m.h/2:26;g.appendChild(el("ellipse",{class:"walk",cx:m.x,cy:m.y,rx,ry,fill:"none",stroke:"#9ad","stroke-width":3}));g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));}
+    else if(m.kind==="pill"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:m.ink||"#fff","font-size":10},m.label||""));}
+    else if(m.kind==="bridge"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge"));}
+    else if(m.kind==="bar"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w||12,height:m.h||20,rx:3,fill:"#bfb9ac",class:"walk"}));}
+    else if(m.kind==="text"){const fs=m.size||13;g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.08)":"none"}));g.appendChild(el("text",{x:m.x,y:m.y,fill:"#d7eceb","font-size":fs,"font-weight":700},m.text||""));}
+    layerMarks.appendChild(g);
+  });
+}
+function appendWalk(g,d){
+  const geom=walkGeomFromDock(d);
+  g.appendChild(el("rect",{class:"walk",x:geom.x,y:geom.y,width:geom.w,height:geom.h,rx:3,fill:"#bfb9ac"}));
+  g.appendChild(el("text",{x:d.x,y:d.y-12,fill:"#d7eceb","font-size":14,"font-weight":700},d.name));
+}
+function redraw(){
+  buildSlips();drawMarks();layerDocks.innerHTML="";layerSlips.innerHTML="";
+  const byDock={};
+  docks.forEach(d=>{const rot=Number(d.rot)||0;const attrs={"data-dock":d.id,class:"dock-hit"+(selectedDock===d.id?" on":"")+(multi.has("dock:"+d.id)?" multi":"")};if(rot)attrs.transform=`rotate(${rot} ${d.x} ${d.y})`;const g=el("g",attrs);appendWalk(g,d);byDock[d.id]=g;layerDocks.appendChild(g);});
+  slips.forEach(s=>{
+    const parent=byDock[s.dockId]||layerSlips;
+    const rot=Number(s.rot)||0;
+    const hidden=slipHiddenByLayer(s);
+    const dim=!hidden && !match(s,filter);
+    const attrs={class:"slip"+(selected===s.id?" on":"")+(dim?" dim":"")+(hidden?" layer-hidden":""),"data-id":s.id,"data-dock":s.dockId};
+    if(rot) attrs.transform=`rotate(${rot} ${s.x+s.w/2} ${s.y+s.h/2})`;
+    const g=el("g",attrs);
+    g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
+    g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+3,"text-anchor":"middle"},String(s.num).replace(/^F|^C/,"")));
+    parent.appendChild(g);
+  });
+  document.getElementById("count").textContent=slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
+}
+const DOCK_CHIPS=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
+const chipsEl=document.getElementById("chips");
+function renderChips(){
+  chipsEl.innerHTML="";
+  if(activeLayerId){
+    const layer=layers.find(l=>l.id===activeLayerId);
+    if(layer && layer.hidden){
+      const note=document.createElement("button");
+      note.className="chip"; note.textContent="Layer hidden — click to show";
+      note.onclick=()=>{ layer.hidden=false; saveLayersStore(); saveLayout(false); renderChips(); renderLayersEditor(); redraw(); };
+      chipsEl.appendChild(note);
+    }
+    const opts=[{id:"All",name:"All",color:null},{id:"__none__",name:"Unassigned",color:null,isNone:true}].concat((layer&&layer.options)||[]);
+    opts.forEach(o=>{
+      const wrap=document.createElement("span");
+      wrap.style.display="inline-flex"; wrap.style.gap="2px"; wrap.style.alignItems="center";
+      const b=document.createElement("button");
+      const isHidden = o.id==="__none__" ? !!(layer&&layer.hideUnassigned) : !!(o.hidden);
+      b.className="chip"+(layerOptFilter===o.id?" on":"")+" layer-on"+(isHidden?" hidden-opt":"");
+      b.textContent=o.name||o.id;
+      if(o.color){ b.style.boxShadow="inset 0 -3px 0 "+o.color; }
+      b.onclick=()=>{ layerOptFilter=o.id; renderChips(); redraw(); };
+      wrap.appendChild(b);
+      if(o.id!=="All"){
+        const eye=document.createElement("button");
+        eye.className="chip eye"+(isHidden?" off":"");
+        eye.title=isHidden?"Show":"Hide";
+        eye.textContent=isHidden?"🙈":"👁";
+        eye.onclick=e=>{
+          e.stopPropagation();
+          if(o.id==="__none__"){ layer.hideUnassigned=!layer.hideUnassigned; }
+          else { o.hidden=!o.hidden; }
+          saveLayersStore(); saveLayout(false); renderChips(); renderLayersEditor(); redraw();
+        };
+        wrap.appendChild(eye);
+      }
+      chipsEl.appendChild(wrap);
+    });
+    const clear=document.createElement("button");
+    clear.className="chip"; clear.textContent="Exit layer colors";
+    clear.onclick=()=>{ activeLayerId=null; layerOptFilter="All"; renderChips(); renderLayersEditor(); redraw(); };
+    chipsEl.appendChild(clear);
+  }else{
+    DOCK_CHIPS.forEach(c=>{
+      const b=document.createElement("button");
+      b.className="chip"+(filter===c?" on":"");
+      b.textContent=c;
+      b.onclick=()=>{ filter=c; renderChips(); redraw(); };
+      chipsEl.appendChild(b);
+    });
+  }
+}
+renderChips();
+redraw();
+function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const ctm=svg.getScreenCTM();return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};}
+function showTab(name){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));document.getElementById("pane-slip").hidden=name!=="slip";document.getElementById("pane-dir").hidden=name!=="dir";const pl=document.getElementById("pane-layers"); if(pl) pl.hidden=name!=="layers";document.getElementById("pane-layout").hidden=name!=="layout"; if(name==="layers") renderLayersEditor();}
+function rotCtrl(val){return `<label>Rotation (degrees)<input id="ed-rot" type="range" min="-180" max="180" step="1" value="${val}"/></label><div class="row2"><label>Angle<input id="ed-rot-num" type="number" step="1" value="${val}"/></label><div class="st"><button type="button" data-rot="-90">-90</button><button type="button" data-rot="-15">-15</button><button type="button" data-rot="15">+15</button><button type="button" data-rot="90">+90</button><button type="button" data-rot="0">0</button></div></div>`;}
+function bindRot(obj,after){const apply=v=>{obj.rot=((Number(v)%360)+360)%360;if(obj.rot>180)obj.rot-=360;if(Math.abs(obj.rot)<0.01)obj.rot=0;saveLayout();redraw();if(after)after();};document.getElementById("ed-rot").oninput=e=>{document.getElementById("ed-rot-num").value=e.target.value;obj.rot=+e.target.value;saveLayout();redraw();};document.getElementById("ed-rot").onchange=e=>apply(e.target.value);document.getElementById("ed-rot-num").onchange=e=>apply(e.target.value);document.querySelectorAll("[data-rot]").forEach(btn=>btn.onclick=()=>{const s=+btn.dataset.rot;apply(s===0?0:(Number(obj.rot)||0)+s);});}
+function nextSlipNumber(){
+  const used=new Set(slips.map(s=>s.id));
+  let n=900;
+  while(used.has(String(n))) n++;
+  return n;
+}
+function resizeSide(arr,count,startHint){
+  arr=arr?arr.slice():[];
+  count=Math.max(0,Math.min(80,+count||0));
+  if(arr.length>count) return arr.slice(0,count);
+  let n=startHint!=null?startHint:nextSlipNumber();
+  const used=new Set(slips.map(s=>String(s.num)).concat(arr.map(String)));
+  while(arr.length<count){ while(used.has(String(n))) n++; arr.push(/^[A-Z]/.test(String(startHint))?String(startHint):n); used.add(String(n)); n++; }
+  return arr;
+}
+function renderDockEditor(){
+  const box=document.getElementById("dock-editor");
+  const d=docks.find(x=>x.id===selectedDock);
+  const m=marks.find(x=>x.id===selectedMark);
+  const s=slips.find(x=>x.id===selected);
+  if(s && editing && selectedDock && d && !isLocked(d)){
+    const placed=(d.placed&&d.placed[s.id])||{};
+    box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip on the chart</p><label>Number / label<input id="ed-num" value="${s.num}"/></label><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(s.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(s.y)}"/></label></div><div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(s.w)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(s.h)}"/></label></div><label>Color<input id="ed-fill" type="color" value="${placed.fill||d.fill||COLORS[s.kind]||"#e4dcc8"}"/></label>${rotCtrl(Number(s.rot)||0)}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div><div class="st"><button type="button" id="ed-dup-slip">Duplicate slip</button><button type="button" id="ed-del-slip">Delete this slip</button></div>`;
+    const apply=()=>{setPlaced(d,s.id,{x:+document.getElementById("ed-x").value,y:+document.getElementById("ed-y").value,w:+document.getElementById("ed-w").value,h:+document.getElementById("ed-h").value,fill:document.getElementById("ed-fill").value});saveLayout();redraw();};
+    document.getElementById("ed-fill").oninput=()=>{setPlaced(d,s.id,{fill:document.getElementById("ed-fill").value});saveLayout(false);redraw();};
+    document.getElementById("ed-fill").onchange=()=>saveLayout();
+    document.getElementById("ed-num").onchange=()=>{
+      const nn=String(document.getElementById("ed-num").value).trim(); if(!nn) return;
+      const rename=arr=>(arr||[]).map(n=>String(n)===String(s.id)?(/^\d+$/.test(nn)?Number(nn):nn):n);
+      d.a=rename(d.a); d.b=rename(d.b);
+      (d.extras||[]).forEach(ex=>{ if(String(ex.num)===String(s.id)) ex.num=/^\d+$/.test(nn)?Number(nn):nn; });
+      if(d.placed && d.placed[s.id]){ d.placed[nn]=d.placed[s.id]; delete d.placed[s.id]; }
+      selected=nn; saveLayout(); redraw(); renderDockEditor();
+    };
+    document.getElementById("ed-dup-slip").onclick=()=>{
+      const num=prompt("Duplicate as slip number?", String(nextSlipNumber())); if(num==null||!String(num).trim()) return;
+      d.extras=d.extras||[];
+      d.extras.push({num:String(num).trim(),dx:(s.x-d.x)+20,dy:(s.y-d.y)+20,w:s.w,h:s.h,kind:s.kind,size:s.size});
+      d.locked=false; selected=String(num).trim(); saveLayout(); redraw(); renderDockEditor();
+    };
+    ["ed-x","ed-y","ed-w","ed-h"].forEach(id=>document.getElementById(id).onchange=apply);
+    const rotObj={rot:Number(s.rot)||0};
+    bindRot(rotObj,()=>{setPlaced(d,s.id,{rot:rotObj.rot});saveLayout();redraw();renderDockEditor();});
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);setPlaced(d,s.id,{x:s.x+dx,y:s.y+dy});saveLayout();redraw();renderDockEditor();});
+    document.getElementById("ed-del-slip").onclick=()=>{
+      if(!confirm("Delete slip "+s.num+"?")) return;
+      d.a=(d.a||[]).filter(n=>String(n)!==s.id);
+      d.b=(d.b||[]).filter(n=>String(n)!==s.id);
+      d.extras=(d.extras||[]).filter(ex=>String(ex.num)!==s.id);
+      if(d.placed) delete d.placed[s.id];
+      selected=null;saveLayout();redraw();renderDockEditor();
+    };
+    return;
+  }
+  if(d){
+    const locked=isLocked(d);
+    box.innerHTML=`<h2>Dock ${d.name}</h2>
+      <div class="st"><button type="button" id="ed-lock">${locked?"Unlock slips":"Lock slips together"}</button></div>
+      <p class="hint">${locked?"Locked: the whole dock moves as one. Unlock to drag slips one at a time.":"Unlocked: drag slips individually. Lock when the layout looks right."}</p>
+      <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>
+      <label>Layout<select id="ed-type"><option value="ns"${d.type==="ns"?" selected":""}>North–south finger</option><option value="ew"${d.type==="ew"?" selected":""}>East–west finger</option><option value="col"${d.type==="col"?" selected":""}>Single column</option></select></label>
+      <div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
+      <div class="row2"><label>Slip width<input id="ed-sw" type="number" value="${Math.round(d.sw||d.w||40)}"/></label><label>Slip height<input id="ed-sh" type="number" value="${Math.round(d.sh||d.h||15)}"/></label></div>
+      <div class="row2"><label>Gap<input id="ed-gap" type="number" value="${Math.round(d.gap||3)}"/></label><label>Side A count<input id="ed-acount" type="number" min="0" max="80" value="${(d.a||[]).length}"/></label></div>
+      <label>Side B count<input id="ed-bcount" type="number" min="0" max="80" value="${(d.b||[]).length}"/></label>
+      <div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>
+      ${rotCtrl(Number(d.rot)||0)}
+      <label>Left / top numbers<textarea id="ed-a" rows="3">${(d.a||[]).join(", ")}</textarea></label>
+      <label>Right / bottom numbers<textarea id="ed-b" rows="3">${(d.b||[]).join(", ")}</textarea></label>
+      <div class="st"><button type="button" id="ed-add-slip">+ Slip on this dock</button><button type="button" id="ed-reset-slips">Reset slip layout</button></div>`;
+    document.getElementById("ed-lock").onclick=()=>{d.locked=!locked;saveLayout();redraw();renderDockEditor();};
+    document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value;saveLayout();redraw();};
+    document.getElementById("ed-type").onchange=()=>{d.type=document.getElementById("ed-type").value;d.placed={};saveLayout();redraw();renderDockEditor();};
+    const applyPos=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;if(isLocked(d)) moveDockSlips(d,nx-d.x,ny-d.y);d.x=nx;d.y=ny;saveLayout();redraw();};
+    document.getElementById("ed-x").onchange=applyPos;document.getElementById("ed-y").onchange=applyPos;
+    const applySize=()=>{
+      const sw=+document.getElementById("ed-sw").value,sh=+document.getElementById("ed-sh").value,gap=+document.getElementById("ed-gap").value;
+      if(d.type==="col"){d.w=sw;d.h=sh;} else {d.sw=sw;d.sh=sh;}
+      d.gap=gap;d.placed={};saveLayout();redraw();
+    };
+    ["ed-sw","ed-sh","ed-gap"].forEach(id=>document.getElementById(id).onchange=applySize);
+    document.getElementById("ed-acount").onchange=()=>{d.a=resizeSide(d.a,+document.getElementById("ed-acount").value);d.placed={};saveLayout();redraw();renderDockEditor();};
+    document.getElementById("ed-bcount").onchange=()=>{d.b=resizeSide(d.b,+document.getElementById("ed-bcount").value);d.placed={};saveLayout();redraw();renderDockEditor();};
+    bindRot(d,()=>renderDockEditor());
+    document.getElementById("ed-a").onchange=()=>{d.a=parseNums(document.getElementById("ed-a").value);saveLayout();redraw();};
+    document.getElementById("ed-b").onchange=()=>{d.b=parseNums(document.getElementById("ed-b").value);saveLayout();redraw();};
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);if(isLocked(d)) moveDockSlips(d,dx,dy);d.x+=dx;d.y+=dy;saveLayout();redraw();renderDockEditor();});
+    document.getElementById("ed-add-slip").onclick=()=>{
+      const num=prompt("New slip number?", String(nextSlipNumber()));
+      if(num==null||!String(num).trim()) return;
+      d.extras=d.extras||[];
+      d.extras.push({num:String(num).trim(),dx:0,dy:-30,w:d.sw||d.w||40,h:d.sh||d.h||16});
+      d.locked=false;saveLayout();selected=String(num).trim();redraw();renderDockEditor();
+    };
+    document.getElementById("ed-reset-slips").onclick=()=>{d.placed={};saveLayout();redraw();renderDockEditor();};
+    if(!document.getElementById("ed-fill-dock")){
+      const colorRow=document.createElement("div");
+      colorRow.innerHTML=`<label>Dock / slip color<input id="ed-fill-dock" type="color" value="${d.fill||COLORS[d.kind]||"#e4dcc8"}"/></label><div class="st"><button type="button" id="ed-dup-dock">Duplicate dock</button><button type="button" id="ed-del-dock">Delete dock</button></div>`;
+      box.appendChild(colorRow);
+      document.getElementById("ed-fill-dock").oninput=()=>{d.fill=document.getElementById("ed-fill-dock").value;saveLayout(false);redraw();};
+      document.getElementById("ed-fill-dock").onchange=()=>saveLayout();
+      document.getElementById("ed-dup-dock").onclick=()=>{
+        const copy=clone(d); copy.id=uid("dock"); copy.name=(d.name||"Dock")+" copy"; copy.x+=40; copy.y+=40;
+        docks.push(copy); selectedDock=copy.id; saveLayout(); redraw(); renderDockEditor();
+      };
+      document.getElementById("ed-del-dock").onclick=()=>{
+        if(!confirm("Delete dock "+d.name+" and its slips?")) return;
+        docks=docks.filter(x=>x.id!==d.id);
+        groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="dock:"+d.id));
+        selectedDock=null; selected=null; saveLayout(); redraw(); renderDockEditor();
+      };
+    }
+  }else if(m){
+    const kindName={bar:"Walkway",box:"Building",pill:"Building",bridge:"Bridge",text:"Label",p:"Parking"}[m.kind]||m.kind;
+    box.innerHTML=`<h2>${kindName}</h2><p class="hint">${m.title||m.id}</p><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label></div>${m.kind!=="text"||m.w!=null?`<div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(m.w||12)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(m.h||20)}"/></label></div>`:""}<label>Color<input id="ed-fill" type="color" value="${m.fill||m.ink||"#2b6d8a"}"/></label><div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>${rotCtrl(Number(m.rot)||0)}${m.kind==="text"||m.text!=null?`<label>Text<input id="ed-text" value="${m.text||""}"/></label>`:""}${m.t1!=null?`<label>Title<input id="ed-t1" value="${m.t1||""}"/></label>`:""}${m.label!=null?`<label>Label<input id="ed-label" value="${m.label||""}"/></label>`:""}<div class="st"><button type="button" id="ed-dup-mark">Duplicate</button><button type="button" id="ed-del">Delete this piece</button></div>`;
+    const apply=()=>{m.x=+document.getElementById("ed-x").value;m.y=+document.getElementById("ed-y").value;const ew=document.getElementById("ed-w"),eh=document.getElementById("ed-h");if(ew)m.w=+ew.value;if(eh)m.h=+eh.value;saveLayout();redraw();};
+    document.getElementById("ed-x").onchange=apply;document.getElementById("ed-y").onchange=apply;
+    const ew=document.getElementById("ed-w"); if(ew) ew.onchange=apply; const eh=document.getElementById("ed-h"); if(eh) eh.onchange=apply;
+    bindRot(m,()=>renderDockEditor());
+    const t=document.getElementById("ed-text"); if(t) t.oninput=()=>{m.text=t.value;saveLayout();redraw();};
+    const t1=document.getElementById("ed-t1"); if(t1) t1.oninput=()=>{m.t1=t1.value;saveLayout();redraw();};
+    const lb=document.getElementById("ed-label"); if(lb) lb.oninput=()=>{m.label=lb.value;saveLayout();redraw();};
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);m.x+=dx;m.y+=dy;saveLayout();redraw();renderDockEditor();});
+    const cf=document.getElementById("ed-fill");
+    if(cf){ cf.oninput=()=>{ if(m.kind==="text") m.ink=cf.value; else m.fill=cf.value; saveLayout(false); redraw(); }; cf.onchange=()=>saveLayout(); }
+    document.getElementById("ed-dup-mark").onclick=()=>{ const copy=clone(m); copy.id=uid(m.kind||"mark"); copy.x+=30; copy.y+=30; marks.push(copy); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); };
+    document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));selectedMark=null;saveLayout();redraw();renderDockEditor();};
+  }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label.</p>";
+}
+function renderSlipLayerAssigns(slipId){
+  const box=document.getElementById("slip-layer-assigns");
+  if(!box) return;
+  if(!layers.length){ box.innerHTML=""; return; }
+  const rec=data[slipId]||{};
+  const opts=rec.layerOpts||{};
+  box.innerHTML="<p class=\"hint\" style=\"margin-top:10px\">Layer colors</p>"+layers.map(layer=>{
+    const cur=opts[layer.id]||"";
+    const options=["<option value=\"\">Unassigned</option>"].concat((layer.options||[]).map(o=>"<option value=\""+o.id+"\""+(cur===o.id?" selected":"")+">"+o.name+"</option>"));
+    return "<label>"+layer.name+"<select data-layer-assign=\""+layer.id+"\">"+options.join("")+"</select></label>";
+  }).join("");
+  box.querySelectorAll("[data-layer-assign]").forEach(sel=>{
+    sel.onchange=()=>{
+      data[slipId]=data[slipId]||{status:"vacant"};
+      data[slipId].layerOpts=data[slipId].layerOpts||{};
+      const v=sel.value;
+      if(!v) delete data[slipId].layerOpts[sel.dataset.layerAssign];
+      else data[slipId].layerOpts[sel.dataset.layerAssign]=v;
+      save(data); redraw();
+    };
+  });
+}
+function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
+function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");renderDockEditor();redraw();}
+function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");renderDockEditor();redraw();}
+function selectEditSlip(id){
+  const s=slips.find(x=>x.id===id); if(!s) return;
+  selected=id; selectedDock=s.dockId; selectedMark=null;
+  showTab("layout"); renderDockEditor(); redraw();
+}
+let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
+const chart=document.getElementById("chart");
+const WORLD_W=2400, WORLD_H=1700;
+const applyZoom=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`;
+function chartSize(){
+  const r=chart.getBoundingClientRect();
+  return {w:Math.max(320, r.width||800), h:Math.max(240, r.height||560)};
+}
+function minFitScale(){
+  const {w,h}=chartSize();
+  return Math.min(w/WORLD_W, h/WORLD_H)*0.96;
+}
+function minZoomScale(){
+  // Allow zooming out well past "fit whole map" for more range
+  return Math.max(0.06, minFitScale()*0.28);
+}
+function maxZoomScale(){ return 5; }
+function fitWholeMap(){
+  const {w,h}=chartSize();
+  scale=Math.max(minZoomScale(), Math.min(maxZoomScale(), minFitScale()));
+  tx=(w-WORLD_W*scale)/2;
+  ty=(h-WORLD_H*scale)/2;
+  applyZoom();
+}
+function zoomToward(cx,cy,factor){
+  const s1=Math.min(maxZoomScale(), Math.max(minZoomScale(), scale*factor));
+  const k=s1/scale;
+  tx=cx-(cx-tx)*k;
+  ty=cy-(cy-ty)*k;
+  scale=s1;
+  applyZoom();
+}
+function defaultMarinaZoom(){
+  // Start fit-to-page, then zoom in so docks are readable; ⛶ still fits the whole map
+  fitWholeMap();
+  const {w,h}=chartSize();
+  zoomToward(w/2, h/2, 1.9);
+}
+svg.addEventListener("click",e=>{
+  if(dockDrag&&dockDrag.moved)return;
+  if(editing){
+    const sEl=e.target.closest("[data-id]");
+    const dEl=e.target.closest("[data-dock]");
+    const mEl=e.target.closest("[data-mark]");
+    if(e.shiftKey){
+      if(dEl){ const k="dock:"+dEl.getAttribute("data-dock"); if(multi.has(k)) multi.delete(k); else multi.add(k); updateSelHint(); redraw(); return; }
+      if(mEl){ const k="mark:"+mEl.getAttribute("data-mark"); if(multi.has(k)) multi.delete(k); else multi.add(k); updateSelHint(); redraw(); return; }
+    }
+    if(sEl){
+      const dock=docks.find(x=>x.id===sEl.getAttribute("data-dock"));
+      if(dock && !isLocked(dock)){ selectEditSlip(sEl.getAttribute("data-id")); return; }
+      if(dEl){ selectDock(dEl.getAttribute("data-dock")); return; }
+    }
+    if(dEl){selectDock(dEl.getAttribute("data-dock"));return;}
+    if(mEl){selectMark(mEl.getAttribute("data-mark"));return;}
+    return;
+  }
+  const t=e.target.closest("[data-id]"); if(t) select(t.getAttribute("data-id"));
+});
+chart.addEventListener("pointerdown",e=>{
+  if(editing){
+    const sEl=e.target.closest("[data-id]");
+    const dEl=e.target.closest("[data-dock]");
+    const mEl=e.target.closest("[data-mark]");
+    const p=svgPoint(e);
+    // Whole-chart move: after Select/group all, drag anywhere (including slips) moves everything
+    if(moveWholeChart || multi.size>1){
+      const keys=multi.size>1 ? [...multi] : allLayoutKeys();
+      dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false};
+      chart.style.cursor="grabbing";
+      chart.setPointerCapture(e.pointerId);
+      return;
+    }
+    if(sEl){
+      const dock=docks.find(x=>x.id===sEl.getAttribute("data-dock"));
+      const slip=slips.find(x=>x.id===sEl.getAttribute("data-id"));
+      const bundle=dock ? keysForDrag("dock", dock.id) : null;
+      if(bundle){
+        dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false};
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+      if(dock && slip && !isLocked(dock)){
+        dockDrag={kind:"slip",dockId:dock.id,id:slip.id,x:slip.x,y:slip.y,px:p.x,py:p.y,moved:false};
+        selectEditSlip(slip.id);
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    if(dEl){
+      const d=docks.find(x=>x.id===dEl.getAttribute("data-dock"));
+      if(d){
+        const bundle=keysForDrag("dock", d.id);
+        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false}; chart.setPointerCapture(e.pointerId); return; }
+        dockDrag={kind:"dock",id:d.id,x:d.x,y:d.y,px:p.x,py:p.y,moved:false};selectDock(d.id);chart.setPointerCapture(e.pointerId);return;
+      }
+    }
+    if(mEl){
+      const m=marks.find(x=>x.id===mEl.getAttribute("data-mark"));
+      if(m){
+        const bundle=keysForDrag("mark", m.id);
+        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false}; chart.setPointerCapture(e.pointerId); return; }
+        dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false};selectMark(m.id);chart.setPointerCapture(e.pointerId);return;
+      }
+    }
+    pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);return;
+  }
+  if(e.target.closest("[data-id]")) return;
+  pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);
+});
+chart.addEventListener("pointermove",e=>{
+  if(dockDrag){
+    const p=svgPoint(e); const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
+    if(Math.abs(dx)+Math.abs(dy)>2) dockDrag.moved=true;
+    if(dockDrag.kind==="chart"){
+      dockDrag.sx=Math.round(dx); dockDrag.sy=Math.round(dy);
+      // Live nudge via SVG transform (no full redraw — keeps it smooth)
+      nudgeLayers(dockDrag.sx, dockDrag.sy);
+      return;
+    }
+    if(dockDrag.kind==="slip"){
+      const d=docks.find(x=>x.id===dockDrag.dockId);
+      if(d){ setPlaced(d,dockDrag.id,{x:Math.round(dockDrag.x+dx),y:Math.round(dockDrag.y+dy)}); redraw(); }
+    }else if(dockDrag.kind==="dock"){
+      const d=docks.find(x=>x.id===dockDrag.id);
+      if(d){
+        const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
+        const mdx=nx-d.x, mdy=ny-d.y;
+        const g=findGroupFor("dock", d.id);
+        if(g){ moveGroupMembers(g, mdx, mdy); }
+        else { if(isLocked(d)) moveDockSlips(d,mdx,mdy); d.x=nx; d.y=ny; }
+        redraw();
+      }
+    }else{
+      const m=marks.find(x=>x.id===dockDrag.id);
+      if(m){
+        const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
+        const mdx=nx-m.x, mdy=ny-m.y;
+        const g=findGroupFor("mark", m.id);
+        if(g) moveGroupMembers(g, mdx, mdy);
+        else { m.x=nx; m.y=ny; }
+        redraw();
+      }
+    }
+    return;
+  }
+  if(!pan) return;
+  tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
+});
+chart.addEventListener("pointerup",()=>{
+  if(dockDrag){
+    if(dockDrag.kind==="chart"){
+      clearLayerNudge();
+      if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
+        // Cap a single drag so a bad pointer event cannot fling the chart into oblivion
+        const sx=Math.max(-1500, Math.min(1500, dockDrag.sx));
+        const sy=Math.max(-1500, Math.min(1500, dockDrag.sy));
+        moveMembersByKeys(dockDrag.keys, sx, sy);
+        sanitizeLayout();
+        saveLayout();
+        redraw();
+      }
+      chart.style.cursor="";
+      renderDockEditor();
+    }else if(dockDrag.moved){
+      saveLayout(); renderDockEditor();
+    }
+  }
+  dockDrag=null; pan=null;
+});
+chart.addEventListener("wheel",e=>{
+  e.preventDefault();
+  const r=chart.getBoundingClientRect();
+  const cx=e.clientX-r.left, cy=e.clientY-r.top;
+  zoomToward(cx, cy, e.deltaY<0?1.08:0.92);
+},{passive:false});
+document.getElementById("z-in").onclick=()=>{ const {w,h}=chartSize(); zoomToward(w/2,h/2,1.15); };
+document.getElementById("z-out").onclick=()=>{ const {w,h}=chartSize(); zoomToward(w/2,h/2,1/1.15); };
+document.getElementById("z-full").onclick=()=>fitWholeMap();
+// Initial view: zoomed in for reading slips; use ⛶ to see whole map on one page
+requestAnimationFrame(()=>requestAnimationFrame(defaultMarinaZoom));
+window.addEventListener("resize",()=>{
+  // Keep current relative zoom band sane after rotate/resize
+  if(scale<minZoomScale()) { scale=minZoomScale(); applyZoom(); }
+});
+document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return;data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
+["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return;data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
+document.getElementById("q").addEventListener("input",function(){const hit=slips.find(s=>String(s.num)===this.value.trim());if(hit)select(hit.id);});
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
+renderDir();
+document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";document.getElementById("hint").textContent=editing?(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Select / group all to move everything"):"Click a numbered slip · drag to pan";if(editing)showTab("layout");redraw();};
+document.getElementById("bg-op").oninput=function(){bgImg.setAttribute("opacity",String((+this.value)/100));};
+document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
+document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
+document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
+document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;if(Array.isArray(raw.layers)) layers=raw.layers; localStorage.setItem(LAYOUT_STORE,JSON.stringify({docks:raw.docks,marks:raw.marks||[],groups:raw.groups||[],layers})); saveLayersStore(); ({docks,marks,groups,layers}=loadLayout()); if(!Array.isArray(layers)) layers=[]; saveLayout(false);redraw();renderDockEditor();renderLayersEditor();renderChips();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
+document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
+document.getElementById("add-walk").onclick=()=>{const m={id:uid("mainwalk"),kind:"bar",x:200,y:200,w:14,h:220,title:"Walkway",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
+document.getElementById("add-box").onclick=()=>{const m={id:uid("box"),kind:"box",x:80,y:80,w:140,h:50,fill:"#2b6d8a",t1:"Building",t2:"",ink:"#fff",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
+document.getElementById("add-label").onclick=()=>{const m={id:uid("label"),kind:"text",x:200,y:80,text:"Label",size:13,rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
+document.getElementById("add-dock").onclick=()=>{
+  const name=prompt("Dock name?","New dock"); if(name==null||!String(name).trim()) return;
+  const type=(prompt("Layout: ns (finger up/down), ew (finger left/right), or col (stack)?","ns")||"ns").toLowerCase();
+  const aCount=Math.max(1,Math.min(40,+(prompt("How many slips on side A?","8")||8)));
+  const bCount=Math.max(0,Math.min(40,+(prompt("How many slips on side B?","8")||0)));
+  const start=+(prompt("Starting slip number?",String(nextSlipNumber()))||nextSlipNumber());
+  const a=[],b=[]; let n=start; const used=new Set(slips.map(s=>String(s.num)));
+  const take=()=>{while(used.has(String(n))) n++; const v=n; used.add(String(v)); n++; return v;};
+  for(let i=0;i<aCount;i++) a.push(take());
+  for(let i=0;i<bCount;i++) b.push(take());
+  const d={id:uid("dock"),name:String(name).trim(),type:type==="ew"?"ew":type==="col"?"col":"ns",x:200,y:200,kind:"std",size:"Custom",locked:false,sw:type==="ew"?16:40,sh:type==="ew"?36:15,gap:3,w:40,h:16,a,b};
+  docks.push(d); selectedDock=d.id; selected=null; selectedMark=null; saveLayout(); showTab("layout"); redraw(); renderDockEditor();
+};
+document.getElementById("add-slip-free").onclick=()=>{
+  const num=prompt("Slip number?", String(nextSlipNumber())); if(num==null||!String(num).trim()) return;
+  let dock=docks.find(x=>x.id===selectedDock);
+  if(!dock){
+    dock={id:uid("dock"),name:"Extra slips",type:"col",x:80,y:80,kind:"std",size:"Custom",locked:true,gap:22,w:40,h:16,a:[],b:[],extras:[]};
+    docks.push(dock);
+  }
+  dock.extras=dock.extras||[];
+  dock.extras.push({num:String(num).trim(),dx:0,dy:-28,w:dock.sw||dock.w||40,h:dock.sh||dock.h||16});
+  dock.locked=false; selectedDock=dock.id; selected=String(num).trim(); selectedMark=null;
+  saveLayout(); showTab("layout"); redraw(); renderDockEditor();
+};
+
+
+function flashSave(msg){
+  const hint=document.getElementById("hint");
+  const prev=hint?hint.textContent:"";
+  if(hint){ hint.textContent=msg; hint.style.color="#b8f5c5"; }
+  const b=document.getElementById("btn-save");
+  if(b){ b.textContent="Saved"; b.classList.add("on"); }
+  setTimeout(()=>{
+    if(hint){ hint.textContent=prev; hint.style.color=""; }
+    if(b){ b.textContent="Save"; b.classList.remove("on"); }
+  }, 1800);
+}
+
+function printChart(){
+  // Snapshot current SVG (includes layer colors / hidden slips as drawn)
+  const clone=svg.cloneNode(true);
+  clone.removeAttribute("style");
+  clone.setAttribute("width","2400");
+  clone.setAttribute("height","1700");
+  clone.setAttribute("viewBox","0 0 2400 1700");
+  // Light paper-friendly water background (first big rect)
+  const bgRect=clone.querySelector("rect");
+  if(bgRect) bgRect.setAttribute("fill","#e8f2f1");
+  // Soften white-ish label fills for print contrast if needed
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<title>Lacey's Narrows · printable chart</title>
+<style>
+  @page{ size:landscape; margin:0.35in; }
+  html,body{ margin:0; padding:0; background:#fff; }
+  .wrap{ padding:8px 12px; }
+  h1{ font:650 18px -apple-system,system-ui,sans-serif; margin:0 0 4px; color:#123; }
+  .sub{ font:12px -apple-system,system-ui,sans-serif; color:#456; margin:0 0 8px; }
+  svg{ width:100%; height:auto; max-height:7.2in; display:block; }
+  .actions{ margin-top:10px; }
+  @media print{ .actions{ display:none; } }
+</style></head><body>
+<div class="wrap">
+  <h1>Lacey's Narrows</h1>
+  <p class="sub">Greers Ferry Lake · Higden, AR · North up · Printed from live slip chart</p>
+  ${clone.outerHTML}
+  <div class="actions"><button onclick="window.print()">Print</button>
+  <button onclick="window.close()">Close</button></div>
+</div>
+<script>window.onload=function(){ setTimeout(function(){ window.print(); }, 250); };</script>
+</body></html>`;
+  const w=window.open("", "_blank");
+  if(!w){ alert("Allow pop-ups to open the printable chart."); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+function saveNow(){
+  // Persist exact current docks/marks/groups/layers (deletes included)
+  const s=snap();
+  localStorage.setItem(LAYOUT_STORE, s);
+  /* share copy: isolated storage only */
+  saveLayersStore();
+  lastSnap=s;
+  flashSave("Saved on this device · Download JSON for a backup copy");
+}
+
+function saveLayersStore(){
+  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+}
+function renderLayersEditor(){
+  const box=document.getElementById("layers-editor");
+  if(!box) return;
+  if(!layers.length){
+    box.innerHTML="<p class=\"hint\">No custom layers yet. Add one to color-code slips (Power, Lease, Season, …).</p>";
+    return;
+  }
+  box.innerHTML=layers.map(layer=>{
+    const on=activeLayerId===layer.id;
+    const opts=(layer.options||[]).map((o,idx)=>`
+      <div class="opt" data-layer="${layer.id}" data-opt="${o.id}">
+        <button type="button" class="btn eye ${o.hidden?"off":""}" data-hide-opt title="${o.hidden?"Show":"Hide"}">${o.hidden?"🙈":"👁"}</button>
+        <input type="color" value="${o.color||"#e4dcc8"}" data-k="color"/>
+        <input type="text" value="${(o.name||"").replace(/"/g,"&quot;")}" data-k="name" placeholder="Option name" style="flex:1;min-width:100px"/>
+        <button type="button" class="btn" data-del-opt>Remove</button>
+      </div>`).join("");
+    const layerHidden=!!layer.hidden;
+    return `<div class="layer-card" data-layer-card="${layer.id}" style="${layerHidden?"opacity:.55":""}">
+      <h3>
+        <button type="button" class="btn eye ${layerHidden?"off":""}" data-hide-layer title="${layerHidden?"Show layer":"Hide layer"}">${layerHidden?"🙈 Hide":"👁 Show"}</button>
+        <input type="text" value="${(layer.name||"").replace(/"/g,"&quot;")}" data-layer-name style="flex:1;min-width:120px"/>
+        <button type="button" class="btn ${on?"on":""}" data-use-layer>${on?"Coloring on":"Use to color"}</button>
+        <button type="button" class="btn" data-del-layer>Delete layer</button>
+      </h3>
+      <div class="opt" data-unassigned="${layer.id}">
+        <span style="flex:1">Unassigned slips</span>
+        <button type="button" class="btn eye ${layer.hideUnassigned?"off":""}" data-hide-unassigned>${layer.hideUnassigned?"🙈 Hidden":"👁 Visible"}</button>
+      </div>
+      ${opts}
+      <div class="st"><button type="button" class="btn" data-add-opt>+ Option</button></div>
+    </div>`;
+  }).join("");
+
+  box.querySelectorAll("[data-layer-name]").forEach(inp=>{
+    inp.onchange=()=>{
+      const id=inp.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.name=inp.value.trim()||"Layer";
+      saveLayersStore(); saveLayout(false); renderChips();
+    };
+  });
+  box.querySelectorAll("[data-use-layer]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id);
+      if(layer && layer.hidden){ layer.hidden=false; }
+      activeLayerId = activeLayerId===id ? null : id;
+      layerOptFilter="All";
+      saveLayersStore(); saveLayout(false);
+      renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-hide-layer]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.hidden=!layer.hidden;
+      activeLayerId=id;
+      layerOptFilter="All";
+      saveLayersStore(); saveLayout(false); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-hide-unassigned]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-unassigned]").dataset.unassigned;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.hideUnassigned=!layer.hideUnassigned;
+      if(activeLayerId!==id){ activeLayerId=id; layerOptFilter="All"; }
+      saveLayersStore(); saveLayout(false); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-hide-opt]").forEach(btn=>{
+    btn.onclick=()=>{
+      const row=btn.closest(".opt");
+      const layer=layers.find(l=>l.id===row.dataset.layer); if(!layer) return;
+      const opt=(layer.options||[]).find(o=>o.id===row.dataset.opt); if(!opt) return;
+      opt.hidden=!opt.hidden;
+      if(activeLayerId!==layer.id){ activeLayerId=layer.id; layerOptFilter="All"; }
+      saveLayersStore(); saveLayout(false); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-del-layer]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      if(!confirm("Delete this layer? Slip assignments for it will be ignored.")) return;
+      layers=layers.filter(l=>l.id!==id);
+      if(activeLayerId===id) activeLayerId=null;
+      saveLayersStore(); saveLayout(); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll("[data-add-opt]").forEach(btn=>{
+    btn.onclick=()=>{
+      const id=btn.closest("[data-layer-card]").dataset.layerCard;
+      const layer=layers.find(l=>l.id===id); if(!layer) return;
+      layer.options=layer.options||[];
+      const colors=["#5aa0c4","#6dad6a","#e3c35c","#e39a7a","#c9896a","#9b7bb8","#d2b48c"];
+      layer.options.push({id:uid("opt"), name:"Option "+(layer.options.length+1), color:colors[layer.options.length%colors.length]});
+      saveLayersStore(); saveLayout(); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+  box.querySelectorAll(".opt").forEach(row=>{
+    const layerId=row.dataset.layer, optId=row.dataset.opt;
+    row.querySelectorAll("[data-k]").forEach(inp=>{
+      const apply=()=>{
+        const layer=layers.find(l=>l.id===layerId); if(!layer) return;
+        const opt=(layer.options||[]).find(o=>o.id===optId); if(!opt) return;
+        if(inp.dataset.k==="color") opt.color=inp.value;
+        else opt.name=inp.value.trim()||"Option";
+        saveLayersStore(); saveLayout(false); renderChips(); redraw();
+      };
+      inp.onchange=apply; inp.oninput=()=>{ if(inp.dataset.k==="color"){ apply(); } };
+    });
+    const del=row.querySelector("[data-del-opt]");
+    if(del) del.onclick=()=>{
+      const layer=layers.find(l=>l.id===layerId); if(!layer) return;
+      layer.options=(layer.options||[]).filter(o=>o.id!==optId);
+      saveLayersStore(); saveLayout(); renderLayersEditor(); renderChips(); redraw();
+    };
+  });
+}
+document.getElementById("add-layer").onclick=()=>{
+  const name=prompt("Layer name?","Power");
+  if(name==null) return;
+  layers.push({
+    id:uid("layer"),
+    name:String(name).trim()||"Layer",
+    options:[
+      {id:uid("opt"), name:"Option A", color:"#5aa0c4"},
+      {id:uid("opt"), name:"Option B", color:"#6dad6a"},
+      {id:uid("opt"), name:"Option C", color:"#e3c35c"}
+    ]
+  });
+  saveLayersStore(); saveLayout(); showTab("layers"); renderLayersEditor(); renderChips(); redraw();
+};
+document.getElementById("btn-undo").onclick=()=>undo();
+document.getElementById("btn-redo").onclick=()=>redo();
+document.getElementById("btn-save").onclick=()=>saveNow();
+document.getElementById("btn-print").onclick=()=>printChart();
+const _btnSaveLayout=document.getElementById("btn-save-layout"); if(_btnSaveLayout) _btnSaveLayout.onclick=()=>saveNow();
+document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } selectAllLayout(); };
+document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } groupAllLayout(); };
+document.getElementById("btn-group").onclick=()=>{
+  if(multi.size<2){ alert("Shift-click at least two docks or labels first."); return; }
+  const name=prompt("Group name?","Group "+(groups.length+1));
+  if(name==null) return;
+  groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
+  multi.clear(); updateSelHint(); saveLayout(); redraw();
+};
+document.getElementById("btn-ungroup").onclick=()=>{
+  const keys=[...multi];
+  if(selectedDock) keys.push("dock:"+selectedDock);
+  if(selectedMark) keys.push("mark:"+selectedMark);
+  if(!keys.length){ alert("Select a grouped item (or multi-select) first."); return; }
+  groups=groups.filter(g=>!(g.members||[]).some(k=>keys.includes(k)));
+  multi.clear(); moveWholeChart=false; updateSelHint(); saveLayout(); redraw();
+};
+document.getElementById("btn-dup").onclick=()=>{
+  if(selectedDock){
+    const d=docks.find(x=>x.id===selectedDock); if(!d) return;
+    const copy=clone(d); copy.id=uid("dock"); copy.name=(d.name||"Dock")+" copy"; copy.x+=40; copy.y+=40;
+    docks.push(copy); selectedDock=copy.id; saveLayout(); redraw(); renderDockEditor(); return;
+  }
+  if(selectedMark){
+    const m=marks.find(x=>x.id===selectedMark); if(!m) return;
+    const copy=clone(m); copy.id=uid(m.kind||"mark"); copy.x+=30; copy.y+=30;
+    marks.push(copy); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); return;
+  }
+  alert("Select a dock or label first.");
+};
+updateUndoBtns(); updateSelHint();
+document.addEventListener("keydown",e=>{
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="z"){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); }
+});
+
+document.getElementById("strip-cover")?.addEventListener("click",()=>{
+  if(!confirm("Remove oversized / covering pieces (keeps your dock layout)?")) return;
+  if(sanitizeLayout()){ saveLayout(); redraw(); renderDockEditor(); alert("Cleared oversized covers."); }
+  else alert("Nothing oversized found. Select the orange piece and Delete it.");
+});
