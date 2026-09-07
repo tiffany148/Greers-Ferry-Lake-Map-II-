@@ -27,7 +27,7 @@ function moveDockSlips(d,dx,dy){
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
 function loadLayersStandalone(){
   try{
-    const raw=JSON.parse(localStorage.getItem("laceys-view-layers-v1")||"null");
+    const raw=JSON.parse(localStorage.getItem("laceys-view-layers-v2")||"null");
     if(Array.isArray(raw)&&raw.length) return raw;
   }catch(e){}
   return (typeof DEFAULT_LAYERS!=="undefined" && Array.isArray(DEFAULT_LAYERS)) ? clone(DEFAULT_LAYERS) : [];
@@ -54,7 +54,7 @@ function restoreSnap(s){
   if(Array.isArray(raw.layers)) layers=raw.layers;
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem("laceys-view-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-view-layers-v2", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
   redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); renderLayersEditor(); renderChips();
 }
@@ -802,7 +802,7 @@ function saveNow(){
 }
 
 function saveLayersStore(){
-  try{ localStorage.setItem("laceys-view-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-view-layers-v2", JSON.stringify(layers)); }catch(e){}
 }
 
 function renderLayersEditor(){

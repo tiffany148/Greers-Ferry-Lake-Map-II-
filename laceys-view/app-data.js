@@ -1,5 +1,5 @@
-const STORE="laceys-view-slips-v1";
-const LAYOUT_STORE="laceys-view-layout-v1";
+const STORE="laceys-view-slips-v2";
+const LAYOUT_STORE="laceys-view-layout-v2";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
@@ -523,7 +523,7 @@ const DEFAULT_DOCKS=[
     ],
     "sw": 60,
     "sh": 35,
-    "fill": "#ffffff"
+    "fill": "#6fff6a"
   },
   {
     "id": "courtesy",
@@ -554,7 +554,7 @@ const DEFAULT_DOCKS=[
     ],
     "sw": 50,
     "sh": 30,
-    "fill": "#ffffff"
+    "fill": "#9882ff"
   },
   {
     "id": "cruiser",
@@ -886,7 +886,7 @@ const DEFAULT_MARKS=[
     "w": 150,
     "h": 60,
     "label": "Picnic",
-    "fill": "#ffffff",
+    "fill": "#ffbaff",
     "ink": "#4a2430"
   },
   {
@@ -897,7 +897,7 @@ const DEFAULT_MARKS=[
     "w": 80,
     "h": 60,
     "label": "Picnic",
-    "fill": "#ffffff",
+    "fill": "#feafff",
     "ink": "#4a2430",
     "rot": 90
   },
@@ -909,7 +909,7 @@ const DEFAULT_MARKS=[
     "w": 80,
     "h": 45,
     "label": "Picnic",
-    "fill": "#ffffff",
+    "fill": "#fea9ff",
     "ink": "#4a2430"
   },
   {
@@ -1163,57 +1163,58 @@ const DEFAULT_LAYERS=[
       {
         "id": "opt-knlcjh",
         "name": "10x30 Standard",
-        "color": "#5aa0c4"
+        "color": "#ff805c",
+        "hidden": true
       },
       {
         "id": "opt-gfievj",
         "name": "10x30 Premium",
-        "color": "#6dad6a"
+        "color": "#086b00"
       },
       {
         "id": "opt-xau23q",
         "name": "10x30 Preferred",
-        "color": "#e3c35c"
+        "color": "#f5f400"
       },
       {
         "id": "opt-pbib7h",
         "name": "10x34 Preferred",
-        "color": "#e39a7a"
+        "color": "#4dfeff"
       },
       {
         "id": "opt-l34i0t",
         "name": "10x42 Preferred",
-        "color": "#c9896a"
+        "color": "#0000e2"
       },
       {
         "id": "opt-5qe1aa",
         "name": "12x30 Premium",
-        "color": "#9b7bb8"
+        "color": "#8d68ff"
       },
       {
         "id": "opt-ilp8a9",
         "name": "12x38 Preferred",
-        "color": "#d2b48c"
+        "color": "#5900fc"
       },
       {
         "id": "opt-d9h0lh",
         "name": "14x42 Preferred",
-        "color": "#5aa0c4"
+        "color": "#40ff9c"
       },
       {
         "id": "opt-odysj7",
         "name": "16x42 Preferred",
-        "color": "#6dad6a"
+        "color": "#f69aff"
       },
       {
         "id": "opt-zx49ly",
         "name": "20x87 Houseboat",
-        "color": "#e3c35c"
+        "color": "#ff0f86"
       },
       {
         "id": "opt-epizyh",
         "name": "24x100 Houseboat",
-        "color": "#e39a7a"
+        "color": "#470089"
       }
     ]
   },
