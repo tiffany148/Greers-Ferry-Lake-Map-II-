@@ -142,15 +142,84 @@ let multiPick=false; // tap-to-toggle selection (mobile-friendly)
 let moveWholeChart=false;
 function updateSelHint(){
   const el=document.getElementById("sel-hint"); if(!el) return;
-  const btn=document.getElementById("btn-multi");
-  if(btn) btn.classList.toggle("on", multiPick);
+  document.querySelectorAll("#btn-multi, #btn-multi-hdr").forEach(btn=>{ if(btn) btn.classList.toggle("on", multiPick); });
+  document.body.classList.toggle("multipick", !!(editing && multiPick));
+  const countEl=document.getElementById("multi-count");
+  if(countEl) countEl.textContent = multi.size ? (multi.size+" selected") : "Tap list or map to pick";
+  const moveBtn=document.getElementById("btn-multi-move");
+  if(moveBtn){ moveBtn.disabled = multi.size<1; moveBtn.textContent = multiPick ? "Move selected" : "Moving…"; }
   if(multiPick){
-    el.textContent = multi.size ? (multi.size+" selected · tap to add/remove · drag to move") : "Multi-select on · tap docks or labels to pick them";
+    el.textContent = multi.size ? (multi.size+" selected · tick more in the list, or tap Done") : "Tick docks/labels in the list below (or tap the map)";
   }else if(moveWholeChart || multi.size>1){
-    el.textContent = (multi.size||"All")+" selected · drag the chart to move everything";
+    el.textContent = (multi.size||"All")+" selected · drag on the map to move them · Multi-select to change the set";
   }else{
-    el.textContent = "Multi-select (phone) or Select / group all, then drag to move.";
+    el.textContent = "Multi-select opens a checklist — easiest on phones.";
   }
+  renderPickList();
+}
+function pieceLabel(kind,id){
+  if(kind==="dock"){
+    const d=docks.find(x=>x.id===id);
+    return d ? ("Dock "+(d.name||d.id)) : ("Dock "+id);
+  }
+  const m=marks.find(x=>x.id===id);
+  if(!m) return id;
+  if(m.kind==="text") return "Label: "+(m.text||m.id);
+  if(m.kind==="box") return "Building: "+(m.t1||m.id);
+  if(m.kind==="bar") return "Walkway: "+(m.title||m.id);
+  if(m.kind==="pill") return "Sign: "+(m.label||m.text||m.id);
+  if(m.kind==="p") return "Parking";
+  return (m.kind||"Piece")+": "+(m.title||m.text||m.id);
+}
+function renderPickList(){
+  const box=document.getElementById("pick-list");
+  if(!box) return;
+  if(!(editing && multiPick)){ box.hidden=true; box.innerHTML=""; return; }
+  box.hidden=false;
+  const rows=[];
+  rows.push('<div class="pick-section">Docks</div>');
+  docks.forEach(d=>{
+    const k="dock:"+d.id;
+    const on=multi.has(k);
+    rows.push(`<label class="pick-row${on?" on":""}" data-k="${k}"><input type="checkbox" ${on?"checked":""}/><span>${pieceLabel("dock",d.id)}</span></label>`);
+  });
+  rows.push('<div class="pick-section">Labels & pieces</div>');
+  marks.forEach(m=>{
+    const k="mark:"+m.id;
+    const on=multi.has(k);
+    rows.push(`<label class="pick-row${on?" on":""}" data-k="${k}"><input type="checkbox" ${on?"checked":""}/><span>${pieceLabel("mark",m.id)}</span></label>`);
+  });
+  box.innerHTML=rows.join("");
+  box.querySelectorAll(".pick-row").forEach(row=>{
+    const inp=row.querySelector("input");
+    const apply=()=>{
+      const k=row.getAttribute("data-k");
+      if(inp.checked) multi.add(k); else multi.delete(k);
+      if(multi.size<=1) moveWholeChart=false;
+      // sync selected for editor
+      if(k.startsWith("dock:")){ selectedDock=k.slice(5); selectedMark=null; }
+      else { selectedMark=k.slice(5); selectedDock=null; }
+      selected=null;
+      updateSelHint();
+      redraw();
+      renderDockEditor();
+    };
+    inp.onchange=apply;
+    // whole row already toggles checkbox via label
+  });
+}
+function setMultiPick(on){
+  multiPick=!!on;
+  if(multiPick){
+    if(!editing){ document.getElementById("edit-toggle").click(); }
+    moveWholeChart=false;
+    showTab("layout");
+    document.getElementById("hint").textContent="Multi-select · tick the list (or tap the map)";
+  }else{
+    document.getElementById("hint").textContent = multi.size>1 ? "Drag on the map to move the selection" : "Drag docks/labels · Multi-select to pick several";
+  }
+  updateSelHint();
+  redraw();
 }
 function memberKey(kind,id){ return kind+":"+id; }
 function findGroupFor(kind,id){
@@ -607,7 +676,7 @@ chart.addEventListener("pointerdown",e=>{
     const dEl=e.target.closest("[data-dock]");
     const mEl=e.target.closest("[data-mark]");
     const p=svgPoint(e);
-    // Mobile Multi-select: tap to toggle; drag only moves once 2+ are selected
+    // Multi-select mode: taps only toggle — no drag-move (use Done, then drag, or Move selected)
     if(multiPick){
       let tapKey=null, tapDock=null, tapMark=null;
       if(dEl){ tapDock=dEl.getAttribute("data-dock"); tapKey="dock:"+tapDock; }
@@ -615,12 +684,6 @@ chart.addEventListener("pointerdown",e=>{
       else if(sEl){
         const did=sEl.getAttribute("data-dock");
         if(did){ tapDock=did; tapKey="dock:"+did; }
-      }
-      if(multi.size>1){
-        dockDrag={kind:"chart",keys:[...multi],px:p.x,py:p.y,sx:0,sy:0,moved:false,tapKey,tapDock,tapMark,fromMultiPick:true};
-        chart.style.cursor="grabbing";
-        chart.setPointerCapture(e.pointerId);
-        return;
       }
       if(tapKey){
         dockDrag={kind:"pick",tapKey,tapDock,tapMark,px:p.x,py:p.y,moved:false};
@@ -631,7 +694,7 @@ chart.addEventListener("pointerdown",e=>{
     }
     // Whole-chart move: after Select/group all, drag anywhere (including slips) moves everything
     if(moveWholeChart || multi.size>1){
-      const keys=multi.size>1 ? [...multi] : allLayoutKeys();
+      const keys = multi.size ? [...multi] : allLayoutKeys();
       dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false};
       chart.style.cursor="grabbing";
       chart.setPointerCapture(e.pointerId);
@@ -761,9 +824,43 @@ chart.addEventListener("wheel",e=>{
   const cx=e.clientX-r.left, cy=e.clientY-r.top;
   zoomToward(cx, cy, e.deltaY<0?1.08:0.92);
 },{passive:false});
+function panBy(dx,dy){
+  tx+=dx; ty+=dy; applyZoom();
+}
+function panStep(){
+  // ~1/5 of the visible chart per tap — readable nudge when zoomed in
+  const {w,h}=chartSize();
+  return {x:Math.max(60, Math.round(w*0.22)), y:Math.max(60, Math.round(h*0.22))};
+}
+function bindHold(btn, fn){
+  if(!btn) return;
+  let timer=null, repeating=false;
+  const start=e=>{
+    e.preventDefault();
+    fn();
+    repeating=false;
+    timer=setTimeout(function tick(){
+      repeating=true; fn();
+      timer=setTimeout(tick, 70);
+    }, 320);
+  };
+  const stop=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+  btn.addEventListener("pointerdown", start);
+  btn.addEventListener("pointerup", stop);
+  btn.addEventListener("pointerleave", stop);
+  btn.addEventListener("pointercancel", stop);
+  // Prevent the synthetic click from double-firing after a hold
+  btn.addEventListener("click", e=>{ e.preventDefault(); });
+}
 document.getElementById("z-in").onclick=()=>{ const {w,h}=chartSize(); zoomToward(w/2,h/2,1.15); };
 document.getElementById("z-out").onclick=()=>{ const {w,h}=chartSize(); zoomToward(w/2,h/2,1/1.15); };
 document.getElementById("z-full").onclick=()=>fitWholeMap();
+bindHold(document.getElementById("pan-left"), ()=>{ const s=panStep(); panBy(s.x,0); });
+bindHold(document.getElementById("pan-right"), ()=>{ const s=panStep(); panBy(-s.x,0); });
+bindHold(document.getElementById("pan-up"), ()=>{ const s=panStep(); panBy(0,s.y); });
+bindHold(document.getElementById("pan-down"), ()=>{ const s=panStep(); panBy(0,-s.y); });
+const panCenter=document.getElementById("pan-center");
+if(panCenter) panCenter.onclick=()=>fitWholeMap();
 // Initial view: zoomed in for reading slips; use ⛶ to see whole map on one page
 requestAnimationFrame(()=>requestAnimationFrame(defaultMarinaZoom));
 window.addEventListener("resize",()=>{
@@ -1049,13 +1146,32 @@ if(_fixBlank) _fixBlank.onclick=()=>{
   multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
 };
 const _btnSaveLayout=document.getElementById("btn-save-layout"); if(_btnSaveLayout) _btnSaveLayout.onclick=()=>saveNow();
-document.getElementById("btn-multi").onclick=()=>{
-  if(!editing){ document.getElementById("edit-toggle").click(); }
-  multiPick=!multiPick;
-  if(multiPick){ moveWholeChart=false; showTab("layout"); }
-  document.getElementById("hint").textContent = multiPick ? "Multi-select on · tap each dock or label" : "Drag docks/labels · Multi-select or Select all to move";
-  updateSelHint();
-};
+function wireMultiButtons(){
+  const toggle=()=>setMultiPick(!multiPick);
+  const b1=document.getElementById("btn-multi"); if(b1) b1.onclick=toggle;
+  const b2=document.getElementById("btn-multi-hdr"); if(b2) b2.onclick=toggle;
+  const clear=document.getElementById("btn-multi-clear");
+  if(clear) clear.onclick=()=>{ multi.clear(); moveWholeChart=false; updateSelHint(); redraw(); };
+  const done=document.getElementById("btn-multi-done");
+  if(done) done.onclick=()=>{
+    setMultiPick(false);
+    if(multi.size>1){
+      moveWholeChart=true;
+      document.getElementById("hint").textContent="Drag on the map to move the "+multi.size+" selected pieces";
+    }
+  };
+  const move=document.getElementById("btn-multi-move");
+  if(move) move.onclick=()=>{
+    if(multi.size<1){ alert("Pick at least one item in the list first."); return; }
+    setMultiPick(false);
+    moveWholeChart = multi.size>0;
+    document.getElementById("hint").textContent = multi.size>1
+      ? ("Drag on the map to move all "+multi.size+" selected pieces")
+      : "Drag on the map to move the selected piece";
+    updateSelHint();
+  };
+}
+wireMultiButtons();
 document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } multiPick=false; selectAllLayout(); };
 document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } multiPick=false; groupAllLayout(); };
 document.getElementById("btn-group").onclick=()=>{
