@@ -47,6 +47,15 @@
   .place-hint { display:none; position:absolute; z-index:850; left:50%; top:calc(58px + var(--safe-top)); transform:translateX(-50%); background:#c49a58; color:#071822; font-weight:700; font-size:13px; padding:8px 14px; border-radius:999px; white-space:nowrap; }
   .place-hint.on { display:block; }
   .fab.placing { box-shadow:0 0 0 3px #fff8; }
+  .sheet .unlock-row { margin-top:10px; }
+  .sheet .unlock-row button { width:100%; border:0; border-radius:12px; padding:10px 12px; background:#123447; color:var(--ink); font-size:14px; }
+  .sheet .unlock-row button.on { background:#2a5a3a; }
+  .pw-form { display:none; position:absolute; z-index:960; left:50%; top:40%; transform:translate(-50%,-50%); width:min(300px,90vw); background:var(--panel); border-radius:16px; padding:16px; }
+  .pw-form.open { display:block; }
+  .pw-form input { width:100%; margin:8px 0 12px; border:0; border-radius:10px; padding:10px; background:#123447; color:var(--ink); }
+  .pw-form .actions { display:flex; gap:8px; justify-content:flex-end; }
+  .pw-form button { border:0; border-radius:12px; padding:8px 14px; font-size:14px; background:#123447; color:var(--ink); }
+  .pw-err { color:#ffd7de; font-size:12px; min-height:1em; }
 
   .opacity-box {
     position:absolute; right:10px; bottom:calc(78px + var(--safe-bot)); z-index:800;
@@ -80,12 +89,25 @@
   <label class="row"><input type="checkbox" id="prelake-on" checked /> Pre-lake valley (1894)</label>
   <h2>Pins</h2>
   <div id="cats"></div>
+  <div class="unlock-row">
+    <button type="button" id="btn-unlock-shared">Unlock shared edits</button>
+  </div>
+</div>
+<div id="pw-form" class="pw-form">
+  <strong>Shared pin password</strong>
+  <input id="pw-input" type="password" placeholder="Password" autocomplete="current-password" />
+  <div id="pw-err" class="pw-err"></div>
+  <div class="actions">
+    <button type="button" id="pw-cancel">Cancel</button>
+    <button type="button" id="pw-ok" class="fab" style="width:auto;height:auto;border-radius:12px;padding:8px 14px;">Unlock</button>
+  </div>
 </div>
 <div id="place-hint" class="place-hint">Tap the map to drop a pin</div>
 <div id="pin-form" class="pin-form">
   <strong id="pin-form-title">Drop a pin</strong>
   <input id="pin-name" type="text" placeholder="Name this spot" />
   <select id="pin-cat">
+    <option>Shared</option>
     <option>My pins</option>
     <option>Cove</option>
     <option>Marina</option>
@@ -113,6 +135,8 @@
 <p class="note">Not a navigation chart. USACE / public map data.</p>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script src="coves.js"></script>
 <script>
 const PINS = [
@@ -140,14 +164,29 @@ const extra = (typeof COVE_PINS !== "undefined") ? COVE_PINS : [];
 const ALL = PINS.concat(extra.map(function(p){
   return {name:p.name,lat:p.lat,lng:p.lng,cat:p.category||"Cove",fact:p.fact||"",tip:p.tip||""};
 }));
-const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6","My pins":"#e07a5f"};
+const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6","My pins":"#e07a5f",Shared:"#f4a261"};
 function colorFor(cat){ return COLORS[cat] || "#c49a58"; }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]; }); }
 function stockKey(p){ return p.name+"|"+p.lat+"|"+p.lng; }
 const STORE_USER = "gfl-user-pins";
 const STORE_OVR = "gfl-pin-overrides";
+const STORE_UNLOCK = "gfl-shared-unlocked";
+const SHARED_PW_HASH = "249aed4359f903fdfd01ed7b14d007c6f7a0c4a80dd75d44e05e054107b7c948";
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDLTQLu94IcfD_FqhoCw_MkVte4EP-F1T8",
+  authDomain: "greers-ferry-lake-pins.firebaseapp.com",
+  databaseURL: "https://greers-ferry-lake-pins-default-rtdb.firebaseio.com",
+  projectId: "greers-ferry-lake-pins",
+  storageBucket: "greers-ferry-lake-pins.firebasestorage.app",
+  messagingSenderId: "399038895739",
+  appId: "1:399038895739:web:9fdccd1604db2d2930b4de"
+};
 let userPins = JSON.parse(localStorage.getItem(STORE_USER)||"[]");
 let overrides = JSON.parse(localStorage.getItem(STORE_OVR)||"{}");
+let sharedPins = [];
+let sharedUnlocked = localStorage.getItem(STORE_UNLOCK) === "1";
+let sharedReady = false;
+let db = null;
 userPins = userPins.map(function(p,i){
   if (!p.id) p.id = "u-"+Date.now()+"-"+i;
   if (!p.cat) p.cat = "My pins";
@@ -167,7 +206,82 @@ function visiblePins(){
     return out;
   }).filter(Boolean);
   const mine = userPins.map(function(p){ return Object.assign({kind:"user"}, p); });
-  return stock.concat(mine);
+  const shared = sharedPins.map(function(p){ return Object.assign({kind:"shared", cat:"Shared"}, p); });
+  return stock.concat(shared).concat(mine);
+}
+function sha256Hex(text){
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function(buf){
+    return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,"0"); }).join("");
+  });
+}
+function syncUnlockUi(){
+  const b = document.getElementById("btn-unlock-shared");
+  if (!b) return;
+  b.textContent = sharedUnlocked ? "Shared edits unlocked" : "Unlock shared edits";
+  b.classList.toggle("on", sharedUnlocked);
+}
+function requireSharedUnlock(){
+  if (sharedUnlocked) return Promise.resolve(true);
+  return new Promise(function(resolve){
+    const form = document.getElementById("pw-form");
+    const input = document.getElementById("pw-input");
+    const err = document.getElementById("pw-err");
+    err.textContent = "";
+    input.value = "";
+    form.classList.add("open");
+    input.focus();
+    function cleanup(){
+      document.getElementById("pw-ok").onclick = null;
+      document.getElementById("pw-cancel").onclick = null;
+    }
+    document.getElementById("pw-cancel").onclick = function(){
+      form.classList.remove("open");
+      cleanup();
+      resolve(false);
+    };
+    document.getElementById("pw-ok").onclick = function(){
+      sha256Hex(input.value.trim()).then(function(h){
+        if (h !== SHARED_PW_HASH) { err.textContent = "Wrong password"; return; }
+        sharedUnlocked = true;
+        localStorage.setItem(STORE_UNLOCK, "1");
+        syncUnlockUi();
+        form.classList.remove("open");
+        cleanup();
+        resolve(true);
+      });
+    };
+  });
+}
+function initSharedDb(){
+  if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.indexOf("REPLACE_") === 0) {
+    console.warn("Shared pins: Firebase not configured yet");
+    return;
+  }
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    db.ref("sharedPins").on("value", function(snap){
+      const val = snap.val() || {};
+      sharedPins = Object.keys(val).map(function(id){
+        const p = val[id] || {};
+        return {id:id, name:p.name||"Shared pin", lat:+p.lat, lng:+p.lng, fact:p.fact||"", cat:"Shared"};
+      }).filter(function(p){ return !isNaN(p.lat) && !isNaN(p.lng); });
+      sharedReady = true;
+      renderPins();
+    });
+  } catch (e) {
+    console.warn("Shared pins init failed", e);
+  }
+}
+function saveSharedPin(pin){
+  if (!db) return Promise.reject(new Error("Shared sync not ready"));
+  const id = pin.id || ("s-"+Date.now());
+  const payload = {name:pin.name, lat:pin.lat, lng:pin.lng, fact:pin.fact||"", updatedAt: Date.now()};
+  return db.ref("sharedPins/"+id).set(payload).then(function(){ return id; });
+}
+function deleteSharedPin(id){
+  if (!db) return Promise.reject(new Error("Shared sync not ready"));
+  return db.ref("sharedPins/"+id).remove();
 }
 
 const map = L.map("map", { zoomControl:false, rotate:true, bearing:0, touchRotate:true, rotateControl:false }).fitBounds([[35.48,-92.36],[35.66,-91.97]]);
@@ -251,6 +365,8 @@ function renderPins(){
   });
 }
 renderPins();
+syncUnlockUi();
+initSharedDb();
 
 document.querySelectorAll('input[name="base"]').forEach(function(r){
   r.onchange = function(){
@@ -354,7 +470,8 @@ function openPinForm(p){
   editing = p;
   pinFormTitle.textContent = p.kind==="new" ? "Drop a pin" : "Edit pin";
   pinName.value = p.name || "";
-  pinCat.value = p.cat && COLORS[p.cat] ? p.cat : (p.kind==="new" ? "My pins" : (p.cat || "My pins"));
+  var preferred = p.kind==="shared" ? "Shared" : (p.kind==="new" ? (sharedUnlocked ? "Shared" : "My pins") : (p.cat || "My pins"));
+  pinCat.value = preferred;
   if (![].some.call(pinCat.options, function(o){ return o.value===pinCat.value; })) {
     pinCat.value = "My pins";
   }
@@ -371,6 +488,13 @@ function beginMove(p){
   syncPlaceUi();
 }
 function movePinTo(p, ll){
+  if (p.kind==="shared") {
+    requireSharedUnlock().then(function(ok){
+      if (!ok) return;
+      saveSharedPin({id:p.id, name:p.name, lat:ll.lat, lng:ll.lng, fact:p.fact||""}).catch(function(err){ alert("Could not move shared pin"); console.warn(err); });
+    });
+    return;
+  }
   if (p.kind==="user") {
     userPins = userPins.map(function(x){
       if (x.id !== p.id) return x;
@@ -391,6 +515,13 @@ function movePinTo(p, ll){
   renderPins();
 }
 function removePin(p){
+  if (p.kind==="shared") {
+    requireSharedUnlock().then(function(ok){
+      if (!ok) return;
+      deleteSharedPin(p.id).then(function(){ closePinForm(); }).catch(function(err){ alert("Could not delete shared pin"); console.warn(err); });
+    });
+    return;
+  }
   if (p.kind==="user") userPins = userPins.filter(function(x){ return x.id !== p.id; });
   else overrides[p.key] = {deleted:true};
   persistPins();
@@ -412,11 +543,38 @@ pinDelete.onclick = function(){
   if (!editing || editing.kind==="new") return;
   if (confirm("Remove "+(editing.name||"this pin")+"?")) removePin(editing);
 };
+document.getElementById("btn-unlock-shared").onclick = function(){
+  if (sharedUnlocked) {
+    sharedUnlocked = false;
+    localStorage.removeItem(STORE_UNLOCK);
+    syncUnlockUi();
+    return;
+  }
+  requireSharedUnlock();
+};
 document.getElementById("pin-save").onclick = function(){
   const name = pinName.value.trim();
   if (!name) return;
   const cat = pinCat.value || "My pins";
   const fact = pinFact.value.trim();
+  const finishLocal = function(){
+    persistPins();
+    closePinForm();
+    renderPins();
+  };
+  const asShared = cat === "Shared" || (editing && editing.kind==="shared" && cat==="Shared");
+  if (asShared) {
+    requireSharedUnlock().then(function(ok){
+      if (!ok) return;
+      if (!db) { alert("Shared sync is still being set up. Try again in a bit."); return; }
+      const ll = (editing && editing.lat!=null) ? {lat:editing.lat,lng:editing.lng} : map.getCenter();
+      const id = (editing && editing.kind==="shared") ? editing.id : null;
+      saveSharedPin({id:id, name:name, lat:ll.lat, lng:ll.lng, fact:fact}).then(function(){
+        closePinForm();
+      }).catch(function(err){ alert("Could not save shared pin"); console.warn(err); });
+    });
+    return;
+  }
   if (!editing || editing.kind==="new") {
     const ll = editing && editing.lat!=null ? {lat:editing.lat,lng:editing.lng} : map.getCenter();
     userPins.push({id:"u-"+Date.now(), name:name, lat:ll.lat, lng:ll.lng, cat:cat, fact:fact});
@@ -425,12 +583,20 @@ document.getElementById("pin-save").onclick = function(){
       if (x.id !== editing.id) return x;
       return Object.assign({}, x, {name:name, cat:cat, fact:fact});
     });
+  } else if (editing.kind==="shared") {
+    // moved from Shared to a personal category
+    requireSharedUnlock().then(function(ok){
+      if (!ok) return;
+      deleteSharedPin(editing.id).then(function(){
+        userPins.push({id:"u-"+Date.now(), name:name, lat:editing.lat, lng:editing.lng, cat:cat, fact:fact});
+        finishLocal();
+      });
+    });
+    return;
   } else {
     overrides[editing.key] = {name:name, lat:editing.lat, lng:editing.lng, cat:cat, fact:fact, tip:""};
   }
-  persistPins();
-  closePinForm();
-  renderPins();
+  finishLocal();
 };
 
 if ("serviceWorker" in navigator) {
