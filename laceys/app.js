@@ -568,7 +568,8 @@ svg.addEventListener("click",e=>{
     const sEl=e.target.closest("[data-id]");
     const dEl=e.target.closest("[data-dock]");
     const mEl=e.target.closest("[data-mark]");
-    if(e.shiftKey || multiPick){
+    // Desktop Shift-click multi-select (phones use Multi-select + pointerup instead)
+    if(e.shiftKey){
       if(dEl){
         const id=dEl.getAttribute("data-dock");
         toggleMultiKey("dock:"+id);
@@ -583,7 +584,10 @@ svg.addEventListener("click",e=>{
         showTab("layout"); renderDockEditor();
         return;
       }
-      // tap empty water while multi-picking: keep selection
+      return;
+    }
+    if(multiPick){
+      // Handled on pointerup for touch — ignore click to avoid double-toggle
       return;
     }
     if(sEl){
@@ -603,6 +607,28 @@ chart.addEventListener("pointerdown",e=>{
     const dEl=e.target.closest("[data-dock]");
     const mEl=e.target.closest("[data-mark]");
     const p=svgPoint(e);
+    // Mobile Multi-select: tap to toggle; drag only moves once 2+ are selected
+    if(multiPick){
+      let tapKey=null, tapDock=null, tapMark=null;
+      if(dEl){ tapDock=dEl.getAttribute("data-dock"); tapKey="dock:"+tapDock; }
+      else if(mEl){ tapMark=mEl.getAttribute("data-mark"); tapKey="mark:"+tapMark; }
+      else if(sEl){
+        const did=sEl.getAttribute("data-dock");
+        if(did){ tapDock=did; tapKey="dock:"+did; }
+      }
+      if(multi.size>1){
+        dockDrag={kind:"chart",keys:[...multi],px:p.x,py:p.y,sx:0,sy:0,moved:false,tapKey,tapDock,tapMark,fromMultiPick:true};
+        chart.style.cursor="grabbing";
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+      if(tapKey){
+        dockDrag={kind:"pick",tapKey,tapDock,tapMark,px:p.x,py:p.y,moved:false};
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+      pan={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); return;
+    }
     // Whole-chart move: after Select/group all, drag anywhere (including slips) moves everything
     if(moveWholeChart || multi.size>1){
       const keys=multi.size>1 ? [...multi] : allLayoutKeys();
@@ -651,7 +677,15 @@ chart.addEventListener("pointerdown",e=>{
 chart.addEventListener("pointermove",e=>{
   if(dockDrag){
     const p=svgPoint(e); const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
-    if(Math.abs(dx)+Math.abs(dy)>2) dockDrag.moved=true;
+    if(Math.abs(dx)+Math.abs(dy)>6) dockDrag.moved=true; // slightly looser for fat fingers
+    if(dockDrag.kind==="pick"){
+      // Finger slid while multi-picking — treat as pan instead of a toggle
+      if(dockDrag.moved){
+        if(!pan) pan={x:e.clientX-tx, y:e.clientY-ty};
+        tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
+      }
+      return;
+    }
     if(dockDrag.kind==="chart"){
       dockDrag.sx=Math.round(dx); dockDrag.sy=Math.round(dy);
       // Live nudge via SVG transform (no full redraw — keeps it smooth)
@@ -689,9 +723,22 @@ chart.addEventListener("pointermove",e=>{
 });
 chart.addEventListener("pointerup",()=>{
   if(dockDrag){
-    if(dockDrag.kind==="chart"){
+    if(dockDrag.kind==="pick"){
+      if(!dockDrag.moved && dockDrag.tapKey){
+        toggleMultiKey(dockDrag.tapKey);
+        if(dockDrag.tapDock){ selectedDock=dockDrag.tapDock; selectedMark=null; selected=null; }
+        if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
+        showTab("layout"); renderDockEditor();
+      }
+    }else if(dockDrag.kind==="chart"){
       clearLayerNudge();
-      if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
+      if(dockDrag.fromMultiPick && !dockDrag.moved && dockDrag.tapKey){
+        // Tap (not drag) while a multi-selection exists — toggle that piece
+        toggleMultiKey(dockDrag.tapKey);
+        if(dockDrag.tapDock){ selectedDock=dockDrag.tapDock; selectedMark=null; selected=null; }
+        if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
+        showTab("layout"); renderDockEditor();
+      }else if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
         // Cap a single drag so a bad pointer event cannot fling the chart into oblivion
         const sx=Math.max(-1500, Math.min(1500, dockDrag.sx));
         const sy=Math.max(-1500, Math.min(1500, dockDrag.sy));
