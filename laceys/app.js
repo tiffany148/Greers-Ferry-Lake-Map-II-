@@ -30,6 +30,55 @@ function moveDockSlips(d,dx,dy){
   Object.keys(d.placed).forEach(id=>{d.placed[id].x+=dx;d.placed[id].y+=dy;});
 }
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
+let deepZoom=true;
+let photoMax=0.9;
+let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
+const PHOTO_ALIGN_STORE="laceys-photo-align-v1";
+function loadPhotoAlign(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(PHOTO_ALIGN_STORE)||"null");
+    if(raw && typeof raw==="object"){
+      photoAlign={
+        x:Number(raw.x)||0,
+        y:Number(raw.y)||0,
+        scale:Math.max(0.2, Math.min(3, Number(raw.scale)||1)),
+        rot:Number(raw.rot)||0
+      };
+    }
+  }catch(e){}
+}
+function savePhotoAlign(){
+  try{ localStorage.setItem(PHOTO_ALIGN_STORE, JSON.stringify(photoAlign)); }catch(e){}
+}
+function applyPhotoAlign(){
+  if(!bgImg) return;
+  const s=photoAlign.scale||1;
+  const cx=1200, cy=850; // chart center
+  // Scale around center, then translate, then rotate around center
+  const x=(Number(photoAlign.x)||0) + cx*(1-s);
+  const y=(Number(photoAlign.y)||0) + cy*(1-s);
+  bgImg.setAttribute("x", String(x));
+  bgImg.setAttribute("y", String(y));
+  bgImg.setAttribute("width", String(2400*s));
+  bgImg.setAttribute("height", String(1700*s));
+  const rot=Number(photoAlign.rot)||0;
+  if(rot){
+    // rotate around visual center of photo
+    const px=x+1200*s, py=y+850*s;
+    bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
+  }else{
+    bgImg.removeAttribute("transform");
+  }
+  const sv=document.getElementById("photo-scale-val");
+  const rv=document.getElementById("photo-rot-val");
+  const sc=document.getElementById("photo-scale");
+  const rr=document.getElementById("photo-rot");
+  if(sc) sc.value=String(Math.round((photoAlign.scale||1)*100));
+  if(rr) rr.value=String(photoAlign.rot||0);
+  if(sv) sv.textContent=Math.round((photoAlign.scale||1)*100)+"%";
+  if(rv) rv.textContent=(Math.round((photoAlign.rot||0)*10)/10)+"°";
+}
+
 function loadLayersStandalone(){
   try{
     const raw=JSON.parse(localStorage.getItem("laceys-layers-v1")||"null");
@@ -607,54 +656,6 @@ function selectEditSlip(id){
   showTab("layout"); renderDockEditor(); redraw();
 }
 let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
-let deepZoom=true;
-let photoMax=0.9;
-let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
-const PHOTO_ALIGN_STORE="laceys-photo-align-v1";
-function loadPhotoAlign(){
-  try{
-    const raw=JSON.parse(localStorage.getItem(PHOTO_ALIGN_STORE)||"null");
-    if(raw && typeof raw==="object"){
-      photoAlign={
-        x:Number(raw.x)||0,
-        y:Number(raw.y)||0,
-        scale:Math.max(0.2, Math.min(3, Number(raw.scale)||1)),
-        rot:Number(raw.rot)||0
-      };
-    }
-  }catch(e){}
-}
-function savePhotoAlign(){
-  try{ localStorage.setItem(PHOTO_ALIGN_STORE, JSON.stringify(photoAlign)); }catch(e){}
-}
-function applyPhotoAlign(){
-  if(!bgImg) return;
-  const s=photoAlign.scale||1;
-  const cx=1200, cy=850; // chart center
-  // Scale around center, then translate, then rotate around center
-  const x=(Number(photoAlign.x)||0) + cx*(1-s);
-  const y=(Number(photoAlign.y)||0) + cy*(1-s);
-  bgImg.setAttribute("x", String(x));
-  bgImg.setAttribute("y", String(y));
-  bgImg.setAttribute("width", String(2400*s));
-  bgImg.setAttribute("height", String(1700*s));
-  const rot=Number(photoAlign.rot)||0;
-  if(rot){
-    // rotate around visual center of photo
-    const px=x+1200*s, py=y+850*s;
-    bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
-  }else{
-    bgImg.removeAttribute("transform");
-  }
-  const sv=document.getElementById("photo-scale-val");
-  const rv=document.getElementById("photo-rot-val");
-  const sc=document.getElementById("photo-scale");
-  const rr=document.getElementById("photo-rot");
-  if(sc) sc.value=String(Math.round((photoAlign.scale||1)*100));
-  if(rr) rr.value=String(photoAlign.rot||0);
-  if(sv) sv.textContent=Math.round((photoAlign.scale||1)*100)+"%";
-  if(rv) rv.textContent=(Math.round((photoAlign.rot||0)*10)/10)+"°";
-}
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
 function zoomUnit(){ return scale/Math.max(1e-6, minFitScale()); }
 function applyDeepZoomLod(){
