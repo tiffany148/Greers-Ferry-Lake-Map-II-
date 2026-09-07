@@ -1,5 +1,5 @@
-const STORE="laceys-share-slips-v1";
-const LAYOUT_STORE="laceys-share-layout-v1";
+const STORE="laceys-copy-plain-slips-v1";
+const LAYOUT_STORE="laceys-copy-plain-layout-v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
@@ -16,8 +16,8 @@ const DEFAULT_DOCKS=[
     "id": "7",
     "name": "7",
     "type": "ns",
-    "x": 1215,
-    "y": 750,
+    "x": 1336,
+    "y": 778,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -67,8 +67,8 @@ const DEFAULT_DOCKS=[
     "id": "8",
     "name": "8",
     "type": "ns",
-    "x": 1215,
-    "y": 650,
+    "x": 1334,
+    "y": 669,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -118,8 +118,8 @@ const DEFAULT_DOCKS=[
     "id": "9",
     "name": "9",
     "type": "ns",
-    "x": 1215,
-    "y": 550,
+    "x": 1334,
+    "y": 559,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -170,8 +170,8 @@ const DEFAULT_DOCKS=[
     "id": "10",
     "name": "10",
     "type": "ns",
-    "x": 1215,
-    "y": 450,
+    "x": 1333,
+    "y": 453,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -221,8 +221,8 @@ const DEFAULT_DOCKS=[
     "id": "11",
     "name": "11",
     "type": "ns",
-    "x": 1215,
-    "y": 350,
+    "x": 1334,
+    "y": 348,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -272,8 +272,8 @@ const DEFAULT_DOCKS=[
     "id": "12",
     "name": "12",
     "type": "ns",
-    "x": 1214,
-    "y": 250,
+    "x": 1335,
+    "y": 245,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -323,8 +323,8 @@ const DEFAULT_DOCKS=[
     "id": "13",
     "name": "13",
     "type": "ns",
-    "x": 1215,
-    "y": 150,
+    "x": 1333,
+    "y": 141,
     "kind": "std",
     "size": "10x30 Standard",
     "locked": true,
@@ -371,30 +371,11 @@ const DEFAULT_DOCKS=[
     "placed": {}
   },
   {
-    "id": "4",
-    "name": "4",
-    "type": "ns",
-    "x": 413,
-    "y": 1207,
-    "kind": "pref",
-    "size": "10x30 Preferred",
-    "locked": false,
-    "sw": 12,
-    "sh": 12,
-    "gap": 3,
-    "a": [
-      32
-    ],
-    "b": [],
-    "placed": {},
-    "extras": []
-  },
-  {
     "id": "3",
     "name": "3",
     "type": "ns",
-    "x": 596,
-    "y": 923,
+    "x": 707,
+    "y": 935,
     "kind": "pref",
     "size": "10x30 Preferred",
     "locked": true,
@@ -443,12 +424,12 @@ const DEFAULT_DOCKS=[
     "id": "2",
     "name": "2",
     "type": "ns",
-    "x": 722,
-    "y": 944,
+    "x": 864,
+    "y": 1005,
     "kind": "wide",
     "size": "16x42",
     "locked": true,
-    "sw": 50,
+    "sw": 60,
     "sh": 50,
     "gap": 3,
     "a": [
@@ -485,8 +466,8 @@ const DEFAULT_DOCKS=[
     "id": "1",
     "name": "1",
     "type": "ns",
-    "x": 856,
-    "y": 942,
+    "x": 1028,
+    "y": 1048,
     "kind": "wide",
     "size": "16x42",
     "locked": true,
@@ -529,8 +510,8 @@ const DEFAULT_DOCKS=[
     "id": "5",
     "name": "5",
     "type": "ew",
-    "x": -22,
-    "y": 1121,
+    "x": 84,
+    "y": 1473,
     "kind": "pref",
     "size": "10x30 Preferred",
     "locked": true,
@@ -561,14 +542,15 @@ const DEFAULT_DOCKS=[
       274,
       273
     ],
-    "placed": {}
+    "placed": {},
+    "rot": -6
   },
   {
     "id": "sales",
     "name": "Sales",
     "type": "col",
-    "x": 1141,
-    "y": 1138,
+    "x": 1291,
+    "y": 1117,
     "kind": "sales",
     "size": "10x34",
     "locked": true,
@@ -599,8 +581,8 @@ const DEFAULT_DOCKS=[
     "id": "fuel",
     "name": "Fuel",
     "type": "ns",
-    "x": 1317,
-    "y": 958,
+    "x": 1432,
+    "y": 914,
     "kind": "fuel",
     "size": "Fuel stall",
     "locked": true,
@@ -610,8 +592,8 @@ const DEFAULT_DOCKS=[
     "a": [],
     "placed": {
       "3": {
-        "x": 1393,
-        "y": 1044,
+        "x": 1508,
+        "y": 1000,
         "w": 60,
         "h": 40
       }
@@ -633,8 +615,8 @@ const DEFAULT_DOCKS=[
     "id": "courtesy",
     "name": "Courtesy",
     "type": "ns",
-    "x": 1332,
-    "y": 1345,
+    "x": 1443,
+    "y": 1284,
     "kind": "courtesy",
     "size": "Courtesy",
     "locked": true,
@@ -644,8 +626,8 @@ const DEFAULT_DOCKS=[
     "a": [],
     "placed": {
       "3": {
-        "x": 1398,
-        "y": 1411
+        "x": 1509,
+        "y": 1350
       }
     },
     "b": [
@@ -663,8 +645,8 @@ const DEFAULT_DOCKS=[
     "id": "cruiser",
     "name": "Cruiser",
     "type": "ew",
-    "x": 1333,
-    "y": 1585,
+    "x": 1491,
+    "y": 1537,
     "kind": "cruiser",
     "size": "Cruiser",
     "locked": true,
@@ -703,44 +685,44 @@ const DEFAULT_DOCKS=[
     ],
     "placed": {
       "801": {
-        "x": 1505,
-        "y": 1585,
+        "x": 1663,
+        "y": 1537,
         "w": 40,
         "h": 60
       },
       "802": {
-        "x": 1548,
-        "y": 1585,
+        "x": 1706,
+        "y": 1537,
         "w": 40,
         "h": 60
       },
       "803": {
-        "x": 1591,
-        "y": 1585,
+        "x": 1749,
+        "y": 1537,
         "w": 40,
         "h": 60
       },
       "804": {
-        "x": 1634,
-        "y": 1585,
+        "x": 1792,
+        "y": 1537,
         "w": 40,
         "h": 60
       },
       "805": {
-        "x": 1677,
-        "y": 1585,
+        "x": 1835,
+        "y": 1537,
         "w": 40,
         "h": 60
       },
       "806": {
-        "x": 1720,
-        "y": 1585,
+        "x": 1878,
+        "y": 1537,
         "w": 40,
         "h": 60
       },
       "807": {
-        "x": 1763,
-        "y": 1585,
+        "x": 1921,
+        "y": 1537,
         "w": 40,
         "h": 60
       }
@@ -750,8 +732,8 @@ const DEFAULT_DOCKS=[
     "id": "houseboats",
     "name": "Houseboats",
     "type": "ns",
-    "x": 1846,
-    "y": 918,
+    "x": 1971,
+    "y": 936,
     "kind": "hb",
     "size": "12x38",
     "locked": true,
@@ -808,52 +790,88 @@ const DEFAULT_DOCKS=[
     ],
     "placed": {
       "824": {
-        "x": 1846,
-        "y": 1219,
+        "x": 1971,
+        "y": 1237,
         "w": 90,
         "h": 40
       },
+      "831": {
+        "x": 2077,
+        "y": 936,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "832": {
+        "x": 2077,
+        "y": 979,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "833": {
+        "x": 2077,
+        "y": 1022,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "834": {
+        "x": 2077,
+        "y": 1065,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "835": {
+        "x": 2077,
+        "y": 1108,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "836": {
+        "x": 2077,
+        "y": 1151,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "837": {
+        "x": 2077,
+        "y": 1194,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
+      "838": {
+        "x": 2077,
+        "y": 1237,
+        "w": 130,
+        "h": 40,
+        "fill": "#6dad6a"
+      },
       "839": {
-        "x": 1967,
-        "y": 1324,
+        "x": 2083,
+        "y": 1327,
         "w": 60,
         "h": 290
       },
       "840": {
-        "x": 2045,
-        "y": 1324,
+        "x": 2150,
+        "y": 1328,
         "w": 60,
-        "h": 290
+        "h": 290,
+        "fill": "#e3c35c"
       }
     }
-  },
-  {
-    "id": "dock-v1mggn",
-    "name": "Parking",
-    "type": "ew",
-    "x": 82,
-    "y": 781,
-    "kind": "std",
-    "size": "Custom",
-    "locked": false,
-    "gap": 3,
-    "w": 300,
-    "h": 200,
-    "a": [],
-    "b": [
-      2
-    ],
-    "extras": [],
-    "placed": {},
-    "sw": 40,
-    "sh": 36
   },
   {
     "id": "dock-ey4v4d",
     "name": "4",
     "type": "ns",
-    "x": 462,
-    "y": 921,
+    "x": 553,
+    "y": 1026,
     "kind": "std",
     "size": "Custom",
     "locked": true,
@@ -901,59 +919,40 @@ const DEFAULT_MARKS=[
   {
     "id": "shop",
     "kind": "box",
-    "x": 601,
-    "y": 81,
-    "w": 220,
-    "h": 70,
+    "x": 580,
+    "y": 59,
+    "w": 290,
+    "h": 180,
     "fill": "#8a8f62",
-    "t1": "SHOP / Service Dept.",
+    "t1": "",
     "t2": "Office"
-  },
-  {
-    "id": "parking",
-    "kind": "p",
-    "x": 150,
-    "y": 150,
-    "w": 140,
-    "h": 52
   },
   {
     "id": "restroom",
     "kind": "pill",
-    "x": 801,
-    "y": 813,
-    "w": 120,
-    "h": 100,
+    "x": 1018,
+    "y": 947,
+    "w": 80,
+    "h": 75,
     "label": "Restroom"
-  },
-  {
-    "id": "store",
-    "kind": "box",
-    "x": 1015,
-    "y": 857,
-    "w": 300,
-    "h": 180,
-    "fill": "#2b6d8a",
-    "t1": "Marina Store",
-    "t2": "Wave runners",
-    "ink": "#fff"
   },
   {
     "id": "picnic-store",
     "kind": "pill",
-    "x": 1814,
-    "y": 1580,
-    "w": 130,
-    "h": 110,
+    "x": 2059,
+    "y": 1542,
+    "w": 80,
+    "h": 60,
     "label": "Picnic",
     "fill": "#e7a0b8",
-    "ink": "#4a2430"
+    "ink": "#4a2430",
+    "rot": 90
   },
   {
     "id": "picnic-cru",
     "kind": "pill",
-    "x": 1346,
-    "y": 1574,
+    "x": 1497,
+    "y": 1534,
     "w": 140,
     "h": 60,
     "label": "Picnic",
@@ -963,8 +962,8 @@ const DEFAULT_MARKS=[
   {
     "id": "picnic-hb",
     "kind": "pill",
-    "x": 1245,
-    "y": 1647,
+    "x": 1397,
+    "y": 1607,
     "w": 80,
     "h": 45,
     "label": "Picnic",
@@ -974,24 +973,16 @@ const DEFAULT_MARKS=[
   {
     "id": "bridge",
     "kind": "bridge",
-    "x": 831,
-    "y": 12,
+    "x": 965,
+    "y": -1,
     "w": 1100,
     "h": 22
   },
   {
-    "id": "label-pref",
-    "kind": "text",
-    "x": 543,
-    "y": 910,
-    "text": "10x30 Preferred",
-    "size": 13
-  },
-  {
     "id": "label-std",
     "kind": "text",
-    "x": 1805,
-    "y": 221,
+    "x": 1930,
+    "y": 212,
     "text": "10x30 Standard",
     "size": 13,
     "rot": -90
@@ -999,8 +990,8 @@ const DEFAULT_MARKS=[
   {
     "id": "label-d5",
     "kind": "text",
-    "x": 278,
-    "y": 919,
+    "x": 621,
+    "y": 825,
     "text": "Dock 5 access",
     "size": 11,
     "rot": 90
@@ -1008,42 +999,26 @@ const DEFAULT_MARKS=[
   {
     "id": "label-walk",
     "kind": "text",
-    "x": 897,
-    "y": 518,
+    "x": 1052,
+    "y": 546,
     "text": "Main walkway",
     "size": 11,
     "rot": 63
   },
   {
-    "id": "label-sales",
-    "kind": "text",
-    "x": 1116,
-    "y": 1246,
-    "text": "Sales 10x34",
-    "size": 12,
-    "rot": -90
-  },
-  {
-    "id": "label-fuel",
-    "kind": "text",
-    "x": 584,
-    "y": 342,
-    "text": "Fuel / courtesy",
-    "size": 11
-  },
-  {
     "id": "label-emma",
     "kind": "text",
-    "x": 1838,
-    "y": 1553,
+    "x": 1985,
+    "y": 1543,
     "text": "Emma's Room",
-    "size": 11
+    "size": 11,
+    "rot": 90
   },
   {
     "id": "std-walk",
     "kind": "bar",
-    "x": 1171,
-    "y": 852,
+    "x": 1288,
+    "y": 868,
     "w": 1080,
     "h": 14,
     "rot": -90
@@ -1051,16 +1026,16 @@ const DEFAULT_MARKS=[
   {
     "id": "north",
     "kind": "text",
-    "x": 1095,
-    "y": 101,
+    "x": 1220,
+    "y": 115,
     "text": "NORTH",
     "size": 13
   },
   {
     "id": "channel",
     "kind": "text",
-    "x": 2288,
-    "y": 860,
+    "x": 2413,
+    "y": 851,
     "text": "NARROWS CHANNEL",
     "size": 14,
     "rot": 90
@@ -1068,8 +1043,8 @@ const DEFAULT_MARKS=[
   {
     "id": "mainwalk-16bjl6",
     "kind": "bar",
-    "x": 846,
-    "y": 489,
+    "x": 1006,
+    "y": 517,
     "w": 14,
     "h": 400,
     "title": "Walkway",
@@ -1078,10 +1053,10 @@ const DEFAULT_MARKS=[
   {
     "id": "box-pgvqry",
     "kind": "box",
-    "x": 1088,
-    "y": 1044,
-    "w": 80,
-    "h": 60,
+    "x": 1227,
+    "y": 1046,
+    "w": 60,
+    "h": 40,
     "fill": "#2b6d8a",
     "t1": "Dock House ",
     "t2": "",
@@ -1091,8 +1066,8 @@ const DEFAULT_MARKS=[
   {
     "id": "label-9haiji",
     "kind": "text",
-    "x": 1184,
-    "y": 1068,
+    "x": 1306,
+    "y": 1057,
     "text": "Office 1",
     "size": 13,
     "rot": 0
@@ -1100,8 +1075,8 @@ const DEFAULT_MARKS=[
   {
     "id": "label-rlhuce",
     "kind": "text",
-    "x": 1182,
-    "y": 1108,
+    "x": 1306,
+    "y": 1082,
     "text": "Office 2",
     "size": 13,
     "rot": 0
@@ -1109,8 +1084,8 @@ const DEFAULT_MARKS=[
   {
     "id": "mainwalk-13wys1",
     "kind": "bar",
-    "x": 245,
-    "y": 878,
+    "x": 596,
+    "y": 796,
     "w": 14,
     "h": 220,
     "title": "Walkway",
@@ -1119,10 +1094,142 @@ const DEFAULT_MARKS=[
   {
     "id": "label-waj0ir",
     "kind": "text",
-    "x": 1970,
-    "y": 1296,
+    "x": 2093,
+    "y": 1309,
     "text": "Fuel Pump 9",
     "size": 13,
     "rot": 0
+  },
+  {
+    "id": "box-jl5szw",
+    "kind": "box",
+    "x": 1209,
+    "y": 876,
+    "w": 270,
+    "h": 150,
+    "fill": "#2b6d8a",
+    "t1": "Marina Store",
+    "t2": "",
+    "ink": "#fff",
+    "rot": 0
+  },
+  {
+    "id": "box-4pi53s",
+    "kind": "box",
+    "x": 597,
+    "y": 78,
+    "w": 250,
+    "h": 140,
+    "fill": "#095900",
+    "t1": "SHOP/ Service Dept. ",
+    "t2": "",
+    "ink": "#fff",
+    "rot": 0
+  }
+];
+const DEFAULT_LAYERS=[
+  {
+    "id": "layer-ov5r7o",
+    "name": "Available",
+    "options": [
+      {
+        "id": "opt-g3qp21",
+        "name": "Vacant",
+        "color": "#10e9ff"
+      },
+      {
+        "id": "opt-0yhx94",
+        "name": "Occupied",
+        "color": "#0bf400"
+      }
+    ]
+  },
+  {
+    "id": "layer-nskmae",
+    "name": "Winterized?",
+    "options": [
+      {
+        "id": "opt-uc3ps3",
+        "name": "Winterized",
+        "color": "#5aa0c4"
+      },
+      {
+        "id": "opt-vera6l",
+        "name": "Not Winterized",
+        "color": "#db0000"
+      }
+    ]
+  },
+  {
+    "id": "layer-ebev5d",
+    "name": "Size",
+    "options": [
+      {
+        "id": "opt-knlcjh",
+        "name": "10x30 Standard",
+        "color": "#5aa0c4"
+      },
+      {
+        "id": "opt-gfievj",
+        "name": "10x30 Premium",
+        "color": "#6dad6a"
+      },
+      {
+        "id": "opt-xau23q",
+        "name": "10x30 Preferred",
+        "color": "#e3c35c"
+      },
+      {
+        "id": "opt-pbib7h",
+        "name": "10x34 Preferred",
+        "color": "#e39a7a"
+      },
+      {
+        "id": "opt-l34i0t",
+        "name": "10x42 Preferred",
+        "color": "#c9896a"
+      },
+      {
+        "id": "opt-5qe1aa",
+        "name": "12x30 Premium",
+        "color": "#9b7bb8"
+      },
+      {
+        "id": "opt-ilp8a9",
+        "name": "12x38 Preferred",
+        "color": "#d2b48c"
+      },
+      {
+        "id": "opt-d9h0lh",
+        "name": "14x42 Preferred",
+        "color": "#5aa0c4"
+      },
+      {
+        "id": "opt-odysj7",
+        "name": "16x42 Preferred",
+        "color": "#6dad6a"
+      },
+      {
+        "id": "opt-zx49ly",
+        "name": "20x87 Houseboat",
+        "color": "#e3c35c"
+      },
+      {
+        "id": "opt-epizyh",
+        "name": "24x100 Houseboat",
+        "color": "#e39a7a"
+      }
+    ]
+  },
+  {
+    "id": "layer-alhzt0",
+    "name": "Empty",
+    "options": [
+      {
+        "id": "opt-d0br1q",
+        "name": "Blank",
+        "color": "#000000"
+      }
+    ]
   }
 ];

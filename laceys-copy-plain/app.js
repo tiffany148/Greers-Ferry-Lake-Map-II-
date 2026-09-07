@@ -27,9 +27,10 @@ function moveDockSlips(d,dx,dy){
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
 function loadLayersStandalone(){
   try{
-    const raw=JSON.parse(localStorage.getItem("laceys-share-layers-v1")||"null");
-    return Array.isArray(raw)?raw:[];
-  }catch{return [];}
+    const raw=JSON.parse(localStorage.getItem("laceys-copy-plain-layers-v1")||"null");
+    if(Array.isArray(raw)&&raw.length) return raw;
+  }catch(e){}
+  return (typeof DEFAULT_LAYERS!=="undefined" && Array.isArray(DEFAULT_LAYERS)) ? clone(DEFAULT_LAYERS) : [];
 }
 function loadLayout(){
   try{
@@ -40,7 +41,7 @@ function loadLayout(){
     // Saved layout is authoritative so deletes (parking oval, etc.) and positions stick.
     const docks=clone(raw.docks);
     const marks=clone((raw.marks||[]).filter(m=>m && !isDockPieceMark(m.id)));
-    const layers=Array.isArray(raw.layers)?clone(raw.layers):loadLayersStandalone();
+    const layers=(Array.isArray(raw.layers)&&raw.layers.length)?clone(raw.layers):loadLayersStandalone();
     return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers};
   }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};}
 }
@@ -53,7 +54,7 @@ function restoreSnap(s){
   if(Array.isArray(raw.layers)) layers=raw.layers;
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-copy-plain-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
   redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); renderLayersEditor(); renderChips();
 }
@@ -780,14 +781,14 @@ function saveNow(){
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
   localStorage.setItem(LAYOUT_STORE, s);
-  /* share copy: isolated storage only */
+  /* isolated copy */
   saveLayersStore();
   lastSnap=s;
   flashSave("Saved on this device · Download JSON for a backup copy");
 }
 
 function saveLayersStore(){
-  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-copy-plain-layers-v1", JSON.stringify(layers)); }catch(e){}
 }
 function renderLayersEditor(){
   const box=document.getElementById("layers-editor");
