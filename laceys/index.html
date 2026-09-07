@@ -72,10 +72,16 @@ body.editing .edit-banner{display:block}
   svg{ width:10.5in !important; height:7.2in !important; max-width:100% !important; transform:none !important; }
 }
 
+
+.chart{min-height:420px}
+.layout{min-height:420px}
+#error-banner{display:none;margin:8px 16px;padding:10px 12px;border-radius:10px;background:#7a1f1f;color:#fff;font-size:14px}
+
 </style>
 </head>
 <body>
 <header>
+<div id="error-banner"></div>
   <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
     <h1>Lacey's Narrows</h1>
@@ -86,6 +92,7 @@ body.editing .edit-banner{display:block}
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
         <button id="btn-save" type="button" title="Save current layout on this device">Save</button>
+        <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
         <button id="edit-toggle">Edit docks</button>
       </div>
@@ -135,12 +142,13 @@ body.editing .edit-banner{display:block}
         <button class="btn" id="add-box">+ Building</button>
         <button class="btn" id="add-label">+ Label</button>
         <button class="btn" id="btn-dup">Duplicate</button>
+        <button class="btn" id="btn-multi" type="button" title="Tap docks/labels to add or remove them">Multi-select</button>
         <button class="btn" id="btn-select-all">Select all</button>
         <button class="btn" id="btn-group-all">Select / group all</button>
         <button class="btn" id="btn-group">Group selected</button>
         <button class="btn" id="btn-ungroup">Ungroup</button>
       </div>
-      <p class="hint" id="sel-hint">Select / group all, then drag anywhere on the map to move the whole chart.</p>
+      <p class="hint" id="sel-hint">Phone tip: turn on Multi-select, then tap each dock/label you want. Or Select / group all to move everything.</p>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
         <button class="btn" id="btn-save-layout">Save layout</button>
@@ -155,7 +163,7 @@ body.editing .edit-banner{display:block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=49"></script>
-<script src="app.js?v=49"></script>
+<script src="app-data.js?v=51"></script>
+<script src="app.js?v=51"></script>
 </body>
 </html>

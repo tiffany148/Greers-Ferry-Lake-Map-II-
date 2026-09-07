@@ -1,3 +1,8 @@
+
+window.addEventListener("error",function(ev){
+  var b=document.getElementById("error-banner");
+  if(b){ b.style.display="block"; b.textContent="JavaScript error: "+(ev && ev.message ? ev.message : "unknown"); }
+});
 function walkGeomFromDock(d){
   if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
   if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
@@ -55,7 +60,7 @@ function restoreSnap(s){
   localStorage.setItem(LAYOUT_STORE, s);
   try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
-  redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); renderLayersEditor(); renderChips();
+  redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible(); renderLayersEditor(); renderChips();
 }
 function undo(){ if(!hist.length) return; future.push(snap()); restoreSnap(hist.pop()); }
 function redo(){ if(!future.length) return; hist.push(snap()); restoreSnap(future.pop()); }
@@ -133,10 +138,19 @@ if(sanitizeLayout()) saveLayout(false);
 lastSnap=snap();
 let slips=[], selected=null, selectedDock=null, selectedMark=null, filter="All", editing=false;
 const multi=new Set(); // "dock:id" or "mark:id"
+let multiPick=false; // tap-to-toggle selection (mobile-friendly)
 let moveWholeChart=false;
 function updateSelHint(){
   const el=document.getElementById("sel-hint"); if(!el) return;
-  el.textContent = moveWholeChart || multi.size>1 ? ((multi.size||"All")+" selected · drag the chart to move everything") : "Select / group all, then drag on the map to move everything.";
+  const btn=document.getElementById("btn-multi");
+  if(btn) btn.classList.toggle("on", multiPick);
+  if(multiPick){
+    el.textContent = multi.size ? (multi.size+" selected · tap to add/remove · drag to move") : "Multi-select on · tap docks or labels to pick them";
+  }else if(moveWholeChart || multi.size>1){
+    el.textContent = (multi.size||"All")+" selected · drag the chart to move everything";
+  }else{
+    el.textContent = "Multi-select (phone) or Select / group all, then drag to move.";
+  }
 }
 function memberKey(kind,id){ return kind+":"+id; }
 function findGroupFor(kind,id){
@@ -171,6 +185,13 @@ function keysForDrag(kind,id){
   if(g && (g.members||[]).length>1) return [...(g.members||[])];
   if(moveWholeChart) return allLayoutKeys();
   return null;
+}
+
+function toggleMultiKey(k){
+  if(multi.has(k)) multi.delete(k); else multi.add(k);
+  if(multi.size<=1) moveWholeChart=false;
+  updateSelHint();
+  redraw();
 }
 function selectAllLayout(){
   multi.clear();
@@ -547,9 +568,23 @@ svg.addEventListener("click",e=>{
     const sEl=e.target.closest("[data-id]");
     const dEl=e.target.closest("[data-dock]");
     const mEl=e.target.closest("[data-mark]");
-    if(e.shiftKey){
-      if(dEl){ const k="dock:"+dEl.getAttribute("data-dock"); if(multi.has(k)) multi.delete(k); else multi.add(k); updateSelHint(); redraw(); return; }
-      if(mEl){ const k="mark:"+mEl.getAttribute("data-mark"); if(multi.has(k)) multi.delete(k); else multi.add(k); updateSelHint(); redraw(); return; }
+    if(e.shiftKey || multiPick){
+      if(dEl){
+        const id=dEl.getAttribute("data-dock");
+        toggleMultiKey("dock:"+id);
+        selectedDock=id; selectedMark=null; selected=null;
+        showTab("layout"); renderDockEditor();
+        return;
+      }
+      if(mEl){
+        const id=mEl.getAttribute("data-mark");
+        toggleMultiKey("mark:"+id);
+        selectedMark=id; selectedDock=null; selected=null;
+        showTab("layout"); renderDockEditor();
+        return;
+      }
+      // tap empty water while multi-picking: keep selection
+      return;
     }
     if(sEl){
       const dock=docks.find(x=>x.id===sEl.getAttribute("data-dock"));
@@ -694,7 +729,7 @@ document.getElementById("q").addEventListener("input",function(){const hit=slips
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
 renderDir();
-document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";document.getElementById("hint").textContent=editing?(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Select / group all to move everything"):"Click a numbered slip · drag to pan";if(editing)showTab("layout");redraw();};
+document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";if(!editing){ multiPick=false; } document.getElementById("hint").textContent=editing?(multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")):"Click a numbered slip · drag to pan";if(editing)showTab("layout");updateSelHint();redraw();};
 document.getElementById("bg-op").oninput=function(){bgImg.setAttribute("opacity",String((+this.value)/100));};
 document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
 document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
@@ -741,6 +776,32 @@ function flashSave(msg){
     if(hint){ hint.textContent=prev; hint.style.color=""; }
     if(b){ b.textContent="Save"; b.classList.remove("on"); }
   }, 1800);
+}
+
+
+function ensureMapVisible(){
+  try{
+    buildSlips();
+    const slipCount=(typeof slips!=="undefined" && Array.isArray(slips)) ? slips.length : 0;
+    const dockCount=Array.isArray(docks) ? docks.length : 0;
+    if(dockCount < 3 || slipCount < 20){
+      docks=clone(DEFAULT_DOCKS);
+      marks=clone(DEFAULT_MARKS);
+      groups=[];
+      try{
+        localStorage.removeItem(LAYOUT_STORE);
+        localStorage.removeItem("laceys-layout-v2");
+        localStorage.removeItem("laceys-layout-v1");
+      }catch(e){}
+      saveLayout(false);
+      buildSlips();
+    }
+    redraw();
+  }catch(err){
+    const b=document.getElementById("error-banner");
+    if(b){ b.style.display="block"; b.textContent="Chart failed to draw: "+(err && err.message ? err.message : String(err)); }
+    console.error(err);
+  }
 }
 
 function printChart(){
@@ -933,11 +994,25 @@ document.getElementById("btn-undo").onclick=()=>undo();
 document.getElementById("btn-redo").onclick=()=>redo();
 document.getElementById("btn-save").onclick=()=>saveNow();
 document.getElementById("btn-print").onclick=()=>printChart();
+const _fixBlank=document.getElementById("btn-reset-blank");
+if(_fixBlank) _fixBlank.onclick=()=>{
+  if(!confirm("Restore the built-in Lacey\'s dock layout? (clears blank/corrupt offline save on this file)")) return;
+  try{ localStorage.removeItem(LAYOUT_STORE); localStorage.removeItem("laceys-layout-v2"); localStorage.removeItem("laceys-layout-v1"); }catch(e){}
+  docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=[]; layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
+  multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
+};
 const _btnSaveLayout=document.getElementById("btn-save-layout"); if(_btnSaveLayout) _btnSaveLayout.onclick=()=>saveNow();
-document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } selectAllLayout(); };
-document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } groupAllLayout(); };
+document.getElementById("btn-multi").onclick=()=>{
+  if(!editing){ document.getElementById("edit-toggle").click(); }
+  multiPick=!multiPick;
+  if(multiPick){ moveWholeChart=false; showTab("layout"); }
+  document.getElementById("hint").textContent = multiPick ? "Multi-select on · tap each dock or label" : "Drag docks/labels · Multi-select or Select all to move";
+  updateSelHint();
+};
+document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } multiPick=false; selectAllLayout(); };
+document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } multiPick=false; groupAllLayout(); };
 document.getElementById("btn-group").onclick=()=>{
-  if(multi.size<2){ alert("Shift-click at least two docks or labels first."); return; }
+  if(multi.size<2){ alert("Turn on Multi-select and tap at least two docks or labels first (or Shift-click on desktop)."); return; }
   const name=prompt("Group name?","Group "+(groups.length+1));
   if(name==null) return;
   groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
@@ -970,7 +1045,7 @@ document.addEventListener("keydown",e=>{
   if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="y"){ e.preventDefault(); redo(); }
 });
 
-document.getElementById("strip-cover")?.addEventListener("click",()=>{
+const _strip=document.getElementById("strip-cover"); if(_strip) _strip.addEventListener("click",()=>{
   if(!confirm("Remove oversized / covering pieces (keeps your dock layout)?")) return;
   if(sanitizeLayout()){ saveLayout(); redraw(); renderDockEditor(); alert("Cleared oversized covers."); }
   else alert("Nothing oversized found. Select the orange piece and Delete it.");
