@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's Narrows · share copy</title>
+<title>Lacey's Narrows · slip chart</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -117,8 +117,24 @@ body.editing #btn-multi-hdr{display:inline-block}
 .photo-align label{display:flex;align-items:center;gap:6px;margin:0}
 .photo-align input[type=range]{width:110px;accent-color:#d5ecea}
 .photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
-
-
+body.photo-moving{ cursor:move; }
+body.photo-moving .chart{ cursor:move; outline:2px solid #f0c14b; outline-offset:-2px; }
+/* Edit working area = chart viewBox; SVG #map-edit-bound draws the legal edge */
+body.editing .chart{ outline:1px solid rgba(154,213,208,.35); outline-offset:-1px; }
+#photo-move-chip{
+  display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  z-index:40; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;
+  max-width:min(92%,520px); padding:8px 12px; border-radius:12px;
+  background:rgba(26,92,74,.94); color:#eef4f3; font-size:13px; font-weight:650;
+  box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:auto;
+}
+body.photo-moving #photo-move-chip{ display:flex; }
+#photo-move-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#f0c14b; color:#1a1a1a; font-weight:700; cursor:pointer; }
+/* Keep align controls reachable while moving photo (incl. mobile edit) */
+@media (max-width:860px){
+  body.editing.photo-moving .photo-align,
+  body.editing.photo-moving .photo-op{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
+}
 
 /* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
 #edit-sel-chip-desk{ display:none; }
@@ -140,7 +156,6 @@ body.editing #btn-multi-hdr{display:inline-block}
   body.editing .photo-align,
   body.editing .kicker,
   body.editing .multi-bar,
-  body.editing .share-banner,
   body.editing .edit-banner,
   body.editing .meta #hint,
   body.editing .meta #count,
@@ -344,7 +359,6 @@ body.editing #btn-multi-hdr{display:inline-block}
     </div>
   </div>
 </header>
-<div class="share-banner" style="margin:0 16px 8px;padding:8px 12px;border-radius:10px;background:#1a3a5c;font-size:13px">Share copy — saves stay on this link only.</div>
 <div class="multi-bar" id="multi-bar">
   <b id="multi-count">0 selected</b>
   <button type="button" class="btn" id="btn-multi-clear">Clear</button>
@@ -363,19 +377,26 @@ body.editing #btn-multi-hdr{display:inline-block}
 
 <div class="photo-align" id="photo-align-bar">
   <span>Align photo</span>
-  <span style="opacity:.85;font-size:12px">fills chart · pan/rotate without cropping</span>
+  <span style="opacity:.85;font-size:12px">full aerial (no auto-crop) · Move photo to drag/scale</span>
+  <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; pinch or slider to scale">Move photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
   <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
   <button type="button" class="btn" id="photo-nudge-d" title="Nudge down">↓</button>
-  <label>Scale <input id="photo-scale" type="range" min="50" max="200" value="100"/><span id="photo-scale-val">100%</span></label>
+  <button type="button" class="btn" id="photo-scale-minus" title="Scale down">−</button>
+  <label>Scale <input id="photo-scale" type="range" min="20" max="300" value="100"/><span id="photo-scale-val">100%</span></label>
+  <button type="button" class="btn" id="photo-scale-plus" title="Scale up">+</button>
   <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
   <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
   <button type="button" class="btn" id="photo-reset-align" title="Reset photo position">Reset align</button>
 </div>
 <div class="layout">
   <div class="chart" id="chart">
-    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
+    <div id="photo-move-chip" hidden>
+      <span>Moving photo — drag to pan, pinch/slider to scale</span>
+      <button type="button" id="photo-move-done">Done moving photo</button>
+    </div>
+    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
     <div class="pan" aria-label="Pan map">
       <button type="button" id="pan-up" title="Move view up">↑</button>
       <button type="button" id="pan-left" title="Move view left">←</button>
@@ -453,7 +474,7 @@ body.editing #btn-multi-hdr{display:inline-block}
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=63"></script>
-<script src="app.js?v=63"></script>
+<script src="app-data.js?v=65"></script>
+<script src="app.js?v=65"></script>
 </body>
 </html>

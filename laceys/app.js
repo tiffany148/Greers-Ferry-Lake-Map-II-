@@ -29,11 +29,122 @@ function moveDockSlips(d,dx,dy){
   if(!d.placed) return;
   Object.keys(d.placed).forEach(id=>{d.placed[id].x+=dx;d.placed[id].y+=dy;});
 }
+
+const MAP_W=2400, MAP_H=1700; // SVG viewBox -- hard edit working area
+function unionBox(a,b){
+  if(!a) return b; if(!b) return a;
+  const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y);
+  return {x,y,w:Math.max(a.x+a.w,b.x+b.w)-x,h:Math.max(a.y+a.h,b.y+b.h)-y};
+}
+function dockBBox(d){
+  let box=null;
+  try{
+    const g=walkGeomFromDock(d);
+    box=unionBox(box,{x:g.x,y:g.y,w:Math.max(1,g.w),h:Math.max(1,g.h)});
+  }catch(e){}
+  box=unionBox(box,{x:(Number(d.x)||0)-30,y:(Number(d.y)||0)-28,w:60,h:22});
+  try{
+    generatedSlips(d).forEach(s=>{
+      const p=applyPlaced(d,s);
+      box=unionBox(box,{x:Number(p.x)||0,y:Number(p.y)||0,w:Math.max(1,Number(p.w)||10),h:Math.max(1,Number(p.h)||10)});
+    });
+  }catch(e){}
+  return box||{x:Number(d.x)||0,y:Number(d.y)||0,w:10,h:10};
+}
+function markBBox(m){
+  const box=markHitBox(m);
+  return box||{x:Number(m.x)||0,y:Number(m.y)||0,w:10,h:10};
+}
+function slipBBoxFrom(d, slipId, fallback){
+  try{
+    const s=generatedSlips(d).map(x=>applyPlaced(d,x)).find(x=>String(x.id)===String(slipId));
+    if(s) return {x:Number(s.x)||0,y:Number(s.y)||0,w:Math.max(1,Number(s.w)||10),h:Math.max(1,Number(s.h)||10)};
+  }catch(e){}
+  if(fallback) return {x:fallback.x,y:fallback.y,w:Math.max(1,fallback.w||10),h:Math.max(1,fallback.h||10)};
+  return {x:0,y:0,w:10,h:10};
+}
+function keysBBox(keys){
+  let box=null;
+  (keys||[]).forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="dock"){ const d=docks.find(x=>x.id===id); if(d) box=unionBox(box,dockBBox(d)); }
+    else if(kind==="mark"){ const m=marks.find(x=>x.id===id); if(m) box=unionBox(box,markBBox(m)); }
+  });
+  return box;
+}
+/** Clamp a proposed translation so bbox stays inside the map. If already OOB, pulls back in. */
+function clampDeltaForBox(box, dx, dy){
+  if(!box) return {dx:0,dy:0};
+  let ndx=Number(dx)||0, ndy=Number(dy)||0;
+  const w=Math.max(1, Number(box.w)||1), h=Math.max(1, Number(box.h)||1);
+  const x=Number(box.x)||0, y=Number(box.y)||0;
+  if(w>=MAP_W) ndx=-x;
+  else{
+    if(x+ndx<0) ndx=-x;
+    if(x+w+ndx>MAP_W) ndx=MAP_W-(x+w);
+  }
+  if(h>=MAP_H) ndy=-y;
+  else{
+    if(y+ndy<0) ndy=-y;
+    if(y+h+ndy>MAP_H) ndy=MAP_H-(y+h);
+  }
+  return {dx:ndx,dy:ndy};
+}
+function clampLayoutIntoMap(){
+  let changed=false;
+  docks.forEach(d=>{
+    const box=dockBBox(d);
+    const {dx,dy}=clampDeltaForBox(box,0,0);
+    if(dx||dy){
+      if(isLocked(d)) moveDockSlips(d,dx,dy);
+      d.x=(Number(d.x)||0)+dx; d.y=(Number(d.y)||0)+dy; changed=true;
+    }
+    if(d.placed){
+      Object.keys(d.placed).forEach(id=>{
+        const b=slipBBoxFrom(d,id,d.placed[id]);
+        const c=clampDeltaForBox(b,0,0);
+        if(c.dx||c.dy){
+          const p=d.placed[id];
+          setPlaced(d,id,{x:(Number(p.x)||b.x)+c.dx,y:(Number(p.y)||b.y)+c.dy});
+          changed=true;
+        }
+      });
+    }
+  });
+  marks.forEach(m=>{
+    const box=markBBox(m);
+    const {dx,dy}=clampDeltaForBox(box,0,0);
+    if(dx||dy){ m.x=(Number(m.x)||0)+dx; m.y=(Number(m.y)||0)+dy; changed=true; }
+  });
+  return changed;
+}
+let mapBoundRect=null;
+function syncMapBoundVisual(){
+  if(!svg) return;
+  if(!mapBoundRect){
+    mapBoundRect=el("rect",{
+      id:"map-edit-bound",
+      x:"0",y:"0",width:String(MAP_W),height:String(MAP_H),
+      fill:"none", stroke:"#9ad5d0", "stroke-width":"4",
+      "stroke-dasharray":"22 14", opacity:"0.9",
+      "pointer-events":"none"
+    });
+    svg.appendChild(mapBoundRect);
+  }
+  mapBoundRect.setAttribute("visibility", editing ? "visible" : "hidden");
+  // Clip paint to the true chart so letterbox/chrome cannot act as a fake canvas
+  svg.setAttribute("overflow", "hidden");
+}
+
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
 let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
-const PHOTO_ALIGN_STORE="laceys-share-photo-align-v1";
+const PHOTO_ALIGN_STORE="laceys-photo-align-v1";
+let photoMoveMode=false;
+let photoDrag=null;
+const photoPointers=new Map(); // pinch while moving photo
+
 function loadPhotoAlign(){
   try{
     const raw=JSON.parse(localStorage.getItem(PHOTO_ALIGN_STORE)||"null");
@@ -56,25 +167,19 @@ function applyPhotoAlign(){
   const cx=1200, cy=850; // chart working-area center (viewBox 2400×1700)
   const W=2400, H=1700;
   const rot=Number(photoAlign.rot)||0;
-  const rad=rot*Math.PI/180;
-  const c=Math.abs(Math.cos(rad)), sn=Math.abs(Math.sin(rad));
-  // Expand pre-rotation size so after rotate the aerial still fully covers the chart
-  // working area (no empty corners / no marina detail clipped away inside the chart).
-  const coverW=W*c + H*sn;
-  const coverH=W*sn + H*c;
-  const iw=coverW*userS;
-  const ih=coverH*userS;
+  // meet = show FULL aerial inside the image rect (letterbox OK). User scales up to cover.
+  // Do NOT use slice/cover — that crops marina pixels she needs to align.
+  const iw=W*userS;
+  const ih=H*userS;
   const dx=Number(photoAlign.x)||0;
   const dy=Number(photoAlign.y)||0;
-  // Equivalent to legacy cx*(1-s)+dx when rot=0; keeps saved pan/scale alignments stable.
   const x=cx - iw/2 + dx;
   const y=cy - ih/2 + dy;
   bgImg.setAttribute("x", String(x));
   bgImg.setAttribute("y", String(y));
   bgImg.setAttribute("width", String(iw));
   bgImg.setAttribute("height", String(ih));
-  // slice = cover the image rect (fill working area); avoid meet letterboxing that looks like a crop
-  bgImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+  bgImg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   if(rot){
     const px=cx+dx, py=cy+dy;
     bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
@@ -93,13 +198,13 @@ function applyPhotoAlign(){
 
 function loadLayersStandalone(){
   try{
-    const raw=JSON.parse(localStorage.getItem("laceys-share-layers-v1")||"null");
+    const raw=JSON.parse(localStorage.getItem("laceys-layers-v1")||"null");
     return Array.isArray(raw)?raw:[];
   }catch{return [];}
 }
 function loadLayout(){
   try{
-    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
+    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||localStorage.getItem("laceys-layout-v2")||localStorage.getItem("laceys-layout-v1")||"null");
     if(!raw||!Array.isArray(raw.docks)||!raw.docks.length){
       return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};
     }
@@ -139,7 +244,7 @@ function restoreSnap(s){
   if(raw.photoMax!=null) photoMax=Math.max(0, Math.min(1, Number(raw.photoMax)));
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
   redraw(); applyPhotoAlign(); applyDeepZoomLod(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible(); renderLayersEditor(); renderChips();
 }
@@ -167,18 +272,11 @@ let activeLayerId=null;
 let layerOptFilter="All";
 function sanitizeLayout(){
   let changed=false;
-  // Never delete docks just for being off-canvas (whole-chart drag used to wipe the map on reload).
-  // Clamp them back into a usable range instead.
+  // Hard clamp geometry into the real chart (viewBox 0,0,MAP_W x MAP_H) -- never keep OOB placements.
+  if(clampLayoutIntoMap()) changed=true;
   docks.forEach(d=>{
-    const nx=Math.max(-50, Math.min(2800, Number(d.x)||0));
-    const ny=Math.max(-50, Math.min(2000, Number(d.y)||0));
-    if(nx!==d.x || ny!==d.y){
-      const dx=nx-d.x, dy=ny-d.y;
-      if(isLocked(d)) moveDockSlips(d,dx,dy);
-      d.x=nx; d.y=ny; changed=true;
-    }
     (d.extras||[]).forEach(ex=>{
-      // Only stop absurd cover-the-map sizes — do NOT shrink intentional tall slips (e.g. 839/840 at 40x300)
+      // Only stop absurd cover-the-map sizes -- do NOT shrink intentional tall slips (e.g. 839/840 at 40x300)
       if((ex.w||0)>900 && (ex.h||0)>900){ ex.w=Math.min(ex.w,120); ex.h=Math.min(ex.h,40); changed=true; }
     });
     if(d.placed){
@@ -200,11 +298,6 @@ function sanitizeLayout(){
     return true;
   });
   if(docks.length!==before) changed=true;
-  marks.forEach(m=>{
-    const nx=Math.max(-50, Math.min(2800, Number(m.x)||0));
-    const ny=Math.max(-50, Math.min(2000, Number(m.y)||0));
-    if(nx!==m.x || ny!==m.y){ m.x=nx; m.y=ny; changed=true; }
-  });
   marks=marks.filter(m=>!((m.w||0)>1800 || (m.h||0)>1600));
   // If a bad save wiped almost everything, restore the baked main layout.
   if(docks.length < Math.min(8, DEFAULT_DOCKS.length)){
@@ -401,11 +494,13 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid slice"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
+svg.setAttribute("overflow","hidden"); // clip to chart viewBox -- edit canvas = map, not letterbox
 loadPhotoAlign();
 applyPhotoAlign();
 svg.appendChild(layerBg);svg.appendChild(layerSite);svg.appendChild(layerWalkMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);svg.appendChild(layerLabels);svg.appendChild(layerMarks);
+syncMapBoundVisual();
 function layerOptionFor(slipId, layerId){
   const rec=data[slipId];
   if(!rec||!rec.layerOpts) return null;
@@ -486,6 +581,8 @@ function redraw(){
     parent.appendChild(g);
   });
   document.getElementById("count").textContent=slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
+  if(mapBoundRect && mapBoundRect.parentNode===svg) svg.appendChild(mapBoundRect);
+  syncMapBoundVisual();
 }
 const DOCK_CHIPS=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
@@ -568,7 +665,7 @@ function renderDockEditor(){
   if(s && editing && selectedDock && d && !isLocked(d)){
     const placed=(d.placed&&d.placed[s.id])||{};
     box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip on the chart</p><label>Number / label<input id="ed-num" value="${s.num}"/></label><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(s.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(s.y)}"/></label></div><div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(s.w)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(s.h)}"/></label></div><label>Color<input id="ed-fill" type="color" value="${placed.fill||d.fill||COLORS[s.kind]||"#e4dcc8"}"/></label>${rotCtrl(Number(s.rot)||0)}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div><div class="st"><button type="button" id="ed-dup-slip">Duplicate slip</button><button type="button" id="ed-del-slip">Delete this slip</button></div>`;
-    const apply=()=>{setPlaced(d,s.id,{x:+document.getElementById("ed-x").value,y:+document.getElementById("ed-y").value,w:+document.getElementById("ed-w").value,h:+document.getElementById("ed-h").value,fill:document.getElementById("ed-fill").value});saveLayout();redraw();};
+    const apply=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value,nw=+document.getElementById("ed-w").value,nh=+document.getElementById("ed-h").value;const box0={x:nx,y:ny,w:Math.max(1,nw),h:Math.max(1,nh)};const c=clampDeltaForBox(box0,0,0);setPlaced(d,s.id,{x:nx+c.dx,y:ny+c.dy,w:nw,h:nh,fill:document.getElementById("ed-fill").value});saveLayout();redraw();};
     document.getElementById("ed-fill").oninput=()=>{setPlaced(d,s.id,{fill:document.getElementById("ed-fill").value});saveLayout(false);redraw();};
     document.getElementById("ed-fill").onchange=()=>saveLayout();
     document.getElementById("ed-num").onchange=()=>{
@@ -588,7 +685,7 @@ function renderDockEditor(){
     ["ed-x","ed-y","ed-w","ed-h"].forEach(id=>document.getElementById(id).onchange=apply);
     const rotObj={rot:Number(s.rot)||0};
     bindRot(rotObj,()=>{setPlaced(d,s.id,{rot:rotObj.rot});saveLayout();redraw();renderDockEditor();});
-    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);setPlaced(d,s.id,{x:s.x+dx,y:s.y+dy});saveLayout();redraw();renderDockEditor();});
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);const box0=slipBBoxFrom(d,s.id,s);const c=clampDeltaForBox(box0,dx,dy);setPlaced(d,s.id,{x:s.x+c.dx,y:s.y+c.dy});saveLayout();redraw();renderDockEditor();});
     document.getElementById("ed-del-slip").onclick=()=>{
       if(!confirm("Delete slip "+s.num+"?")) return;
       d.a=(d.a||[]).filter(n=>String(n)!==s.id);
@@ -618,7 +715,7 @@ function renderDockEditor(){
     document.getElementById("ed-lock").onclick=()=>{d.locked=!locked;saveLayout();redraw();renderDockEditor();};
     document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value;saveLayout();redraw();};
     document.getElementById("ed-type").onchange=()=>{d.type=document.getElementById("ed-type").value;d.placed={};saveLayout();redraw();renderDockEditor();};
-    const applyPos=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;if(isLocked(d)) moveDockSlips(d,nx-d.x,ny-d.y);d.x=nx;d.y=ny;saveLayout();redraw();};
+    const applyPos=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;const rawDx=nx-d.x, rawDy=ny-d.y;const c=clampDeltaForBox(dockBBox(d),rawDx,rawDy);if(isLocked(d)) moveDockSlips(d,c.dx,c.dy);d.x+=c.dx;d.y+=c.dy;saveLayout();redraw();};
     document.getElementById("ed-x").onchange=applyPos;document.getElementById("ed-y").onchange=applyPos;
     const applySize=()=>{
       const sw=+document.getElementById("ed-sw").value,sh=+document.getElementById("ed-sh").value,gap=+document.getElementById("ed-gap").value;
@@ -631,7 +728,7 @@ function renderDockEditor(){
     bindRot(d,()=>renderDockEditor());
     document.getElementById("ed-a").onchange=()=>{d.a=parseNums(document.getElementById("ed-a").value);saveLayout();redraw();};
     document.getElementById("ed-b").onchange=()=>{d.b=parseNums(document.getElementById("ed-b").value);saveLayout();redraw();};
-    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);if(isLocked(d)) moveDockSlips(d,dx,dy);d.x+=dx;d.y+=dy;saveLayout();redraw();renderDockEditor();});
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);const c=clampDeltaForBox(dockBBox(d),dx,dy);if(isLocked(d)) moveDockSlips(d,c.dx,c.dy);d.x+=c.dx;d.y+=c.dy;saveLayout();redraw();renderDockEditor();});
     document.getElementById("ed-add-slip").onclick=()=>{
       const num=prompt("New slip number?", String(nextSlipNumber()));
       if(num==null||!String(num).trim()) return;
@@ -663,7 +760,7 @@ function renderDockEditor(){
     const colorVal=isText?(m.ink||"#d7eceb"):(m.fill||m.ink||"#2b6d8a");
     const colorLabel=isText?"Text color":(m.kind==="pill"||m.kind==="box"?"Fill color":"Color");
     box.innerHTML=`<h2>${kindName}</h2><p class="hint">${isText?"Drag on the map or use X/Y and arrows to move. Change text color below.":(m.title||m.id)}</p><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label></div>${(!isText||m.w!=null)?`<div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(m.w||12)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(m.h||20)}"/></label></div>`:""}${isText?`<label>Font size<input id="ed-size" type="number" min="8" max="48" value="${Math.round(m.size||13)}"/></label>`:""}<label>${colorLabel}<input id="ed-fill" type="color" value="${colorVal}"/></label>${m.kind==="box"||m.kind==="pill"?`<label>Text / ink color<input id="ed-ink" type="color" value="${m.ink||"#ffffff"}"/></label>`:""}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>${rotCtrl(Number(m.rot)||0)}${m.kind==="text"||m.text!=null?`<label>Text<input id="ed-text" value="${(m.text||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.t1!=null?`<label>Title<input id="ed-t1" value="${(m.t1||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.label!=null?`<label>Label<input id="ed-label" value="${(m.label||"").replace(/"/g,"&quot;")}"/></label>`:""}<div class="st"><button type="button" id="ed-dup-mark">Duplicate</button><button type="button" id="ed-del">Delete this piece</button></div>`;
-    const apply=()=>{m.x=+document.getElementById("ed-x").value;m.y=+document.getElementById("ed-y").value;const ew=document.getElementById("ed-w"),eh=document.getElementById("ed-h");if(ew)m.w=+ew.value;if(eh)m.h=+eh.value;saveLayout();redraw();};
+    const apply=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;const ew=document.getElementById("ed-w"),eh=document.getElementById("ed-h");if(ew)m.w=+ew.value;if(eh)m.h=+eh.value;const c=clampDeltaForBox(markBBox(Object.assign({},m,{x:m.x,y:m.y})),nx-m.x,ny-m.y);m.x+=c.dx;m.y+=c.dy; clampLayoutIntoMap(); saveLayout();redraw();};
     document.getElementById("ed-x").onchange=apply;document.getElementById("ed-y").onchange=apply;
     const ew=document.getElementById("ed-w"); if(ew) ew.onchange=apply; const eh=document.getElementById("ed-h"); if(eh) eh.onchange=apply;
     bindRot(m,()=>renderDockEditor());
@@ -671,7 +768,7 @@ function renderDockEditor(){
     const t1=document.getElementById("ed-t1"); if(t1) t1.oninput=()=>{m.t1=t1.value;saveLayout();redraw();};
     const lb=document.getElementById("ed-label"); if(lb) lb.oninput=()=>{m.label=lb.value;saveLayout();redraw();};
     const sz=document.getElementById("ed-size"); if(sz){ sz.oninput=()=>{m.size=+sz.value||13;saveLayout(false);redraw();}; sz.onchange=()=>saveLayout(); }
-    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);m.x+=dx;m.y+=dy;saveLayout();redraw();renderDockEditor();});
+    box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);const c=clampDeltaForBox(markBBox(m),dx,dy);m.x+=c.dx;m.y+=c.dy;saveLayout();redraw();renderDockEditor();});
     const cf=document.getElementById("ed-fill");
     if(cf){ cf.oninput=()=>{ if(m.kind==="text") m.ink=cf.value; else m.fill=cf.value; saveLayout(false); redraw(); }; cf.onchange=()=>saveLayout(); }
     const ink=document.getElementById("ed-ink");
@@ -737,7 +834,7 @@ function applyDeepZoomLod(){
   if(layerLabels) layerLabels.setAttribute("opacity", String(lodFade(z, 2.0, 2.9)));
 }
 const chart=document.getElementById("chart");
-const WORLD_W=2400, WORLD_H=1700;
+const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); }
 function chartSize(){
   const r=chart.getBoundingClientRect();
@@ -775,6 +872,7 @@ function defaultMarinaZoom(){
 }
 svg.addEventListener("click",e=>{
   if(dockDrag&&dockDrag.moved)return;
+  if(photoMoveMode){ e.preventDefault(); e.stopPropagation(); return; }
   if(editing){
     const sEl=e.target.closest("[data-id]");
     const dEl=e.target.closest("[data-dock]");
@@ -908,6 +1006,20 @@ function hitEditTarget(e){
   return {sEl,dEl,mEl};
 }
 chart.addEventListener("pointerdown",e=>{
+  if(photoMoveMode){
+    try{ e.preventDefault(); }catch(_){}
+    if(e.target.closest && e.target.closest(".zoom,.pan,#photo-move-chip,button,input,label")) return;
+    photoPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const p=svgPoint(e);
+    if(photoPointers.size>=2){
+      const dist=photoPinchDist();
+      photoDrag={kind:"pinch",startDist:dist,startScale:Number(photoAlign.scale)||1,moved:false};
+    }else{
+      photoDrag={kind:"pan",ox:Number(photoAlign.x)||0,oy:Number(photoAlign.y)||0,px:p.x,py:p.y,moved:false};
+    }
+    try{ chart.setPointerCapture(e.pointerId); }catch(_){}
+    return;
+  }
   if(editing){
     // Prevent browser pan/zoom gestures from stealing the interaction
     try{ e.preventDefault(); }catch(_){}
@@ -924,7 +1036,7 @@ chart.addEventListener("pointerdown",e=>{
       }
       if(tapKey){
         if(multi.size>1 && multi.has(tapKey)){
-          dockDrag={kind:"chart",keys:[...multi],px:p.x,py:p.y,sx:0,sy:0,moved:false,fromMultiPick:true,tapKey,tapDock,tapMark};
+          const _keys=[...multi]; dockDrag={kind:"chart",keys:_keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,fromMultiPick:true,tapKey,tapDock,tapMark,startBox:keysBBox(_keys)};
           chart.style.cursor="grabbing";
           chart.setPointerCapture(e.pointerId);
           return;
@@ -941,7 +1053,7 @@ chart.addEventListener("pointerdown",e=>{
         pan={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); return;
       }
       const keys = multi.size ? [...multi] : allLayoutKeys();
-      dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false};
+      dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(keys)};
       chart.style.cursor="grabbing";
       chart.setPointerCapture(e.pointerId);
       return;
@@ -951,12 +1063,12 @@ chart.addEventListener("pointerdown",e=>{
       const slip=slips.find(x=>x.id===sEl.getAttribute("data-id"));
       const bundle=dock ? keysForDrag("dock", dock.id) : null;
       if(bundle){
-        dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false};
+        dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(bundle)};
         chart.setPointerCapture(e.pointerId);
         return;
       }
       if(dock && slip && !isLocked(dock)){
-        dockDrag={kind:"slip",dockId:dock.id,id:slip.id,x:slip.x,y:slip.y,px:p.x,py:p.y,moved:false};
+        dockDrag={kind:"slip",dockId:dock.id,id:slip.id,x:slip.x,y:slip.y,px:p.x,py:p.y,moved:false,startBox:slipBBoxFrom(dock,slip.id,slip)};
         selectEditSlip(slip.id);
         chart.setPointerCapture(e.pointerId);
         return;
@@ -966,16 +1078,16 @@ chart.addEventListener("pointerdown",e=>{
       const d=docks.find(x=>x.id===dEl.getAttribute("data-dock"));
       if(d){
         const bundle=keysForDrag("dock", d.id);
-        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false}; chart.setPointerCapture(e.pointerId); return; }
-        dockDrag={kind:"dock",id:d.id,x:d.x,y:d.y,px:p.x,py:p.y,moved:false};selectDock(d.id);chart.setPointerCapture(e.pointerId);return;
+        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(bundle)}; chart.setPointerCapture(e.pointerId); return; }
+        dockDrag={kind:"dock",id:d.id,x:d.x,y:d.y,px:p.x,py:p.y,moved:false,startBox:dockBBox(d)};selectDock(d.id);chart.setPointerCapture(e.pointerId);return;
       }
     }
     if(mEl){
       const m=marks.find(x=>x.id===mEl.getAttribute("data-mark"));
       if(m){
         const bundle=keysForDrag("mark", m.id);
-        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false}; chart.setPointerCapture(e.pointerId); return; }
-        dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false};selectMark(m.id);chart.setPointerCapture(e.pointerId);return;
+        if(bundle){ dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(bundle)}; chart.setPointerCapture(e.pointerId); return; }
+        dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false,startBox:markBBox(m)};selectMark(m.id);chart.setPointerCapture(e.pointerId);return;
       }
     }
     // Empty water / background only → pan the map
@@ -985,6 +1097,31 @@ chart.addEventListener("pointerdown",e=>{
   pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);
 });
 chart.addEventListener("pointermove",e=>{
+  if(photoMoveMode && photoDrag){
+    try{ e.preventDefault(); }catch(_){}
+    if(photoPointers.has(e.pointerId)) photoPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(photoDrag.kind==="pinch" || photoPointers.size>=2){
+      if(photoDrag.kind!=="pinch"){
+        const dist=photoPinchDist();
+        photoDrag={kind:"pinch",startDist:dist,startScale:Number(photoAlign.scale)||1,moved:false};
+      }
+      const dist=photoPinchDist();
+      if(dist && photoDrag.startDist){
+        const ratio=dist/photoDrag.startDist;
+        if(Math.abs(ratio-1)>0.02) photoDrag.moved=true;
+        photoAlign.scale=Math.max(0.2, Math.min(3, photoDrag.startScale*ratio));
+        savePhotoAlign(); applyPhotoAlign();
+      }
+      return;
+    }
+    const p=svgPoint(e);
+    const dx=p.x-photoDrag.px, dy=p.y-photoDrag.py;
+    if(Math.abs(dx)+Math.abs(dy)>4) photoDrag.moved=true;
+    photoAlign.x=photoDrag.ox+dx;
+    photoAlign.y=photoDrag.oy+dy;
+    savePhotoAlign(); applyPhotoAlign();
+    return;
+  }
   if(dockDrag){
     try{ e.preventDefault(); }catch(_){}
     const p=svgPoint(e); const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
@@ -998,18 +1135,24 @@ chart.addEventListener("pointermove",e=>{
       return;
     }
     if(dockDrag.kind==="chart"){
-      dockDrag.sx=Math.round(dx); dockDrag.sy=Math.round(dy);
-      // Live nudge via SVG transform (no full redraw — keeps it smooth)
+      const rawX=Math.round(dx), rawY=Math.round(dy);
+      const c=clampDeltaForBox(dockDrag.startBox||keysBBox(dockDrag.keys), rawX, rawY);
+      dockDrag.sx=c.dx; dockDrag.sy=c.dy;
+      // Live nudge via SVG transform (no full redraw -- keeps it smooth)
       nudgeLayers(dockDrag.sx, dockDrag.sy);
       return;
     }
     if(dockDrag.kind==="slip"){
       const d=docks.find(x=>x.id===dockDrag.dockId);
-      if(d){ setPlaced(d,dockDrag.id,{x:Math.round(dockDrag.x+dx),y:Math.round(dockDrag.y+dy)}); redraw(); }
+      if(d){
+        const c=clampDeltaForBox(dockDrag.startBox||{x:dockDrag.x,y:dockDrag.y,w:10,h:10}, Math.round(dx), Math.round(dy));
+        setPlaced(d,dockDrag.id,{x:Math.round(dockDrag.x+c.dx),y:Math.round(dockDrag.y+c.dy)}); redraw();
+      }
     }else if(dockDrag.kind==="dock"){
       const d=docks.find(x=>x.id===dockDrag.id);
       if(d){
-        const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
+        const c=clampDeltaForBox(dockDrag.startBox||dockBBox(d), Math.round(dx), Math.round(dy));
+        const nx=Math.round(dockDrag.x+c.dx), ny=Math.round(dockDrag.y+c.dy);
         const mdx=nx-d.x, mdy=ny-d.y;
         const g=findGroupFor("dock", d.id);
         if(g){ moveGroupMembers(g, mdx, mdy); }
@@ -1019,7 +1162,8 @@ chart.addEventListener("pointermove",e=>{
     }else{
       const m=marks.find(x=>x.id===dockDrag.id);
       if(m){
-        const nx=Math.round(dockDrag.x+dx), ny=Math.round(dockDrag.y+dy);
+        const c=clampDeltaForBox(dockDrag.startBox||markBBox(m), Math.round(dx), Math.round(dy));
+        const nx=Math.round(dockDrag.x+c.dx), ny=Math.round(dockDrag.y+c.dy);
         const mdx=nx-m.x, mdy=ny-m.y;
         const g=findGroupFor("mark", m.id);
         if(g) moveGroupMembers(g, mdx, mdy);
@@ -1033,7 +1177,19 @@ chart.addEventListener("pointermove",e=>{
   try{ e.preventDefault(); }catch(_){}
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
-chart.addEventListener("pointerup",()=>{
+chart.addEventListener("pointerup",e=>{
+  if(photoMoveMode){
+    photoPointers.delete(e.pointerId);
+    if(photoDrag && photoDrag.moved) saveLayout(false);
+    if(photoPointers.size===0) photoDrag=null;
+    else if(photoPointers.size===1){
+      // Fall back to pan with remaining finger
+      const rem=[...photoPointers.keys()][0];
+      // keep last align; next move will restart pan on next pointerdown typically
+      photoDrag=null;
+    }
+    return;
+  }
   if(dockDrag){
     if(dockDrag.kind==="pick"){
       if(!dockDrag.moved && dockDrag.tapKey){
@@ -1051,9 +1207,9 @@ chart.addEventListener("pointerup",()=>{
         if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
         showTab("layout"); renderDockEditor();
       }else if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
-        // Cap a single drag so a bad pointer event cannot fling the chart into oblivion
-        const sx=Math.max(-1500, Math.min(1500, dockDrag.sx));
-        const sy=Math.max(-1500, Math.min(1500, dockDrag.sy));
+        // sx/sy already map-clamped during drag; soft-cap absurd pointer glitches
+        const sx=Math.max(-MAP_W, Math.min(MAP_W, dockDrag.sx));
+        const sy=Math.max(-MAP_H, Math.min(MAP_H, dockDrag.sy));
         moveMembersByKeys(dockDrag.keys, sx, sy);
         sanitizeLayout();
         saveLayout();
@@ -1062,6 +1218,7 @@ chart.addEventListener("pointerup",()=>{
       chart.style.cursor="";
       renderDockEditor();
     }else if(dockDrag.moved){
+      sanitizeLayout();
       saveLayout(); renderDockEditor();
     }
   }
@@ -1153,7 +1310,7 @@ document.getElementById("edit-toggle").onclick=()=>{
     if(isMobileEdit()) closeEditPanel(); /* mobile: map full-screen until Tools */
     /* desktop: leave side panel visible — do not force sheet behavior */
   }
-  updateSelHint(); updateSelChip(); redraw(); applyDeepZoomLod();
+  updateSelHint(); updateSelChip(); syncMapBoundVisual(); redraw(); applyDeepZoomLod();
   // reflow zoom after layout change + pin chrome height so map never covers Tools/Done
   requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); applyZoom(); }catch(e){} });
 };
@@ -1197,6 +1354,39 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
   if(fabDone) fabDone.onclick=()=>{ const t=document.getElementById("edit-toggle"); if(t) t.click(); };
   if(peek) peek.onclick=()=> setEditPanelOpen(true);
 })();
+
+function setPhotoMoveMode(on){
+  photoMoveMode=!!on;
+  if(!photoMoveMode){
+    photoDrag=null;
+    photoPointers.clear();
+  }
+  document.body.classList.toggle("photo-moving", photoMoveMode);
+  const btn=document.getElementById("btn-photo-move");
+  if(btn){
+    btn.classList.toggle("on", photoMoveMode);
+    btn.textContent=photoMoveMode?"Done moving photo":"Move photo";
+  }
+  const chip=document.getElementById("photo-move-chip");
+  if(chip) chip.hidden=!photoMoveMode;
+  const hint=document.getElementById("hint");
+  if(hint){
+    if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale";
+    else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
+  }
+  chart.style.cursor=photoMoveMode?"move":"";
+}
+function photoPinchDist(){
+  const pts=[...photoPointers.values()];
+  if(pts.length<2) return null;
+  const dx=pts[0].x-pts[1].x, dy=pts[0].y-pts[1].y;
+  return Math.hypot(dx,dy)||null;
+}
+function bumpPhotoScale(delta){
+  photoAlign.scale=Math.max(0.2, Math.min(3, (Number(photoAlign.scale)||1)+delta));
+  savePhotoAlign(); applyPhotoAlign();
+}
+
 (function wirePhotoOpacity(){
   const sl=document.getElementById("photo-op");
   if(sl){
@@ -1229,6 +1419,12 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
     photoAlign={x:0,y:0,scale:1,rot:0};
     savePhotoAlign(); saveLayout(false); applyPhotoAlign();
   });
+  bind("photo-scale-minus", ()=>{ bumpPhotoScale(-0.05); saveLayout(false); });
+  bind("photo-scale-plus", ()=>{ bumpPhotoScale(0.05); saveLayout(false); });
+  const moveBtn=document.getElementById("btn-photo-move");
+  if(moveBtn) moveBtn.onclick=()=> setPhotoMoveMode(!photoMoveMode);
+  const doneChip=document.getElementById("photo-move-done");
+  if(doneChip) doneChip.onclick=()=> setPhotoMoveMode(false);
   applyDeepZoomLod();
 })();
 document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
@@ -1290,7 +1486,8 @@ function ensureMapVisible(){
       groups=[];
       try{
         localStorage.removeItem(LAYOUT_STORE);
-        /* share isolated — never touch main laceys-layout keys */
+        localStorage.removeItem("laceys-layout-v2");
+        localStorage.removeItem("laceys-layout-v1");
       }catch(e){}
       saveLayout(false);
       buildSlips();
@@ -1343,16 +1540,28 @@ function printChart(){
 }
 
 function saveNow(){
+  // Pull any OOB geometry back inside the chart before persist (undoable)
+  const preClamp=snap();
+  if(clampLayoutIntoMap()){
+    hist.push(preClamp);
+    if(hist.length>80) hist.shift();
+    future.length=0;
+    lastSnap=snap();
+    updateUndoBtns();
+    redraw();
+    try{ renderDockEditor(); }catch(e){}
+  }
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
   localStorage.setItem(LAYOUT_STORE, s);
+  try{ localStorage.setItem("laceys-layout-v2", s); }catch(e){}
   saveLayersStore();
   lastSnap=s;
   flashSave("Saved on this device · Download JSON for a backup copy");
 }
 
 function saveLayersStore(){
-  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
 }
 function renderLayersEditor(){
   const box=document.getElementById("layers-editor");
@@ -1495,7 +1704,7 @@ document.getElementById("btn-print").onclick=()=>printChart();
 const _fixBlank=document.getElementById("btn-reset-blank");
 if(_fixBlank) _fixBlank.onclick=()=>{
   if(!confirm("Restore the built-in Lacey\'s dock layout? (clears blank/corrupt offline save on this file)")) return;
-  try{ localStorage.removeItem(LAYOUT_STORE); /* share isolated */ }catch(e){}
+  try{ localStorage.removeItem(LAYOUT_STORE); localStorage.removeItem("laceys-layout-v2"); localStorage.removeItem("laceys-layout-v1"); }catch(e){}
   docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=[]; layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
   multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
 };
