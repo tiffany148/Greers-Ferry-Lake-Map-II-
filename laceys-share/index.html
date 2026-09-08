@@ -33,8 +33,19 @@ svg{transform-origin:0 0}
 .slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
 .dock-hit{cursor:grab}
 .dock-hit.on .walk{stroke:#fff;stroke-width:2}
-.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
-.zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173;font-size:18px;cursor:pointer}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;z-index:5}
+.zoom button,.pan button{width:48px;height:48px;border:0;border-radius:12px;background:#fff;color:#173;font-size:22px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.pan{position:absolute;left:10px;bottom:10px;display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:6px;z-index:5}
+.pan .spacer{visibility:hidden;pointer-events:none}
+.pan #pan-up{grid-column:2;grid-row:1}
+.pan #pan-left{grid-column:1;grid-row:2}
+.pan #pan-right{grid-column:3;grid-row:2}
+.pan #pan-down{grid-column:2;grid-row:3}
+.pan #pan-center{grid-column:2;grid-row:2;font-size:16px}
+@media (max-width:700px){
+  .zoom button,.pan button{width:52px;height:52px;font-size:24px}
+  .pan{grid-template-columns:52px 52px 52px;grid-template-rows:52px 52px 52px}
+}
 aside{background:#0a3338;padding:16px;overflow:auto}
 .tabs{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
@@ -64,7 +75,7 @@ body.editing .edit-banner{display:block}
 @media print{
   @page{ size: landscape; margin: 0.4in; }
   body{ background:#fff !important; color:#111 !important; }
-  header .kicker,.search,.chips,.zoom,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
+  header .kicker,.search,.chips,.zoom,.pan,.photo-op,.photo-align,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
   header{ padding:0 0 6px !important; }
   h1{ color:#111 !important; font-size:18px !important; }
   .layout{ display:block !important; height:auto !important; }
@@ -72,10 +83,109 @@ body.editing .edit-banner{display:block}
   svg{ width:10.5in !important; height:7.2in !important; max-width:100% !important; transform:none !important; }
 }
 
+
+.chart{min-height:420px}
+.layout{min-height:420px}
+#error-banner{display:none;margin:8px 16px;padding:10px 12px;border-radius:10px;background:#7a1f1f;color:#fff;font-size:14px}
+
+
+.dock-hit.multi .walk{stroke:#ffe08a;stroke-width:3;filter:drop-shadow(0 0 3px #ffe08a)}
+.dock-hit.multi text{fill:#ffe08a !important}
+.multi-bar{display:none;margin:8px 16px 0;padding:10px 12px;border-radius:12px;background:#1a5c62;align-items:center;gap:8px;flex-wrap:wrap}
+body.editing.multipick .multi-bar{display:flex}
+.multi-bar b{flex:1 1 auto;font-size:14px}
+.multi-bar .btn{padding:10px 14px;font-size:14px;min-height:44px}
+.pick-list{max-height:42vh;overflow:auto;margin:10px 0;border-radius:12px;background:#0a3539}
+.pick-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #15565b;font-size:15px;cursor:pointer;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
+.pick-row:last-child{border-bottom:0}
+.pick-row.on{background:#2a6a55}
+.pick-row input{width:22px;height:22px;accent-color:#d5ecea;flex:0 0 auto}
+.pick-row span{flex:1}
+.pick-section{font-size:12px;letter-spacing:.08em;color:var(--muted);padding:10px 14px 4px;text-transform:uppercase}
+#btn-multi-hdr{display:none}
+body.editing #btn-multi-hdr{display:inline-block}
+
+
+.photo-op{display:flex;align-items:center;gap:10px;margin:6px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
+.photo-op input[type=range]{flex:1;min-width:120px;accent-color:#d5ecea}
+.photo-op b{min-width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
+#btn-deep-zoom{display:inline-block}
+
+
+.photo-align{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 8px;padding:8px 12px;border-radius:12px;background:#0f3f44;font-size:13px}
+.photo-align .btn{min-height:40px;padding:8px 12px}
+.photo-align label{display:flex;align-items:center;gap:6px;margin:0}
+.photo-align input[type=range]{width:110px;accent-color:#d5ecea}
+.photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
+
+
+/* Mobile full-screen edit: chart fills screen, tools as bottom sheet */
+@media (max-width:860px){
+  body.editing .search,
+  body.editing .chips,
+  body.editing .photo-align,
+  body.editing .kicker,
+  body.editing .edit-banner{ display:none !important; }
+  body.editing .photo-op{ margin:4px 8px 0; padding:6px 10px; }
+  body.editing header{ padding:6px 10px 2px; padding-top:calc(6px + env(safe-area-inset-top)); }
+  body.editing h1{ font-size:20px; }
+  body.editing .meta{ font-size:11px; }
+  body.editing .layout{
+    display:flex; flex-direction:column;
+    height:calc(100dvh - 118px);
+    min-height:0;
+  }
+  body.editing .chart{
+    flex:1 1 auto;
+    height:auto !important;
+    min-height:0 !important;
+    margin:0 !important;
+    border-radius:0 !important;
+  }
+  body.editing aside{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    z-index:50;
+    max-height:min(72dvh, 620px);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    transform:translateY(calc(100% - 58px));
+    transition:transform .22s ease;
+    padding:0 14px calc(12px + env(safe-area-inset-bottom));
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  body.editing.panel-open aside{
+    transform:translateY(0);
+  }
+  body.editing .sheet-handle{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    position:sticky; top:0; z-index:2;
+    background:#0a3338;
+    padding:10px 0 8px;
+    margin:0 -14px 8px;
+    border-bottom:1px solid #15565b;
+  }
+  body.editing .sheet-handle .grab{
+    width:44px; height:5px; border-radius:99px; background:#3a6a70;
+  }
+  #btn-panel-toggle{ display:none; }
+  body.editing #btn-panel-toggle{ display:inline-block; }
+  body.editing .pan{ bottom:68px; } /* above collapsed sheet peek */
+  body.editing .zoom{ bottom:68px; }
+  body.editing.panel-open .pan,
+  body.editing.panel-open .zoom{ bottom:calc(min(72dvh, 620px) - 40px); opacity:.35; pointer-events:none; }
+}
+@media (min-width:861px){
+  .sheet-handle{ display:none !important; }
+  #btn-panel-toggle{ display:none !important; }
+}
+
 </style>
 </head>
 <body>
 <header>
+<div id="error-banner"></div>
   <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
     <h1>Lacey's Narrows</h1>
@@ -86,20 +196,52 @@ body.editing .edit-banner{display:block}
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
         <button id="btn-save" type="button" title="Save current layout on this device">Save</button>
+        <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
         <button id="edit-toggle">Edit docks</button>
       </div>
     </div>
   </div>
 </header>
-<div class="share-banner" style="margin:0 16px 8px;padding:8px 12px;border-radius:10px;background:#3a4a1a;font-size:13px">Share copy — edits and saves here stay on this link only. They do not change your main Lacey’s chart.</div>
+<div class="multi-bar" id="multi-bar">
+  <b id="multi-count">0 selected</b>
+  <button type="button" class="btn" id="btn-multi-clear">Clear</button>
+  <button type="button" class="btn" id="btn-multi-move">Move selected</button>
+  <button type="button" class="btn" id="btn-multi-done">Done</button>
+</div>
 <div class="edit-banner">Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
+<div class="share-banner" style="margin:0 16px 8px;padding:8px 12px;border-radius:10px;background:#1a3a5c;font-size:13px">Share copy — saves stay on this link only.</div>
+<div class="photo-op" id="photo-op-bar" title="Aerial photo overlay">
+  <span>Photo</span>
+  <input id="photo-op" type="range" min="0" max="100" value="90"/>
+  <b id="photo-op-val">90%</b>
+  <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
+</div>
+
+<div class="photo-align" id="photo-align-bar">
+  <span>Align photo</span>
+  <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
+  <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
+  <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
+  <button type="button" class="btn" id="photo-nudge-d" title="Nudge down">↓</button>
+  <label>Scale <input id="photo-scale" type="range" min="50" max="200" value="100"/><span id="photo-scale-val">100%</span></label>
+  <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
+  <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
+  <button type="button" class="btn" id="photo-reset-align" title="Reset photo position">Reset align</button>
+</div>
 <div class="layout">
   <div class="chart" id="chart">
     <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
-    <div class="zoom"><button id="z-in" title="Zoom in">+</button><button id="z-out" title="Zoom out">−</button><button id="z-full" title="Fit whole map on screen">⛶</button></div>
+    <div class="pan" aria-label="Pan map">
+      <button type="button" id="pan-up" title="Move view up">↑</button>
+      <button type="button" id="pan-left" title="Move view left">←</button>
+      <button type="button" id="pan-center" title="Recenter / fit">·</button>
+      <button type="button" id="pan-right" title="Move view right">→</button>
+      <button type="button" id="pan-down" title="Move view down">↓</button>
+    </div>
+    <div class="zoom"><button type="button" id="z-in" title="Zoom in">+</button><button type="button" id="z-out" title="Zoom out">−</button><button type="button" id="z-full" title="Fit whole map on screen">⛶</button></div>
   </div>
   <aside>
     <div class="tabs">
@@ -136,12 +278,14 @@ body.editing .edit-banner{display:block}
         <button class="btn" id="add-box">+ Building</button>
         <button class="btn" id="add-label">+ Label</button>
         <button class="btn" id="btn-dup">Duplicate</button>
+        <button class="btn" id="btn-multi" type="button" title="Tap docks/labels to add or remove them">Multi-select</button>
         <button class="btn" id="btn-select-all">Select all</button>
         <button class="btn" id="btn-group-all">Select / group all</button>
         <button class="btn" id="btn-group">Group selected</button>
         <button class="btn" id="btn-ungroup">Ungroup</button>
       </div>
-      <p class="hint" id="sel-hint">Select / group all, then drag anywhere on the map to move the whole chart.</p>
+      <p class="hint" id="sel-hint">Turn on Multi-select, then tick items in the list (easiest on phones). You can also tap the map.</p>
+      <div id="pick-list" hidden></div>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
         <button class="btn" id="btn-save-layout">Save layout</button>
@@ -151,12 +295,12 @@ body.editing .edit-banner{display:block}
         <button class="btn" id="strip-cover">Remove covering piece</button>
         <button class="btn" id="reset-layout">Reset positions</button>
       </div>
-      <label>Align photo opacity<input id="bg-op" type="range" min="0" max="80" value="0"/></label>
+      <p class="hint">Photo opacity is the <b>Photo</b> slider above the map (0–100%). Deep zoom uses it as max photo strength.</p>
       <input id="import-file" type="file" accept="application/json" hidden/>
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=1"></script>
-<script src="app.js?v=1"></script>
+<script src="app-data.js?v=2"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>
