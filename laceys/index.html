@@ -23,7 +23,7 @@ h1{margin:4px 0 0;font-size:28px;font-weight:650}
 .chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
-.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539;touch-action:none;-ms-touch-action:none}
 .chart.editing{cursor:default}
 svg{transform-origin:0 0}
 .slip{cursor:pointer}
@@ -119,6 +119,18 @@ body.editing #btn-multi-hdr{display:inline-block}
 .photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
 
 
+
+/* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
+#edit-sel-chip-desk{ display:none; }
+@media (min-width:861px){
+  body.editing #edit-sel-chip-desk{
+    display:block; margin:6px 16px 0; padding:8px 12px; border-radius:10px;
+    background:#1a5c62; font-size:13px; font-weight:650; color:#e7f6f5;
+  }
+  body.editing #edit-sel-chip-desk:empty,
+  body.editing #edit-sel-chip-desk[hidden]{ display:none !important; }
+}
+
 /* Mobile full-screen edit: sticky chrome always on top; map below; Tools sheet on demand */
 #edit-chrome{ display:none; }
 @media (max-width:860px){
@@ -153,6 +165,27 @@ body.editing #btn-multi-hdr{display:inline-block}
   }
   body.editing #edit-chrome #btn-panel-toggle.on{ background:#d5ecea; color:#0a3338; }
   body.editing #edit-chrome #edit-toggle-mobile.on{ background:#f0c14b; color:#1a1a1a; }
+
+  body.editing #edit-chrome .ec-sel{
+    flex:1 1 100%;
+    order:99;
+    margin-top:2px;
+    padding:6px 10px;
+    border-radius:10px;
+    background:#13494e;
+    border:1px solid #2a6a70;
+    font-size:13px;
+    font-weight:650;
+    color:#e7f6f5;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    min-height:28px;
+    line-height:1.3;
+  }
+  body.editing #edit-chrome .ec-sel:empty,
+  body.editing #edit-chrome .ec-sel[hidden]{ display:none !important; }
+
   body.editing .layout{
     display:block;
     position:fixed;
@@ -227,7 +260,9 @@ body.editing #btn-multi-hdr{display:inline-block}
   <button type="button" id="btn-save-m" title="Save">Save</button>
   <button type="button" id="btn-panel-toggle">Tools</button>
   <button type="button" id="edit-toggle-mobile" class="on">Done</button>
+  <div id="edit-sel-chip" class="ec-sel" hidden></div>
 </div>
+<div id="edit-sel-chip-desk" hidden></div>
 <div id="error-banner"></div>
   <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
@@ -346,7 +381,7 @@ body.editing #btn-multi-hdr{display:inline-block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=61"></script>
-<script src="app.js?v=61"></script>
+<script src="app-data.js?v=62"></script>
+<script src="app.js?v=62"></script>
 </body>
 </html>
