@@ -34,6 +34,10 @@ let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
 const PHOTO_ALIGN_STORE="laceys-share-photo-align-v1";
+let photoMoveMode=false;
+let photoDrag=null;
+const photoPointers=new Map(); // pinch while moving photo
+
 function loadPhotoAlign(){
   try{
     const raw=JSON.parse(localStorage.getItem(PHOTO_ALIGN_STORE)||"null");
@@ -56,25 +60,19 @@ function applyPhotoAlign(){
   const cx=1200, cy=850; // chart working-area center (viewBox 2400×1700)
   const W=2400, H=1700;
   const rot=Number(photoAlign.rot)||0;
-  const rad=rot*Math.PI/180;
-  const c=Math.abs(Math.cos(rad)), sn=Math.abs(Math.sin(rad));
-  // Expand pre-rotation size so after rotate the aerial still fully covers the chart
-  // working area (no empty corners / no marina detail clipped away inside the chart).
-  const coverW=W*c + H*sn;
-  const coverH=W*sn + H*c;
-  const iw=coverW*userS;
-  const ih=coverH*userS;
+  // meet = show FULL aerial inside the image rect (letterbox OK). User scales up to cover.
+  // Do NOT use slice/cover — that crops marina pixels she needs to align.
+  const iw=W*userS;
+  const ih=H*userS;
   const dx=Number(photoAlign.x)||0;
   const dy=Number(photoAlign.y)||0;
-  // Equivalent to legacy cx*(1-s)+dx when rot=0; keeps saved pan/scale alignments stable.
   const x=cx - iw/2 + dx;
   const y=cy - ih/2 + dy;
   bgImg.setAttribute("x", String(x));
   bgImg.setAttribute("y", String(y));
   bgImg.setAttribute("width", String(iw));
   bgImg.setAttribute("height", String(ih));
-  // slice = cover the image rect (fill working area); avoid meet letterboxing that looks like a crop
-  bgImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+  bgImg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   if(rot){
     const px=cx+dx, py=cy+dy;
     bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
@@ -401,8 +399,9 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid slice"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
+svg.setAttribute("overflow","visible");
 loadPhotoAlign();
 applyPhotoAlign();
 svg.appendChild(layerBg);svg.appendChild(layerSite);svg.appendChild(layerWalkMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);svg.appendChild(layerLabels);svg.appendChild(layerMarks);
@@ -775,6 +774,7 @@ function defaultMarinaZoom(){
 }
 svg.addEventListener("click",e=>{
   if(dockDrag&&dockDrag.moved)return;
+  if(photoMoveMode){ e.preventDefault(); e.stopPropagation(); return; }
   if(editing){
     const sEl=e.target.closest("[data-id]");
     const dEl=e.target.closest("[data-dock]");
@@ -908,6 +908,20 @@ function hitEditTarget(e){
   return {sEl,dEl,mEl};
 }
 chart.addEventListener("pointerdown",e=>{
+  if(photoMoveMode){
+    try{ e.preventDefault(); }catch(_){}
+    if(e.target.closest && e.target.closest(".zoom,.pan,#photo-move-chip,button,input,label")) return;
+    photoPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const p=svgPoint(e);
+    if(photoPointers.size>=2){
+      const dist=photoPinchDist();
+      photoDrag={kind:"pinch",startDist:dist,startScale:Number(photoAlign.scale)||1,moved:false};
+    }else{
+      photoDrag={kind:"pan",ox:Number(photoAlign.x)||0,oy:Number(photoAlign.y)||0,px:p.x,py:p.y,moved:false};
+    }
+    try{ chart.setPointerCapture(e.pointerId); }catch(_){}
+    return;
+  }
   if(editing){
     // Prevent browser pan/zoom gestures from stealing the interaction
     try{ e.preventDefault(); }catch(_){}
@@ -985,6 +999,31 @@ chart.addEventListener("pointerdown",e=>{
   pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);
 });
 chart.addEventListener("pointermove",e=>{
+  if(photoMoveMode && photoDrag){
+    try{ e.preventDefault(); }catch(_){}
+    if(photoPointers.has(e.pointerId)) photoPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(photoDrag.kind==="pinch" || photoPointers.size>=2){
+      if(photoDrag.kind!=="pinch"){
+        const dist=photoPinchDist();
+        photoDrag={kind:"pinch",startDist:dist,startScale:Number(photoAlign.scale)||1,moved:false};
+      }
+      const dist=photoPinchDist();
+      if(dist && photoDrag.startDist){
+        const ratio=dist/photoDrag.startDist;
+        if(Math.abs(ratio-1)>0.02) photoDrag.moved=true;
+        photoAlign.scale=Math.max(0.2, Math.min(3, photoDrag.startScale*ratio));
+        savePhotoAlign(); applyPhotoAlign();
+      }
+      return;
+    }
+    const p=svgPoint(e);
+    const dx=p.x-photoDrag.px, dy=p.y-photoDrag.py;
+    if(Math.abs(dx)+Math.abs(dy)>4) photoDrag.moved=true;
+    photoAlign.x=photoDrag.ox+dx;
+    photoAlign.y=photoDrag.oy+dy;
+    savePhotoAlign(); applyPhotoAlign();
+    return;
+  }
   if(dockDrag){
     try{ e.preventDefault(); }catch(_){}
     const p=svgPoint(e); const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
@@ -1033,7 +1072,19 @@ chart.addEventListener("pointermove",e=>{
   try{ e.preventDefault(); }catch(_){}
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
-chart.addEventListener("pointerup",()=>{
+chart.addEventListener("pointerup",e=>{
+  if(photoMoveMode){
+    photoPointers.delete(e.pointerId);
+    if(photoDrag && photoDrag.moved) saveLayout(false);
+    if(photoPointers.size===0) photoDrag=null;
+    else if(photoPointers.size===1){
+      // Fall back to pan with remaining finger
+      const rem=[...photoPointers.keys()][0];
+      // keep last align; next move will restart pan on next pointerdown typically
+      photoDrag=null;
+    }
+    return;
+  }
   if(dockDrag){
     if(dockDrag.kind==="pick"){
       if(!dockDrag.moved && dockDrag.tapKey){
@@ -1197,6 +1248,39 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
   if(fabDone) fabDone.onclick=()=>{ const t=document.getElementById("edit-toggle"); if(t) t.click(); };
   if(peek) peek.onclick=()=> setEditPanelOpen(true);
 })();
+
+function setPhotoMoveMode(on){
+  photoMoveMode=!!on;
+  if(!photoMoveMode){
+    photoDrag=null;
+    photoPointers.clear();
+  }
+  document.body.classList.toggle("photo-moving", photoMoveMode);
+  const btn=document.getElementById("btn-photo-move");
+  if(btn){
+    btn.classList.toggle("on", photoMoveMode);
+    btn.textContent=photoMoveMode?"Done moving photo":"Move photo";
+  }
+  const chip=document.getElementById("photo-move-chip");
+  if(chip) chip.hidden=!photoMoveMode;
+  const hint=document.getElementById("hint");
+  if(hint){
+    if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale";
+    else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
+  }
+  chart.style.cursor=photoMoveMode?"move":"";
+}
+function photoPinchDist(){
+  const pts=[...photoPointers.values()];
+  if(pts.length<2) return null;
+  const dx=pts[0].x-pts[1].x, dy=pts[0].y-pts[1].y;
+  return Math.hypot(dx,dy)||null;
+}
+function bumpPhotoScale(delta){
+  photoAlign.scale=Math.max(0.2, Math.min(3, (Number(photoAlign.scale)||1)+delta));
+  savePhotoAlign(); applyPhotoAlign();
+}
+
 (function wirePhotoOpacity(){
   const sl=document.getElementById("photo-op");
   if(sl){
@@ -1229,6 +1313,12 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
     photoAlign={x:0,y:0,scale:1,rot:0};
     savePhotoAlign(); saveLayout(false); applyPhotoAlign();
   });
+  bind("photo-scale-minus", ()=>{ bumpPhotoScale(-0.05); saveLayout(false); });
+  bind("photo-scale-plus", ()=>{ bumpPhotoScale(0.05); saveLayout(false); });
+  const moveBtn=document.getElementById("btn-photo-move");
+  if(moveBtn) moveBtn.onclick=()=> setPhotoMoveMode(!photoMoveMode);
+  const doneChip=document.getElementById("photo-move-done");
+  if(doneChip) doneChip.onclick=()=> setPhotoMoveMode(false);
   applyDeepZoomLod();
 })();
 document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
