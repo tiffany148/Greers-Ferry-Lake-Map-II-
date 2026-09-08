@@ -215,6 +215,7 @@ function updateSelHint(){
     el.textContent = "Multi-select opens a checklist — easiest on phones.";
   }
   renderPickList();
+  updateSelChip();
 }
 function pieceLabel(kind,id){
   if(kind==="dock"){
@@ -229,6 +230,38 @@ function pieceLabel(kind,id){
   if(m.kind==="pill") return "Sign: "+(m.label||m.text||m.id);
   if(m.kind==="p") return "Parking";
   return (m.kind||"Piece")+": "+(m.title||m.text||m.id);
+}
+function currentSelectionLabel(){
+  if(!editing) return "";
+  if(multi.size>1) return multi.size+" selected";
+  if(multi.size===1){
+    const k=[...multi][0];
+    const {kind,id}=parseMemberKey(k);
+    return pieceLabel(kind==="mark"?"mark":"dock", id);
+  }
+  if(selected && editing){
+    const s=slips.find(x=>x.id===selected);
+    if(s){
+      const num=String(s.num);
+      return (/^\d+$/.test(num)?"Slip ":"")+num+(s.dock?(" · Dock "+s.dock):"");
+    }
+  }
+  if(selectedDock) return pieceLabel("dock", selectedDock);
+  if(selectedMark) return pieceLabel("mark", selectedMark);
+  if(moveWholeChart) return "Entire map selected";
+  return "";
+}
+function updateSelChip(){
+  const label=currentSelectionLabel();
+  const chips=[document.getElementById("edit-sel-chip"), document.getElementById("edit-sel-chip-desk")];
+  chips.forEach(chip=>{
+    if(!chip) return;
+    if(!editing || !label){ chip.hidden=true; chip.textContent=""; return; }
+    chip.hidden=false;
+    chip.textContent=label;
+  });
+  // Keep mobile chrome height correct when chip appears/disappears
+  if(editing){ try{ syncEditChromeHeight(); }catch(e){} }
 }
 function renderPickList(){
   const box=document.getElementById("pick-list");
@@ -648,12 +681,12 @@ function renderSlipLayerAssigns(slipId){
   });
 }
 function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
-function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent="Selected · tap Tools to edit properties, or drag on the map"; } renderDockEditor();redraw();}
-function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent="Selected · tap Tools to edit properties, or drag on the map"; } renderDockEditor();redraw();}
+function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("dock",id)+" · drag to move · Tools for properties"; } renderDockEditor();redraw();updateSelChip();}
+function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("mark",id)+" · drag to move · Tools for properties"; } renderDockEditor();redraw();updateSelChip();}
 function selectEditSlip(id){
   const s=slips.find(x=>x.id===id); if(!s) return;
   selected=id; selectedDock=s.dockId; selectedMark=null;
-  showTab("layout"); if(!isMobileEdit()) openEditPanel(); renderDockEditor(); redraw();
+  showTab("layout"); if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h){ const num=String(s.num); h.textContent=((/^\d+$/.test(num)?"Slip ":"")+num)+" · drag to move · Tools for properties"; } } renderDockEditor(); redraw(); updateSelChip();
 }
 let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
@@ -757,30 +790,134 @@ svg.addEventListener("click",e=>{
   }
   const t=e.target.closest("[data-id]"); if(t) select(t.getAttribute("data-id"));
 });
+function markHitBox(m){
+  if(!m) return null;
+  if(m.kind==="text"){
+    const fs=m.size||13;
+    const w=Math.max(28,(m.text||"").length*fs*0.62);
+    return {x:m.x-4,y:m.y-fs,w:w,h:fs+8};
+  }
+  if(m.kind==="p"){
+    const rx=m.w?m.w/2:70, ry=m.h?m.h/2:26;
+    return {x:m.x-rx,y:m.y-ry,w:rx*2,h:ry*2};
+  }
+  if(m.w!=null && m.h!=null) return {x:m.x,y:m.y,w:m.w,h:m.h};
+  return {x:m.x-12,y:m.y-12,w:24,h:24};
+}
+function dist2ToRect(px,py,r){
+  const cx=Math.max(r.x, Math.min(px, r.x+r.w));
+  const cy=Math.max(r.y, Math.min(py, r.y+r.h));
+  const dx=px-cx, dy=py-cy;
+  return dx*dx+dy*dy;
+}
+function hitEditTarget(e){
+  // Prefer real DOM hits (including stacked SVG under the finger)
+  let sEl=null, dEl=null, mEl=null;
+  const pickFrom = (node)=>{
+    if(!node || !node.closest) return;
+    if(!sEl){ const s=node.closest("[data-id]"); if(s && chart.contains(s)) sEl=s; }
+    if(!dEl){ const d=node.closest("[data-dock]"); if(d && chart.contains(d)) dEl=d; }
+    if(!mEl){ const m=node.closest("[data-mark]"); if(m && chart.contains(m)) mEl=m; }
+  };
+  pickFrom(e.target);
+  if(!sEl && !dEl && !mEl && document.elementsFromPoint){
+    const stack=document.elementsFromPoint(e.clientX, e.clientY)||[];
+    for(const node of stack){
+      const before=!(sEl||dEl||mEl);
+      pickFrom(node);
+      // Stop at the topmost interactive chart piece
+      if(before && (sEl||dEl||mEl)) break;
+    }
+  }
+  // Geometric slop: fat-finger near a dock/slip/mark should still grab it (not pan)
+  if(!sEl && !dEl && !mEl){
+    const p=svgPoint(e);
+    const slop=Math.max(14, 22/Math.max(0.001, scale)); // ~22 screen px in world units
+    const slop2=slop*slop;
+    let best=null, bestD=slop2;
+    slips.forEach(s=>{
+      const r={x:s.x,y:s.y,w:s.w,h:s.h};
+      const d=dist2ToRect(p.x,p.y,r);
+      if(d<=bestD){ bestD=d; best={type:"slip",s}; }
+    });
+    docks.forEach(d=>{
+      const g=walkGeomFromDock(d);
+      const r={x:g.x,y:g.y,w:g.w,h:g.h};
+      const dist=dist2ToRect(p.x,p.y,r);
+      if(dist<=bestD){ bestD=dist; best={type:"dock",d}; }
+      // also dock label area near name
+      const lr={x:d.x-24,y:d.y-28,w:48,h:22};
+      const distL=dist2ToRect(p.x,p.y,lr);
+      if(distL<=bestD){ bestD=distL; best={type:"dock",d}; }
+    });
+    marks.forEach(m=>{
+      const box=markHitBox(m); if(!box) return;
+      const dist=dist2ToRect(p.x,p.y,box);
+      if(dist<=bestD){ bestD=dist; best={type:"mark",m}; }
+    });
+    if(best){
+      if(best.type==="slip"){
+        // Synthesize via querying current DOM if present
+        sEl=layerSlips && layerSlips.querySelector('[data-id="'+best.s.id+'"]');
+        if(!sEl){
+          // fake minimal attrs object
+          sEl={ getAttribute:(k)=>k==="data-id"?best.s.id:(k==="data-dock"?best.s.dockId:null), closest:(sel)=>sel.includes("data-id")?sEl:(sel.includes("data-dock")?sEl:null) };
+        }
+        dEl=sEl;
+      }else if(best.type==="dock"){
+        dEl=layerDocks && layerDocks.querySelector('[data-dock="'+best.d.id+'"]');
+        if(!dEl) dEl={ getAttribute:(k)=>k==="data-dock"?best.d.id:null, closest:()=>dEl };
+      }else if(best.type==="mark"){
+        mEl=(layerMarks||layerLabels||layerSite) && (
+          (layerMarks && layerMarks.querySelector('[data-mark="'+best.m.id+'"]')) ||
+          (layerWalkMarks && layerWalkMarks.querySelector('[data-mark="'+best.m.id+'"]')) ||
+          (layerLabels && layerLabels.querySelector('[data-mark="'+best.m.id+'"]')) ||
+          (layerSite && layerSite.querySelector('[data-mark="'+best.m.id+'"]'))
+        );
+        if(!mEl) mEl={ getAttribute:(k)=>k==="data-mark"?best.m.id:null, closest:()=>mEl };
+      }
+    }
+  }
+  // If we hit a slip that carries data-dock, treat as dock hit too for locked docks
+  if(sEl && !dEl){
+    const did=sEl.getAttribute("data-dock");
+    if(did) dEl=sEl;
+  }
+  return {sEl,dEl,mEl};
+}
 chart.addEventListener("pointerdown",e=>{
   if(editing){
-    const sEl=e.target.closest("[data-id]");
-    const dEl=e.target.closest("[data-dock]");
-    const mEl=e.target.closest("[data-mark]");
+    // Prevent browser pan/zoom gestures from stealing the interaction
+    try{ e.preventDefault(); }catch(_){}
+    const {sEl,dEl,mEl}=hitEditTarget(e);
     const p=svgPoint(e);
-    // Multi-select mode: taps only toggle — no drag-move (use Done, then drag, or Move selected)
+    // Multi-select: tap toggles; if several already selected, dragging a selected piece moves the set
     if(multiPick){
       let tapKey=null, tapDock=null, tapMark=null;
-      if(dEl){ tapDock=dEl.getAttribute("data-dock"); tapKey="dock:"+tapDock; }
-      else if(mEl){ tapMark=mEl.getAttribute("data-mark"); tapKey="mark:"+tapMark; }
+      if(mEl && mEl.getAttribute("data-mark")){ tapMark=mEl.getAttribute("data-mark"); tapKey="mark:"+tapMark; }
+      else if(dEl && dEl.getAttribute("data-dock")){ tapDock=dEl.getAttribute("data-dock"); tapKey="dock:"+tapDock; }
       else if(sEl){
         const did=sEl.getAttribute("data-dock");
         if(did){ tapDock=did; tapKey="dock:"+did; }
       }
       if(tapKey){
+        if(multi.size>1 && multi.has(tapKey)){
+          dockDrag={kind:"chart",keys:[...multi],px:p.x,py:p.y,sx:0,sy:0,moved:false,fromMultiPick:true,tapKey,tapDock,tapMark};
+          chart.style.cursor="grabbing";
+          chart.setPointerCapture(e.pointerId);
+          return;
+        }
         dockDrag={kind:"pick",tapKey,tapDock,tapMark,px:p.x,py:p.y,moved:false};
         chart.setPointerCapture(e.pointerId);
         return;
       }
       pan={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); return;
     }
-    // Whole-chart move: after Select/group all, drag anywhere (including slips) moves everything
+    // Grouped / multi-selected / select-all: drag on a hit object moves the set; empty water pans
     if(moveWholeChart || multi.size>1){
+      if(!(sEl||dEl||mEl)){
+        pan={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); return;
+      }
       const keys = multi.size ? [...multi] : allLayoutKeys();
       dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false};
       chart.style.cursor="grabbing";
@@ -819,6 +956,7 @@ chart.addEventListener("pointerdown",e=>{
         dockDrag={kind:"mark",id:m.id,x:m.x,y:m.y,px:p.x,py:p.y,moved:false};selectMark(m.id);chart.setPointerCapture(e.pointerId);return;
       }
     }
+    // Empty water / background only → pan the map
     pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);return;
   }
   if(e.target.closest("[data-id]")) return;
@@ -826,6 +964,7 @@ chart.addEventListener("pointerdown",e=>{
 });
 chart.addEventListener("pointermove",e=>{
   if(dockDrag){
+    try{ e.preventDefault(); }catch(_){}
     const p=svgPoint(e); const dx=p.x-dockDrag.px, dy=p.y-dockDrag.py;
     if(Math.abs(dx)+Math.abs(dy)>6) dockDrag.moved=true; // slightly looser for fat fingers
     if(dockDrag.kind==="pick"){
@@ -869,6 +1008,7 @@ chart.addEventListener("pointermove",e=>{
     return;
   }
   if(!pan) return;
+  try{ e.preventDefault(); }catch(_){}
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
 chart.addEventListener("pointerup",()=>{
@@ -985,7 +1125,7 @@ document.getElementById("edit-toggle").onclick=()=>{
         : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")))
     : "Click a numbered slip · drag to pan";
   if(editing){ showTab("layout"); closeEditPanel(); /* map stays full-screen until Tools */ }
-  updateSelHint(); redraw(); applyDeepZoomLod();
+  updateSelHint(); updateSelChip(); redraw(); applyDeepZoomLod();
   // reflow zoom after layout change + pin chrome height so map never covers Tools/Done
   requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); applyZoom(); }catch(e){} });
 };
@@ -1114,8 +1254,7 @@ function ensureMapVisible(){
       groups=[];
       try{
         localStorage.removeItem(LAYOUT_STORE);
-        /* share isolated */
-        /* share isolated */
+        /* share isolated — never touch main laceys-layout keys */
       }catch(e){}
       saveLayout(false);
       buildSlips();
@@ -1171,7 +1310,6 @@ function saveNow(){
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
   localStorage.setItem(LAYOUT_STORE, s);
-  /* share isolated */
   saveLayersStore();
   lastSnap=s;
   flashSave("Saved on this device · Download JSON for a backup copy");
@@ -1321,7 +1459,7 @@ document.getElementById("btn-print").onclick=()=>printChart();
 const _fixBlank=document.getElementById("btn-reset-blank");
 if(_fixBlank) _fixBlank.onclick=()=>{
   if(!confirm("Restore the built-in Lacey\'s dock layout? (clears blank/corrupt offline save on this file)")) return;
-  try{ localStorage.removeItem(LAYOUT_STORE); /* share isolated */ /* share isolated */ }catch(e){}
+  try{ localStorage.removeItem(LAYOUT_STORE); /* share isolated */ }catch(e){}
   docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=[]; layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
   multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
 };
@@ -1359,7 +1497,13 @@ document.getElementById("btn-group").onclick=()=>{
   const name=prompt("Group name?","Group "+(groups.length+1));
   if(name==null) return;
   groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
-  multi.clear(); updateSelHint(); saveLayout(); redraw();
+  // Keep selection + exit multi-pick so the group is immediately draggable on the map
+  multiPick=false;
+  moveWholeChart=true;
+  updateSelHint();
+  const h=document.getElementById("hint");
+  if(h) h.textContent="Grouped · drag on the map to move all "+multi.size+" pieces";
+  saveLayout(); redraw(); updateSelChip();
 };
 document.getElementById("btn-ungroup").onclick=()=>{
   const keys=[...multi];
