@@ -118,6 +118,69 @@ body.editing #btn-multi-hdr{display:inline-block}
 .photo-align input[type=range]{width:110px;accent-color:#d5ecea}
 .photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
 
+
+/* Mobile full-screen edit: chart fills screen, tools as bottom sheet */
+@media (max-width:860px){
+  body.editing .search,
+  body.editing .chips,
+  body.editing .photo-align,
+  body.editing .kicker,
+  body.editing .edit-banner{ display:none !important; }
+  body.editing .photo-op{ margin:4px 8px 0; padding:6px 10px; }
+  body.editing header{ padding:6px 10px 2px; padding-top:calc(6px + env(safe-area-inset-top)); }
+  body.editing h1{ font-size:20px; }
+  body.editing .meta{ font-size:11px; }
+  body.editing .layout{
+    display:flex; flex-direction:column;
+    height:calc(100dvh - 118px);
+    min-height:0;
+  }
+  body.editing .chart{
+    flex:1 1 auto;
+    height:auto !important;
+    min-height:0 !important;
+    margin:0 !important;
+    border-radius:0 !important;
+  }
+  body.editing aside{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    z-index:50;
+    max-height:min(72dvh, 620px);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    transform:translateY(calc(100% - 58px));
+    transition:transform .22s ease;
+    padding:0 14px calc(12px + env(safe-area-inset-bottom));
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  body.editing.panel-open aside{
+    transform:translateY(0);
+  }
+  body.editing .sheet-handle{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    position:sticky; top:0; z-index:2;
+    background:#0a3338;
+    padding:10px 0 8px;
+    margin:0 -14px 8px;
+    border-bottom:1px solid #15565b;
+  }
+  body.editing .sheet-handle .grab{
+    width:44px; height:5px; border-radius:99px; background:#3a6a70;
+  }
+  #btn-panel-toggle{ display:none; }
+  body.editing #btn-panel-toggle{ display:inline-block; }
+  body.editing .pan{ bottom:68px; } /* above collapsed sheet peek */
+  body.editing .zoom{ bottom:68px; }
+  body.editing.panel-open .pan,
+  body.editing.panel-open .zoom{ bottom:calc(min(72dvh, 620px) - 40px); opacity:.35; pointer-events:none; }
+}
+@media (min-width:861px){
+  .sheet-handle{ display:none !important; }
+  #btn-panel-toggle{ display:none !important; }
+}
+
 </style>
 </head>
 <body>
@@ -236,7 +299,7 @@ body.editing #btn-multi-hdr{display:inline-block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=58"></script>
-<script src="app.js?v=58"></script>
+<script src="app-data.js?v=59"></script>
+<script src="app.js?v=59"></script>
 </body>
 </html>

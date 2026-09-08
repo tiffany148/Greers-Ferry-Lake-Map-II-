@@ -648,12 +648,12 @@ function renderSlipLayerAssigns(slipId){
   });
 }
 function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
-function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");renderDockEditor();redraw();}
-function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");renderDockEditor();redraw();}
+function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");openEditPanel();renderDockEditor();redraw();}
+function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");openEditPanel();renderDockEditor();redraw();}
 function selectEditSlip(id){
   const s=slips.find(x=>x.id===id); if(!s) return;
   selected=id; selectedDock=s.dockId; selectedMark=null;
-  showTab("layout"); renderDockEditor(); redraw();
+  showTab("layout"); openEditPanel(); renderDockEditor(); redraw();
 }
 let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
@@ -960,7 +960,40 @@ document.getElementById("q").addEventListener("input",function(){const hit=slips
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
 renderDir();
-document.getElementById("edit-toggle").onclick=()=>{editing=!editing;document.body.classList.toggle("editing",editing);chart.classList.toggle("editing",editing);document.getElementById("edit-toggle").classList.toggle("on",editing);document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";if(!editing){ multiPick=false; } document.getElementById("hint").textContent=editing?(multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")):"Click a numbered slip · drag to pan";if(editing)showTab("layout");updateSelHint();redraw();applyDeepZoomLod();};
+
+function setEditPanelOpen(on){
+  document.body.classList.toggle("panel-open", !!on);
+  const b=document.getElementById("btn-panel-toggle");
+  if(b){ b.classList.toggle("on", !!on); b.textContent = on ? "Hide tools" : "Tools"; }
+}
+function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:860px)").matches) setEditPanelOpen(true); }
+function closeEditPanel(){ setEditPanelOpen(false); }
+document.getElementById("edit-toggle").onclick=()=>{
+  editing=!editing;
+  document.body.classList.toggle("editing",editing);
+  chart.classList.toggle("editing",editing);
+  document.getElementById("edit-toggle").classList.toggle("on",editing);
+  document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
+  if(!editing){ multiPick=false; closeEditPanel(); }
+  document.getElementById("hint").textContent=editing
+    ? (window.matchMedia("(max-width:860px)").matches
+        ? "Full-screen edit · tap Tools for the panel, or tap a dock/label"
+        : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")))
+    : "Click a numbered slip · drag to pan";
+  if(editing){ showTab("layout"); openEditPanel(); }
+  updateSelHint(); redraw(); applyDeepZoomLod();
+  // reflow zoom after layout change
+  requestAnimationFrame(()=>{ try{ applyZoom(); }catch(e){} });
+};
+const _btnPanel=document.getElementById("btn-panel-toggle");
+if(_btnPanel) _btnPanel.onclick=()=> setEditPanelOpen(!document.body.classList.contains("panel-open"));
+const _btnSheetClose=document.getElementById("btn-sheet-close");
+if(_btnSheetClose) _btnSheetClose.onclick=()=> closeEditPanel();
+const _sheetHandle=document.getElementById("sheet-handle");
+if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
+  if(e.target.closest("button")) return;
+  setEditPanelOpen(!document.body.classList.contains("panel-open"));
+});
 (function wirePhotoOpacity(){
   const sl=document.getElementById("photo-op");
   if(sl){
