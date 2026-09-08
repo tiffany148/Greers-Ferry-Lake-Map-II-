@@ -119,6 +119,8 @@ body.editing #btn-multi-hdr{display:inline-block}
 .photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
 body.photo-moving{ cursor:move; }
 body.photo-moving .chart{ cursor:move; outline:2px solid #f0c14b; outline-offset:-2px; }
+/* Edit working area = chart viewBox; SVG #map-edit-bound draws the legal edge */
+body.editing .chart{ outline:1px solid rgba(154,213,208,.35); outline-offset:-1px; }
 #photo-move-chip{
   display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
   z-index:40; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;
@@ -396,7 +398,7 @@ body.photo-moving #photo-move-chip{ display:flex; }
       <span>Moving photo — drag to pan, pinch/slider to scale</span>
       <button type="button" id="photo-move-done">Done moving photo</button>
     </div>
-    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="visible"></svg>
+    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
     <div class="pan" aria-label="Pan map">
       <button type="button" id="pan-up" title="Move view up">↑</button>
       <button type="button" id="pan-left" title="Move view left">←</button>
@@ -474,7 +476,7 @@ body.photo-moving #photo-move-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=64"></script>
-<script src="app.js?v=64"></script>
+<script src="app-data.js?v=65"></script>
+<script src="app.js?v=65"></script>
 </body>
 </html>
