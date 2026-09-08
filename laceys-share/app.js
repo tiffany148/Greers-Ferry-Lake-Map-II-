@@ -648,12 +648,12 @@ function renderSlipLayerAssigns(slipId){
   });
 }
 function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
-function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");openEditPanel();renderDockEditor();redraw();}
-function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");openEditPanel();renderDockEditor();redraw();}
+function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent="Selected · tap Tools to edit properties, or drag on the map"; } renderDockEditor();redraw();}
+function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent="Selected · tap Tools to edit properties, or drag on the map"; } renderDockEditor();redraw();}
 function selectEditSlip(id){
   const s=slips.find(x=>x.id===id); if(!s) return;
   selected=id; selectedDock=s.dockId; selectedMark=null;
-  showTab("layout"); openEditPanel(); renderDockEditor(); redraw();
+  showTab("layout"); if(!isMobileEdit()) openEditPanel(); renderDockEditor(); redraw();
 }
 let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
@@ -964,9 +964,10 @@ renderDir();
 function setEditPanelOpen(on){
   document.body.classList.toggle("panel-open", !!on);
   const b=document.getElementById("btn-panel-toggle");
-  if(b){ b.classList.toggle("on", !!on); b.textContent = on ? "Hide tools" : "Tools"; }
+  if(b){ b.classList.toggle("on", !!on); b.textContent = on ? "Map" : "Tools"; }
 }
 function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:860px)").matches) setEditPanelOpen(true); }
+function isMobileEdit(){ return !!(window.matchMedia && window.matchMedia("(max-width:860px)").matches); }
 function closeEditPanel(){ setEditPanelOpen(false); }
 document.getElementById("edit-toggle").onclick=()=>{
   editing=!editing;
@@ -977,10 +978,10 @@ document.getElementById("edit-toggle").onclick=()=>{
   if(!editing){ multiPick=false; closeEditPanel(); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
-        ? "Full-screen edit · tap Tools for the panel, or tap a dock/label"
+        ? "Full-screen map · drag to edit · tap Tools for the panel"
         : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")))
     : "Click a numbered slip · drag to pan";
-  if(editing){ showTab("layout"); openEditPanel(); }
+  if(editing){ showTab("layout"); closeEditPanel(); /* map stays full-screen until Tools */ }
   updateSelHint(); redraw(); applyDeepZoomLod();
   // reflow zoom after layout change
   requestAnimationFrame(()=>{ try{ applyZoom(); }catch(e){} });
