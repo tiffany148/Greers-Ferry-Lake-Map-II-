@@ -52,19 +52,31 @@ function savePhotoAlign(){
 }
 function applyPhotoAlign(){
   if(!bgImg) return;
-  const s=photoAlign.scale||1;
-  const cx=1200, cy=850; // chart center
-  // Scale around center, then translate, then rotate around center
-  const x=(Number(photoAlign.x)||0) + cx*(1-s);
-  const y=(Number(photoAlign.y)||0) + cy*(1-s);
+  const userS=Math.max(0.2, Math.min(3, Number(photoAlign.scale)||1));
+  const cx=1200, cy=850; // chart working-area center (viewBox 2400×1700)
+  const W=2400, H=1700;
+  const rot=Number(photoAlign.rot)||0;
+  const rad=rot*Math.PI/180;
+  const c=Math.abs(Math.cos(rad)), sn=Math.abs(Math.sin(rad));
+  // Expand pre-rotation size so after rotate the aerial still fully covers the chart
+  // working area (no empty corners / no marina detail clipped away inside the chart).
+  const coverW=W*c + H*sn;
+  const coverH=W*sn + H*c;
+  const iw=coverW*userS;
+  const ih=coverH*userS;
+  const dx=Number(photoAlign.x)||0;
+  const dy=Number(photoAlign.y)||0;
+  // Equivalent to legacy cx*(1-s)+dx when rot=0; keeps saved pan/scale alignments stable.
+  const x=cx - iw/2 + dx;
+  const y=cy - ih/2 + dy;
   bgImg.setAttribute("x", String(x));
   bgImg.setAttribute("y", String(y));
-  bgImg.setAttribute("width", String(2400*s));
-  bgImg.setAttribute("height", String(1700*s));
-  const rot=Number(photoAlign.rot)||0;
+  bgImg.setAttribute("width", String(iw));
+  bgImg.setAttribute("height", String(ih));
+  // slice = cover the image rect (fill working area); avoid meet letterboxing that looks like a crop
+  bgImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
   if(rot){
-    // rotate around visual center of photo
-    const px=x+1200*s, py=y+850*s;
+    const px=cx+dx, py=cy+dy;
     bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
   }else{
     bgImg.removeAttribute("transform");
@@ -73,10 +85,10 @@ function applyPhotoAlign(){
   const rv=document.getElementById("photo-rot-val");
   const sc=document.getElementById("photo-scale");
   const rr=document.getElementById("photo-rot");
-  if(sc) sc.value=String(Math.round((photoAlign.scale||1)*100));
-  if(rr) rr.value=String(photoAlign.rot||0);
-  if(sv) sv.textContent=Math.round((photoAlign.scale||1)*100)+"%";
-  if(rv) rv.textContent=(Math.round((photoAlign.rot||0)*10)/10)+"°";
+  if(sc) sc.value=String(Math.round(userS*100));
+  if(rr) rr.value=String(rot);
+  if(sv) sv.textContent=Math.round(userS*100)+"%";
+  if(rv) rv.textContent=(Math.round(rot*10)/10)+"°";
 }
 
 function loadLayersStandalone(){
@@ -115,11 +127,21 @@ function restoreSnap(s){
   const raw=JSON.parse(s);
   docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
   if(Array.isArray(raw.layers)) layers=raw.layers;
+  if(raw.photoAlign){
+    photoAlign={
+      x:Number(raw.photoAlign.x)||0,
+      y:Number(raw.photoAlign.y)||0,
+      scale:Math.max(0.2, Math.min(3, Number(raw.photoAlign.scale)||1)),
+      rot:Number(raw.photoAlign.rot)||0
+    };
+    savePhotoAlign();
+  }
+  if(raw.photoMax!=null) photoMax=Math.max(0, Math.min(1, Number(raw.photoMax)));
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
   try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
-  redraw(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible(); renderLayersEditor(); renderChips();
+  redraw(); applyPhotoAlign(); applyDeepZoomLod(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible(); renderLayersEditor(); renderChips();
 }
 function undo(){ if(!hist.length) return; future.push(snap()); restoreSnap(hist.pop()); }
 function redo(){ if(!future.length) return; hist.push(snap()); restoreSnap(future.pop()); }
@@ -379,7 +401,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid slice"});
 layerBg.appendChild(bgImg);
 loadPhotoAlign();
 applyPhotoAlign();
@@ -1105,6 +1127,8 @@ function setEditPanelOpen(on){
   document.body.classList.toggle("panel-open", !!on);
   const b=document.getElementById("btn-panel-toggle");
   if(b){ b.classList.toggle("on", !!on); b.textContent = on ? "Map" : "Tools"; }
+  const fab=document.getElementById("edit-fab-tools");
+  if(fab){ fab.classList.toggle("on", !!on); fab.textContent = on ? "Map" : "Tools"; }
   requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); }catch(e){} });
 }
 function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:860px)").matches) setEditPanelOpen(true); }
@@ -1121,10 +1145,14 @@ document.getElementById("edit-toggle").onclick=()=>{
   if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
-        ? "Full-screen map · drag docks · Tools opens panel · Done exits"
-        : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")))
+        ? "Tools = panel · drag docks · empty water pans · Done exits"
+        : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · use Dock panel on the right · empty water pans")))
     : "Click a numbered slip · drag to pan";
-  if(editing){ showTab("layout"); closeEditPanel(); /* map stays full-screen until Tools */ }
+  if(editing){
+    showTab("layout");
+    if(isMobileEdit()) closeEditPanel(); /* mobile: map full-screen until Tools */
+    /* desktop: leave side panel visible — do not force sheet behavior */
+  }
   updateSelHint(); updateSelChip(); redraw(); applyDeepZoomLod();
   // reflow zoom after layout change + pin chrome height so map never covers Tools/Done
   requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); applyZoom(); }catch(e){} });
@@ -1161,6 +1189,14 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
   if(e.target.closest("button")) return;
   setEditPanelOpen(!document.body.classList.contains("panel-open"));
 });
+(function wireEditFabs(){
+  const fabTools=document.getElementById("edit-fab-tools");
+  const fabDone=document.getElementById("edit-fab-done");
+  const peek=document.getElementById("edit-tools-peek");
+  if(fabTools) fabTools.onclick=()=> setEditPanelOpen(!document.body.classList.contains("panel-open"));
+  if(fabDone) fabDone.onclick=()=>{ const t=document.getElementById("edit-toggle"); if(t) t.click(); };
+  if(peek) peek.onclick=()=> setEditPanelOpen(true);
+})();
 (function wirePhotoOpacity(){
   const sl=document.getElementById("photo-op");
   if(sl){

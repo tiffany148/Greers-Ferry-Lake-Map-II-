@@ -236,8 +236,61 @@ body.editing #btn-multi-hdr{display:inline-block}
   body.editing .sheet-handle .grab{
     width:44px; height:5px; border-radius:99px; background:#3a6a70;
   }
-  body.editing .pan{ bottom:16px; left:8px; }
-  body.editing .zoom{ bottom:16px; right:8px; }
+  body.editing #edit-chrome .ec-coach{
+    flex:1 1 100%;
+    order:98;
+    margin:0;
+    padding:4px 2px 0;
+    font-size:12px;
+    font-weight:500;
+    color:#b7d4d2;
+    line-height:1.35;
+  }
+
+  /* Floating Tools / Done — always above full-screen map (z above chart, below sheet) */
+  #edit-fabs{ display:none; }
+  body.editing #edit-fabs{
+    display:flex; position:fixed; left:0; right:0;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    z-index:75;
+    justify-content:center; align-items:center; gap:10px;
+    pointer-events:none; padding:0 14px;
+  }
+  body.editing #edit-fabs button{
+    pointer-events:auto;
+    min-height:52px; min-width:112px;
+    padding:12px 22px; font-size:16px; font-weight:750;
+    border:0; border-radius:999px;
+    box-shadow:0 4px 18px rgba(0,0,0,.45);
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  body.editing #edit-fab-tools{ background:#d5ecea; color:#0a3338; }
+  body.editing.panel-open #edit-fab-tools{ background:#f0c14b; color:#1a1a1a; }
+  body.editing #edit-fab-done{ background:#f0c14b; color:#1a1a1a; }
+  /* FABs stay at screen bottom (z-index 75 > sheet 70) so Map/Done remain tappable over the sheet */
+
+  /* Thin always-visible peek when Tools sheet closed */
+  #edit-tools-peek{ display:none; }
+  body.editing:not(.panel-open) #edit-tools-peek{
+    display:flex; position:fixed; left:50%; transform:translateX(-50%);
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index:74;
+    align-items:center; justify-content:center; gap:6px;
+    min-height:28px; padding:6px 16px;
+    border:0; border-radius:999px 999px 0 0;
+    background:rgba(10,51,56,.92); color:#d5ecea;
+    font-size:13px; font-weight:700; letter-spacing:.02em;
+    box-shadow:0 -2px 12px rgba(0,0,0,.35);
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    pointer-events:auto;
+  }
+  body.editing.panel-open #edit-tools-peek{ display:none !important; }
+
+  /* Clear pan/zoom away from FABs */
+  body.editing .pan{ bottom:88px; left:8px; }
+  body.editing .zoom{ bottom:88px; right:8px; }
   body.editing.panel-open .pan,
   body.editing.panel-open .zoom{ opacity:.35; pointer-events:none; }
 }
@@ -245,6 +298,14 @@ body.editing #btn-multi-hdr{display:inline-block}
   .sheet-handle{ display:none !important; }
   #edit-chrome{ display:none !important; }
   #btn-panel-toggle{ display:none !important; }
+  #edit-fabs{ display:none !important; }
+  #edit-tools-peek{ display:none !important; }
+  /* Desktop: keep side panel in grid while editing; do not trap in sheet */
+  body.editing .layout{ display:grid; grid-template-columns:1fr 320px; }
+  body.editing aside{
+    position:relative; transform:none; pointer-events:auto;
+    max-height:none; box-shadow:none; border-radius:0;
+  }
 }
 
 
@@ -260,6 +321,7 @@ body.editing #btn-multi-hdr{display:inline-block}
   <button type="button" id="btn-save-m" title="Save">Save</button>
   <button type="button" id="btn-panel-toggle">Tools</button>
   <button type="button" id="edit-toggle-mobile" class="on">Done</button>
+  <div class="ec-coach" id="edit-coach">Tools = panel · drag docks · empty water pans</div>
   <div id="edit-sel-chip" class="ec-sel" hidden></div>
 </div>
 <div id="edit-sel-chip-desk" hidden></div>
@@ -287,7 +349,7 @@ body.editing #btn-multi-hdr{display:inline-block}
   <button type="button" class="btn" id="btn-multi-move">Move selected</button>
   <button type="button" class="btn" id="btn-multi-done">Done</button>
 </div>
-<div class="edit-banner">Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
+<div class="edit-banner">Edit: drag docks on the map · use the right panel (Dock / Layers) for tools · Undo/Redo/Save in the header. Empty water pans; pinch/zoom stays on the map.</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
 <div class="photo-op" id="photo-op-bar" title="Aerial photo overlay">
@@ -299,6 +361,7 @@ body.editing #btn-multi-hdr{display:inline-block}
 
 <div class="photo-align" id="photo-align-bar">
   <span>Align photo</span>
+  <span style="opacity:.85;font-size:12px">fills chart · pan/rotate without cropping</span>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
   <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
@@ -381,7 +444,14 @@ body.editing #btn-multi-hdr{display:inline-block}
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=62"></script>
-<script src="app.js?v=62"></script>
+
+<div id="edit-fabs" aria-label="Edit quick actions">
+  <button type="button" id="edit-fab-tools">Tools</button>
+  <button type="button" id="edit-fab-done">Done</button>
+</div>
+<button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
+
+<script src="app-data.js?v=63"></script>
+<script src="app.js?v=63"></script>
 </body>
 </html>
