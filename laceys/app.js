@@ -965,6 +965,7 @@ function setEditPanelOpen(on){
   document.body.classList.toggle("panel-open", !!on);
   const b=document.getElementById("btn-panel-toggle");
   if(b){ b.classList.toggle("on", !!on); b.textContent = on ? "Map" : "Tools"; }
+  requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); }catch(e){} });
 }
 function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:860px)").matches) setEditPanelOpen(true); }
 function isMobileEdit(){ return !!(window.matchMedia && window.matchMedia("(max-width:860px)").matches); }
@@ -975,17 +976,42 @@ document.getElementById("edit-toggle").onclick=()=>{
   chart.classList.toggle("editing",editing);
   document.getElementById("edit-toggle").classList.toggle("on",editing);
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
-  if(!editing){ multiPick=false; closeEditPanel(); }
+  const em=document.getElementById("edit-toggle-mobile");
+  if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
+  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
-        ? "Full-screen map · drag to edit · tap Tools for the panel"
+        ? "Full-screen map · drag docks · Tools opens panel · Done exits"
         : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · Multi-select or Select all to move")))
     : "Click a numbered slip · drag to pan";
   if(editing){ showTab("layout"); closeEditPanel(); /* map stays full-screen until Tools */ }
   updateSelHint(); redraw(); applyDeepZoomLod();
-  // reflow zoom after layout change
-  requestAnimationFrame(()=>{ try{ applyZoom(); }catch(e){} });
+  // reflow zoom after layout change + pin chrome height so map never covers Tools/Done
+  requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); applyZoom(); }catch(e){} });
 };
+
+function syncEditChromeHeight(){
+  const chrome=document.getElementById("edit-chrome");
+  if(!chrome || !document.body.classList.contains("editing")) return;
+  const h=Math.ceil(chrome.getBoundingClientRect().height);
+  if(h>0) document.documentElement.style.setProperty("--edit-chrome-h", h+"px");
+}
+function wireMobileEditChrome(){
+  const map={
+    "btn-undo-m":"btn-undo",
+    "btn-redo-m":"btn-redo",
+    "btn-save-m":"btn-save",
+    "edit-toggle-mobile":"edit-toggle"
+  };
+  Object.keys(map).forEach(id=>{
+    const src=document.getElementById(id);
+    const dst=document.getElementById(map[id]);
+    if(src && dst) src.onclick=()=> dst.click();
+  });
+  window.addEventListener("resize", ()=>{ if(document.body.classList.contains("editing")) syncEditChromeHeight(); });
+}
+wireMobileEditChrome();
+
 const _btnPanel=document.getElementById("btn-panel-toggle");
 if(_btnPanel) _btnPanel.onclick=()=> setEditPanelOpen(!document.body.classList.contains("panel-open"));
 const _btnSheetClose=document.getElementById("btn-sheet-close");
