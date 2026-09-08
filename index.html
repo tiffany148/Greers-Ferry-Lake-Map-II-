@@ -56,6 +56,11 @@
   .pw-form .actions { display:flex; gap:8px; justify-content:flex-end; }
   .pw-form button { border:0; border-radius:12px; padding:8px 14px; font-size:14px; background:#123447; color:var(--ink); }
   .pw-err { color:#ffd7de; font-size:12px; min-height:1em; }
+  .extra-fields { margin:0 0 8px; }
+  .marina-block { margin-top:8px; font-size:13px; line-height:1.35; }
+  .marina-block a { color:#7bdff2; }
+  .marina-svc { margin-top:4px; color:#c9dce8; }
+  .crowd-meta { font-size:11px; color:#9bb4c4; margin-top:4px; }
 
   .opacity-box {
     position:absolute; right:10px; bottom:calc(78px + var(--safe-bot)); z-index:800;
@@ -109,6 +114,8 @@
   <select id="pin-cat">
     <option>Shared</option>
     <option>My pins</option>
+    <option>Hazards</option>
+    <option>Water</option>
     <option>Cove</option>
     <option>Marina</option>
     <option>Park</option>
@@ -116,6 +123,19 @@
     <option>Town</option>
     <option>Infrastructure</option>
   </select>
+  <div id="extra-hazard" class="extra-fields" hidden>
+    <select id="hazard-type">
+      <option>Trees / logs</option>
+      <option>Shallow area</option>
+      <option>Rocks</option>
+      <option>Debris</option>
+      <option>Other hazard</option>
+    </select>
+  </div>
+  <div id="extra-water" class="extra-fields" hidden>
+    <input id="water-depth" type="number" inputmode="decimal" step="0.1" min="0" placeholder="Depth (ft)" />
+    <input id="water-temp" type="number" inputmode="decimal" step="0.1" placeholder="Water temp (°F)" />
+  </div>
   <textarea id="pin-fact" placeholder="Note (optional)"></textarea>
   <div class="actions">
     <button type="button" id="pin-delete" class="danger grow" hidden>Delete</button>
@@ -148,7 +168,7 @@ const PINS = [
   {name:"Fairfield Bay",lat:35.6050,lng:-92.2700,cat:"Town",fact:"West-arm resort community."},
   {name:"Edgemont",lat:35.6023,lng:-92.1963,cat:"Town",fact:"North of The Narrows."},
   {name:"The Narrows",lat:35.5511,lng:-92.1870,cat:"Landmark",fact:"Channel between the two basins."},
-  {name:"Lacey's Narrows Marina",lat:35.5596,lng:-92.1942,cat:"Marina",fact:"Service and slips on The Narrows."},
+  {name:"Lacey's Narrows Marina",lat:35.5596,lng:-92.1942,cat:"Marina",fact:"Full-service marina on The Narrows."},
   {name:"Shiloh Marina",lat:35.5392,lng:-92.1462,cat:"Marina",fact:"South-central arm."},
   {name:"Hill Creek Marina",lat:35.6078,lng:-92.1491,cat:"Marina",fact:"Devil's Fork arm."},
   {name:"Eden Isle Marina",lat:35.5013,lng:-92.0954,cat:"Marina",fact:"Near Heber Springs."},
@@ -164,7 +184,37 @@ const extra = (typeof COVE_PINS !== "undefined") ? COVE_PINS : [];
 const ALL = PINS.concat(extra.map(function(p){
   return {name:p.name,lat:p.lat,lng:p.lng,cat:p.category||"Cove",fact:p.fact||"",tip:p.tip||""};
 }));
-const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6","My pins":"#e07a5f",Shared:"#f4a261"};
+const COLORS = {Infrastructure:"#e8c98a",Park:"#4ecdc4",Marina:"#7bdff2",Landmark:"#c49a58",Town:"#f2d0a4",Cove:"#8ecae6","My pins":"#e07a5f",Shared:"#f4a261",Hazards:"#e63946",Water:"#457b9d"};
+const MARINA_INFO = {
+  "Lacey's Narrows Marina": {
+    address: "7674 Edgemont Road, Greers Ferry, AR 72067",
+    phone: "501-825-6214",
+    website: "https://www.laceysmarina.com/",
+    hours: "Ship store Mon–Fri 8am–5pm (call ahead weekends)",
+    services: ["Full-service marina","Boat sales & service","Covered slips","Fuel (24-hr pumps)","Pontoon / houseboat / WaveRunner rentals","Ship's store"]
+  },
+  "Shiloh Marina": {
+    address: "1350 Shiloh Road, Greers Ferry / Higden, AR 72067",
+    phone: "501-825-6237",
+    website: "https://www.shiloh-marina.com/",
+    hours: "Call for current hours",
+    services: ["Boat slips","Boat service","Pontoon rentals","Ramp / park access","Ship's store"]
+  },
+  "Hill Creek Marina": {
+    address: "500 Hill Creek Road, Edgemont, AR 72044",
+    phone: "870-948-2230",
+    website: "",
+    hours: "Call for current hours",
+    services: ["Boat slips","Launch ramp","Marina store"]
+  },
+  "Eden Isle Marina": {
+    address: "10 Yacht Harbor Road, Heber Springs, AR 72543",
+    phone: "501-362-2232",
+    website: "https://www.edenislemarina.com/",
+    hours: "Mon–Fri 9am–4pm (call ahead)",
+    services: ["Secure boat slips","Pontoon rentals","Boat sales","Ship's store / fuel & ice"]
+  }
+};
 function colorFor(cat){ return COLORS[cat] || "#c49a58"; }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]; }); }
 function stockKey(p){ return p.name+"|"+p.lat+"|"+p.lng; }
@@ -184,6 +234,8 @@ const FIREBASE_CONFIG = {
 let userPins = JSON.parse(localStorage.getItem(STORE_USER)||"[]");
 let overrides = JSON.parse(localStorage.getItem(STORE_OVR)||"{}");
 let sharedPins = [];
+let hazardPins = [];
+let waterPins = [];
 let sharedUnlocked = localStorage.getItem(STORE_UNLOCK) === "1";
 let sharedReady = false;
 let db = null;
@@ -207,7 +259,9 @@ function visiblePins(){
   }).filter(Boolean);
   const mine = userPins.map(function(p){ return Object.assign({kind:"user"}, p); });
   const shared = sharedPins.map(function(p){ return Object.assign({kind:"shared", cat:"Shared"}, p); });
-  return stock.concat(shared).concat(mine);
+  const hazards = hazardPins.map(function(p){ return Object.assign({kind:"hazard", cat:"Hazards"}, p); });
+  const water = waterPins.map(function(p){ return Object.assign({kind:"water", cat:"Water"}, p); });
+  return stock.concat(shared).concat(hazards).concat(water).concat(mine);
 }
 function sha256Hex(text){
   return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function(buf){
@@ -269,6 +323,25 @@ function initSharedDb(){
       sharedReady = true;
       renderPins();
     });
+    db.ref("hazards").on("value", function(snap){
+      const val = snap.val() || {};
+      hazardPins = Object.keys(val).map(function(id){
+        const p = val[id] || {};
+        return {id:id, name:p.name||p.hazardType||"Hazard", lat:+p.lat, lng:+p.lng, fact:p.fact||"", hazardType:p.hazardType||"Other hazard", updatedAt:p.updatedAt||0};
+      }).filter(function(p){ return !isNaN(p.lat) && !isNaN(p.lng); });
+      renderPins();
+    });
+    db.ref("water").on("value", function(snap){
+      const val = snap.val() || {};
+      waterPins = Object.keys(val).map(function(id){
+        const p = val[id] || {};
+        const bits = [];
+        if (p.depthFt != null && p.depthFt !== "") bits.push(p.depthFt + " ft");
+        if (p.tempF != null && p.tempF !== "") bits.push(p.tempF + " °F");
+        return {id:id, name:p.name||(bits.join(" · ")||"Water reading"), lat:+p.lat, lng:+p.lng, fact:p.fact||"", depthFt:p.depthFt, tempF:p.tempF, updatedAt:p.updatedAt||0};
+      }).filter(function(p){ return !isNaN(p.lat) && !isNaN(p.lng); });
+      renderPins();
+    });
   } catch (e) {
     console.warn("Shared pins init failed", e);
   }
@@ -282,6 +355,30 @@ function saveSharedPin(pin){
 function deleteSharedPin(id){
   if (!db) return Promise.reject(new Error("Shared sync not ready"));
   return db.ref("sharedPins/"+id).remove();
+}
+function saveHazardPin(pin){
+  if (!db) return Promise.reject(new Error("Sync not ready"));
+  const id = pin.id || ("h-"+Date.now());
+  const payload = {name:pin.name, hazardType:pin.hazardType||"Other hazard", lat:pin.lat, lng:pin.lng, fact:pin.fact||"", updatedAt: Date.now()};
+  return db.ref("hazards/"+id).set(payload).then(function(){ return id; });
+}
+function deleteHazardPin(id){
+  if (!db) return Promise.reject(new Error("Sync not ready"));
+  return db.ref("hazards/"+id).remove();
+}
+function saveWaterPin(pin){
+  if (!db) return Promise.reject(new Error("Sync not ready"));
+  const id = pin.id || ("w-"+Date.now());
+  const payload = {name:pin.name, lat:pin.lat, lng:pin.lng, fact:pin.fact||"", depthFt:pin.depthFt==null||pin.depthFt===""?null:Number(pin.depthFt), tempF:pin.tempF==null||pin.tempF===""?null:Number(pin.tempF), updatedAt: Date.now()};
+  return db.ref("water/"+id).set(payload).then(function(){ return id; });
+}
+function deleteWaterPin(id){
+  if (!db) return Promise.reject(new Error("Sync not ready"));
+  return db.ref("water/"+id).remove();
+}
+function formatWhen(ts){
+  if (!ts) return "";
+  try { return new Date(ts).toLocaleString(); } catch(e){ return ""; }
 }
 
 const map = L.map("map", { zoomControl:false, rotate:true, bearing:0, touchRotate:true, rotateControl:false }).fitBounds([[35.48,-92.36],[35.66,-91.97]]);
@@ -324,8 +421,35 @@ opacitySlider.oninput = setOverlays;
 let groups = {};
 const catsEl = document.getElementById("cats");
 const catOn = {};
+function marinaHtml(name){
+  const m = MARINA_INFO[name];
+  if (!m) return "";
+  let h = '<div class="marina-block">';
+  if (m.address) h += '<div>'+esc(m.address)+'</div>';
+  if (m.phone) h += '<div><a href="tel:'+esc(m.phone.replace(/[^0-9+]/g,''))+'">'+esc(m.phone)+'</a></div>';
+  if (m.hours) h += '<div>'+esc(m.hours)+'</div>';
+  if (m.website) h += '<div><a href="'+esc(m.website)+'" target="_blank" rel="noopener">Website</a></div>';
+  if (m.services && m.services.length) h += '<div class="marina-svc">'+esc(m.services.join(" · "))+'</div>';
+  return h+'</div>';
+}
 function popupHtml(p){
-  return "<b>"+esc(p.name)+"</b><br>"+esc(p.cat||"")+(p.fact?"<br>"+esc(p.fact):"")+(p.tip?"<br><i>"+esc(p.tip)+"</i>":"")+'<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button></div>';
+  let body = "<b>"+esc(p.name)+"</b><br>"+esc(p.cat||"");
+  if (p.kind==="hazard" && p.hazardType) body += "<br>"+esc(p.hazardType);
+  if (p.kind==="water") {
+    const bits = [];
+    if (p.depthFt != null && p.depthFt !== "") bits.push(p.depthFt+" ft deep");
+    if (p.tempF != null && p.tempF !== "") bits.push(p.tempF+" °F");
+    if (bits.length) body += "<br>"+esc(bits.join(" · "));
+  }
+  if (p.fact) body += "<br>"+esc(p.fact);
+  if (p.tip) body += "<br><i>"+esc(p.tip)+"</i>";
+  if (p.cat==="Marina" || (p.kind==="stock" && MARINA_INFO[p.name])) body += marinaHtml(p.name);
+  if ((p.kind==="hazard"||p.kind==="water") && p.updatedAt) body += '<div class="crowd-meta">Updated '+esc(formatWhen(p.updatedAt))+'</div>';
+  const canEdit = p.kind!=="stock" || true;
+  const actions = (p.kind==="stock" && p.cat==="Marina")
+    ? '<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button></div>'
+    : '<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button></div>';
+  return body+actions;
 }
 function bindPopupActions(marker, p){
   marker.on("popupopen", function(){
@@ -466,21 +590,34 @@ function closePinForm(){
   pinDelete.hidden = true;
   document.getElementById("pin-move").hidden = true;
 }
+function syncExtraFields(){
+  const cat = pinCat.value;
+  document.getElementById("extra-hazard").hidden = cat !== "Hazards";
+  document.getElementById("extra-water").hidden = cat !== "Water";
+}
 function openPinForm(p){
   editing = p;
   pinFormTitle.textContent = p.kind==="new" ? "Drop a pin" : "Edit pin";
   pinName.value = p.name || "";
-  var preferred = p.kind==="shared" ? "Shared" : (p.kind==="new" ? (sharedUnlocked ? "Shared" : "My pins") : (p.cat || "My pins"));
+  var preferred = p.kind==="shared" ? "Shared"
+    : p.kind==="hazard" ? "Hazards"
+    : p.kind==="water" ? "Water"
+    : (p.kind==="new" ? (sharedUnlocked ? "Shared" : "My pins") : (p.cat || "My pins"));
   pinCat.value = preferred;
   if (![].some.call(pinCat.options, function(o){ return o.value===pinCat.value; })) {
     pinCat.value = "My pins";
   }
+  document.getElementById("hazard-type").value = p.hazardType || "Trees / logs";
+  document.getElementById("water-depth").value = (p.depthFt!=null && p.depthFt!=="") ? p.depthFt : "";
+  document.getElementById("water-temp").value = (p.tempF!=null && p.tempF!=="") ? p.tempF : "";
   pinFact.value = p.fact || p.tip || "";
   pinDelete.hidden = p.kind==="new";
   document.getElementById("pin-move").hidden = p.kind==="new";
+  syncExtraFields();
   pinForm.classList.add("open");
   pinName.focus();
 }
+pinCat.onchange = syncExtraFields;
 function beginMove(p){
   closePinForm();
   placing = false;
@@ -493,6 +630,14 @@ function movePinTo(p, ll){
       if (!ok) return;
       saveSharedPin({id:p.id, name:p.name, lat:ll.lat, lng:ll.lng, fact:p.fact||""}).catch(function(err){ alert("Could not move shared pin"); console.warn(err); });
     });
+    return;
+  }
+  if (p.kind==="hazard") {
+    saveHazardPin({id:p.id, name:p.name, hazardType:p.hazardType, lat:ll.lat, lng:ll.lng, fact:p.fact||""}).catch(function(err){ alert("Could not move hazard"); console.warn(err); });
+    return;
+  }
+  if (p.kind==="water") {
+    saveWaterPin({id:p.id, name:p.name, depthFt:p.depthFt, tempF:p.tempF, lat:ll.lat, lng:ll.lng, fact:p.fact||""}).catch(function(err){ alert("Could not move water reading"); console.warn(err); });
     return;
   }
   if (p.kind==="user") {
@@ -520,6 +665,14 @@ function removePin(p){
       if (!ok) return;
       deleteSharedPin(p.id).then(function(){ closePinForm(); }).catch(function(err){ alert("Could not delete shared pin"); console.warn(err); });
     });
+    return;
+  }
+  if (p.kind==="hazard") {
+    deleteHazardPin(p.id).then(function(){ closePinForm(); }).catch(function(err){ alert("Could not delete hazard"); console.warn(err); });
+    return;
+  }
+  if (p.kind==="water") {
+    deleteWaterPin(p.id).then(function(){ closePinForm(); }).catch(function(err){ alert("Could not delete water reading"); console.warn(err); });
     return;
   }
   if (p.kind==="user") userPins = userPins.filter(function(x){ return x.id !== p.id; });
@@ -553,26 +706,49 @@ document.getElementById("btn-unlock-shared").onclick = function(){
   requireSharedUnlock();
 };
 document.getElementById("pin-save").onclick = function(){
-  const name = pinName.value.trim();
-  if (!name) return;
   const cat = pinCat.value || "My pins";
+  let name = pinName.value.trim();
   const fact = pinFact.value.trim();
+  const hazardType = document.getElementById("hazard-type").value;
+  const depthFt = document.getElementById("water-depth").value;
+  const tempF = document.getElementById("water-temp").value;
+  if (!name && cat!=="Water" && cat!=="Hazards") return;
+  if (!name && cat==="Hazards") name = hazardType;
+  if (!name && cat==="Water") name = ([depthFt?depthFt+" ft":"", tempF?tempF+" °F":""].filter(Boolean).join(" · ") || "Water reading");
   const finishLocal = function(){
     persistPins();
     closePinForm();
     renderPins();
   };
+  const ll = (editing && editing.lat!=null) ? {lat:editing.lat,lng:editing.lng} : map.getCenter();
+  if (!db && (cat==="Shared" || cat==="Hazards" || cat==="Water" || (editing && (editing.kind==="shared"||editing.kind==="hazard"||editing.kind==="water")))) {
+    alert("Online sync is still connecting. Try again in a moment.");
+    return;
+  }
   const asShared = cat === "Shared" || (editing && editing.kind==="shared" && cat==="Shared");
   if (asShared) {
     requireSharedUnlock().then(function(ok){
       if (!ok) return;
-      if (!db) { alert("Shared sync is still being set up. Try again in a bit."); return; }
-      const ll = (editing && editing.lat!=null) ? {lat:editing.lat,lng:editing.lng} : map.getCenter();
       const id = (editing && editing.kind==="shared") ? editing.id : null;
       saveSharedPin({id:id, name:name, lat:ll.lat, lng:ll.lng, fact:fact}).then(function(){
         closePinForm();
       }).catch(function(err){ alert("Could not save shared pin"); console.warn(err); });
     });
+    return;
+  }
+  if (cat === "Hazards" || (editing && editing.kind==="hazard" && cat==="Hazards")) {
+    const id = (editing && editing.kind==="hazard") ? editing.id : null;
+    saveHazardPin({id:id, name:name, hazardType:hazardType, lat:ll.lat, lng:ll.lng, fact:fact}).then(function(){
+      closePinForm();
+    }).catch(function(err){ alert("Could not save hazard"); console.warn(err); });
+    return;
+  }
+  if (cat === "Water" || (editing && editing.kind==="water" && cat==="Water")) {
+    if (depthFt==="" && tempF==="") { alert("Add a depth and/or water temperature"); return; }
+    const id = (editing && editing.kind==="water") ? editing.id : null;
+    saveWaterPin({id:id, name:name, depthFt:depthFt, tempF:tempF, lat:ll.lat, lng:ll.lng, fact:fact}).then(function(){
+      closePinForm();
+    }).catch(function(err){ alert("Could not save water reading"); console.warn(err); });
     return;
   }
   if (!editing || editing.kind==="new") {
