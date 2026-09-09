@@ -30,6 +30,7 @@ svg{transform-origin:0 0}
 .slip rect{stroke:#3a4342;stroke-width:.5}
 .slip.on rect{stroke:#fff;stroke-width:2}
 .slip.dim{opacity:.2}
+.slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
 .slip text,.slip-num,.dock-name-label,.screen-label{pointer-events:none;font-weight:800}
 .slip-num,.dock-name-label,.screen-label{paint-order:stroke;stroke-linejoin:round}
 .dock-hit{cursor:grab}
@@ -399,7 +400,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
 </div>
 
-<div class="label-size-bar" id="label-size-bar" title="Slip number on-screen size (independent of map zoom)">
+<div class="label-size-bar" id="label-size-bar" hidden title="Slip number on-screen size (independent of map zoom)">
   <span>Label size</span>
   <select id="label-size" aria-label="Slip label size">
     <option value="small">Small</option>
@@ -519,7 +520,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=67"></script>
-<script src="app.js?v=67"></script>
+<script src="app-data.js?v=68"></script>
+<script src="app.js?v=68"></script>
 </body>
 </html>

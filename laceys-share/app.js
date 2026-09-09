@@ -142,8 +142,8 @@ let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
 const PHOTO_ALIGN_STORE="laceys-share-photo-align-v1";
 const LABEL_SIZE_STORE="laceys-share-label-size-v1";
-const LABEL_PX={small:10,normal:12,large:14,xl:18};
-let labelSizeKey="normal";
+const LABEL_PX={classic:9,small:10,normal:12,large:14,xl:18};
+let labelSizeKey="classic";
 let photoMoveMode=false;
 let dockAlignMode=false;
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
@@ -178,57 +178,28 @@ function saveLabelSize(){
   try{ localStorage.setItem(LABEL_SIZE_STORE, labelSizeKey); }catch(e){}
 }
 function targetLabelPx(){ return LABEL_PX[labelSizeKey]||12; }
-/** World/user-unit font size so labels stay ~target CSS px on screen (scale is svg CSS transform). */
+/** Classic chart fonts (pre v66) — world units, not screen-boosted. */
 function screenAwareFontSize(worldBase){
-  const need=targetLabelPx()/Math.max(1e-6, scale||1);
-  // Never smaller than the designed world size when zoomed in; grow when zoomed out / layout scaled down
-  return Math.round(Math.max(Number(worldBase)||9, Math.min(96, need))*10)/10;
+  return Number(worldBase)||9;
 }
-function labelStrokeWidth(fs){
-  // ~2–3 CSS px outline, in user units
-  return Math.round(Math.max(0.8, Math.min(8, (targetLabelPx()*0.22)/Math.max(1e-6, scale||1)))*100)/100;
-}
+function labelStrokeWidth(fs){ return 0; }
 function slipLabelAttrs(x,y,worldBase){
-  const fs=screenAwareFontSize(worldBase);
-  const sw=labelStrokeWidth(fs);
+  const fs=Number(worldBase)||9;
   return {
     x, y, "text-anchor":"middle",
-    fill:"#0a1210", stroke:"#f4fffe", "stroke-width":String(sw),
-    "paint-order":"stroke", "font-size":String(fs), "font-weight":"800",
+    fill:"#1b2423", "font-size":String(fs), "font-weight":"700",
     class:"slip-num"
   };
 }
 function dockNameLabelAttrs(x,y,worldBase){
-  const fs=screenAwareFontSize(worldBase);
-  const sw=labelStrokeWidth(fs);
+  const fs=Number(worldBase)||14;
   return {
-    x, y, fill:"#0a1210", stroke:"#f4fffe", "stroke-width":String(sw),
-    "paint-order":"stroke", "font-size":String(fs), "font-weight":"800",
+    x, y, fill:"#d7eceb", "font-size":String(fs), "font-weight":"700",
     class:"dock-name-label"
   };
 }
 function syncLabelFonts(){
-  try{
-    const slipFs=screenAwareFontSize(9);
-    const slipSw=labelStrokeWidth(slipFs);
-    svg.querySelectorAll("text.slip-num").forEach(t=>{
-      t.setAttribute("font-size", String(slipFs));
-      t.setAttribute("stroke-width", String(slipSw));
-    });
-    const dockFs=screenAwareFontSize(14);
-    const dockSw=labelStrokeWidth(dockFs);
-    svg.querySelectorAll("text.dock-name-label").forEach(t=>{
-      t.setAttribute("font-size", String(dockFs));
-      t.setAttribute("stroke-width", String(dockSw));
-    });
-    // Mark text / pill labels that opted in
-    svg.querySelectorAll("text.screen-label").forEach(t=>{
-      const base=Number(t.getAttribute("data-world-fs"))||13;
-      const fs=screenAwareFontSize(base);
-      t.setAttribute("font-size", String(fs));
-      t.setAttribute("stroke-width", String(labelStrokeWidth(fs)));
-    });
-  }catch(e){}
+  // Classic sizing — leave draw-time font-size alone (no zoom boost)
 }
 loadLabelSize();
 function applyPhotoAlign(){
