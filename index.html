@@ -86,7 +86,8 @@
 <div id="map"></div>
 <div id="sheet" class="sheet" role="dialog" aria-label="Map layers">
   <h2>Base map</h2>
-  <label class="row"><input type="radio" name="base" value="satellite" checked /> Satellite</label>
+  <label class="row"><input type="radio" name="base" value="auto" checked /> Auto (topo to satellite)</label>
+  <label class="row"><input type="radio" name="base" value="satellite" /> Satellite</label>
   <label class="row"><input type="radio" name="base" value="streets" /> Streets</label>
   <label class="row"><input type="radio" name="base" value="topo" /> Topo</label>
   <h2>Historical overlay</h2>
@@ -385,12 +386,44 @@ const map = L.map("map", { zoomControl:false, rotate:true, bearing:0, touchRotat
 L.control.zoom({ position:"bottomleft" }).addTo(map);
 L.control.scale({ imperial:true, metric:false }).addTo(map);
 const layers = {
-  satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom:19, attribution:"Esri" }),
+  satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom:19, attribution:"Esri", opacity:0 }),
   streets: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"OSM" }),
   topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom:17, attribution:"OTM" })
 };
-let base = "satellite";
-layers.satellite.addTo(map);
+let base = "auto";
+function clearBaseLayers(){
+  Object.keys(layers).forEach(function(k){
+    if (map.hasLayer(layers[k])) map.removeLayer(layers[k]);
+  });
+}
+function autoSatOpacity(z){
+  if (z <= 12) return 0;
+  if (z >= 15) return 1;
+  return (z - 12) / 3;
+}
+function applyAutoBase(){
+  if (!map.hasLayer(layers.topo)) layers.topo.addTo(map);
+  if (!map.hasLayer(layers.satellite)) layers.satellite.addTo(map);
+  // keep topo under satellite
+  if (layers.topo.bringToBack) layers.topo.bringToBack();
+  if (layers.satellite.bringToFront) layers.satellite.bringToFront();
+  layers.topo.setOpacity(1);
+  layers.satellite.setOpacity(autoSatOpacity(map.getZoom()));
+}
+function setBaseMode(mode){
+  base = mode;
+  clearBaseLayers();
+  if (mode === "auto") {
+    applyAutoBase();
+    return;
+  }
+  layers[mode].setOpacity(1);
+  layers[mode].addTo(map);
+}
+setBaseMode("auto");
+map.on("zoom zoomend", function(){
+  if (base === "auto") applyAutoBase();
+});
 
 const hist = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}", {
   maxZoom:15, opacity:0.55, attribution:"Esri / USGS historic topo"
@@ -494,9 +527,7 @@ initSharedDb();
 
 document.querySelectorAll('input[name="base"]').forEach(function(r){
   r.onchange = function(){
-    map.removeLayer(layers[base]);
-    base = this.value;
-    layers[base].addTo(map);
+    setBaseMode(this.value);
   };
 });
 
