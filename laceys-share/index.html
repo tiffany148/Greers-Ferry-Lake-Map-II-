@@ -175,7 +175,6 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   body.editing .chips,
   body.editing .photo-op,
   body.editing .photo-align,
-  body.editing .label-size-bar,
   body.editing .kicker,
   body.editing .multi-bar,
   body.editing .share-banner,
@@ -400,15 +399,16 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
 </div>
 
-<div class="label-size-bar" id="label-size-bar" hidden title="Slip number on-screen size (independent of map zoom)">
+<div class="label-size-bar" id="label-size-bar" title="Slip number on-screen size (independent of map zoom)">
   <span>Label size</span>
   <select id="label-size" aria-label="Slip label size">
     <option value="small">Small</option>
+    <option value="classic">Classic</option>
     <option value="normal" selected>Normal</option>
     <option value="large">Large</option>
     <option value="xl">XL</option>
   </select>
-  <span style="opacity:.85;font-size:12px">stays readable when zoomed out</span>
+  <span style="opacity:.85;font-size:12px">changes slip number size on the chart</span>
 </div>
 <div class="photo-align" id="photo-align-bar">
   <span>Align</span>
@@ -519,7 +519,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=70"></script>
-<script src="app.js?v=70"></script>
+<script src="app-data.js?v=71"></script>
+<script src="app.js?v=71"></script>
 </body>
 </html>
