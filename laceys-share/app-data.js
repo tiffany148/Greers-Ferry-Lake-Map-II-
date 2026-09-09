@@ -1,5 +1,5 @@
-const STORE="laceys-share-slips-v1";
-const LAYOUT_STORE="laceys-share-layout-v1";
+const STORE="laceys-view-slips-v1";
+const LAYOUT_STORE="laceys-view-layout-v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();

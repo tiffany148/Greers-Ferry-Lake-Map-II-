@@ -3,6 +3,9 @@ window.addEventListener("error",function(ev){
   var b=document.getElementById("error-banner");
   if(b){ b.style.display="block"; b.textContent="JavaScript error: "+(ev && ev.message ? ev.message : "unknown"); }
 });
+
+const VIEW_ONLY=true;
+function blockEdit(){ if(VIEW_ONLY){ alert("This is a view-only chart. You can switch and hide/show layers, but docks and slips stay fixed."); return true; } return false; }
 function walkGeomFromDock(d){
   if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
   if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
@@ -140,7 +143,7 @@ function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|
 let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0}; // overlay registration vs chart
-const PHOTO_ALIGN_STORE="laceys-share-photo-align-v1";
+const PHOTO_ALIGN_STORE="laceys-view-photo-align-v1";
 
 function clampPhotoScale(v){ return Math.max(0.2, Math.min(3, Number(v)||1)); }
 /** Normalize saved align: old `scale` → both axes; prefer scaleX/scaleY when present. */
@@ -161,7 +164,7 @@ function normalizePhotoAlign(raw){
 function syncPhotoAlignScaleAvg(){
   photoAlign.scale = clampPhotoScale(((Number(photoAlign.scaleX)||1)+(Number(photoAlign.scaleY)||1))/2);
 }
-const LABEL_SIZE_STORE="laceys-share-label-size-v1";
+const LABEL_SIZE_STORE="laceys-view-label-size-v1";
 const LABEL_PX={classic:9,small:10,normal:12,large:14,xl:18};
 let labelSizeKey="classic";
 let photoMoveMode=false;
@@ -266,13 +269,13 @@ function applyPhotoAlign(){
 
 function loadLayersStandalone(){
   try{
-    const raw=JSON.parse(localStorage.getItem("laceys-share-layers-v1")||"null");
+    const raw=JSON.parse(localStorage.getItem("laceys-view-layers-v1")||"null");
     return Array.isArray(raw)?raw:[];
   }catch{return [];}
 }
 function loadLayout(){
   try{
-    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
+    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||localStorage.getItem("laceys-layout-v2")||localStorage.getItem("laceys-layout-v1")||"null");
     if(!raw||!Array.isArray(raw.docks)||!raw.docks.length){
       return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};
     }
@@ -302,7 +305,7 @@ function restoreSnap(s){
   if(raw.photoMax!=null) photoMax=Math.max(0, Math.min(1, Number(raw.photoMax)));
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-view-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
   redraw(); applyPhotoAlign(); applyDeepZoomLod(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible(); renderLayersEditor(); renderChips();
 }
@@ -892,6 +895,15 @@ function renderDockEditor(){
 function renderSlipLayerAssigns(slipId){
   const box=document.getElementById("slip-layer-assigns");
   if(!box) return;
+  if(VIEW_ONLY){
+    if(!layers.length||!activeLayerId){ box.innerHTML=""; return; }
+    const layer=layers.find(l=>l.id===activeLayerId);
+    const rec=data[slipId]||{};
+    const optId=(rec.layerOpts||{})[activeLayerId];
+    const opt=layer && (layer.options||[]).find(o=>o.id===optId);
+    box.innerHTML="<p class=\"hint\" style=\"margin-top:10px\">"+ (layer?layer.name:"Layer") +": <b>"+(opt?opt.name:"Unassigned")+"</b></p>";
+    return;
+  }
   if(!layers.length){ box.innerHTML=""; return; }
   const rec=data[slipId]||{};
   const opts=rec.layerOpts||{};
@@ -1454,8 +1466,8 @@ window.addEventListener("resize",()=>{
   // Keep current relative zoom band sane after rotate/resize
   if(scale<minZoomScale()) { scale=minZoomScale(); applyZoom(); }
 });
-document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return;data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
-["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return;data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
+document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return; if(VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
+["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return; if(VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
 document.getElementById("q").addEventListener("input",function(){const hit=slips.find(s=>String(s.num)===this.value.trim());if(hit)select(hit.id);});
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
@@ -1473,6 +1485,7 @@ function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:
 function isMobileEdit(){ return !!(window.matchMedia && window.matchMedia("(max-width:860px)").matches); }
 function closeEditPanel(){ setEditPanelOpen(false); }
 document.getElementById("edit-toggle").onclick=()=>{
+  if(VIEW_ONLY){ blockEdit(); return; }
   editing=!editing;
   document.body.classList.toggle("editing",editing);
   chart.classList.toggle("editing",editing);
@@ -1537,6 +1550,7 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
 })();
 
 function setPhotoMoveMode(on){
+  if(VIEW_ONLY && on){ blockEdit(); return; }
   photoMoveMode=!!on;
   if(photoMoveMode && dockAlignMode) setDockAlignMode(false);
   if(!photoMoveMode){
@@ -1560,6 +1574,7 @@ function setPhotoMoveMode(on){
   chart.style.cursor=photoMoveMode?"move":(dockAlignMode?"grab":"");
 }
 function setDockAlignMode(on){
+  if(VIEW_ONLY && on){ blockEdit(); return; }
   dockAlignMode=!!on;
   if(dockAlignMode){
     if(photoMoveMode) setPhotoMoveMode(false);
@@ -1752,7 +1767,7 @@ function restoreOriginalChart(){
 }
 function showLayoutTipBannerOnce(){
   try{
-    if(localStorage.getItem('laceys-share-v67-layout-tip')) return;
+    if(localStorage.getItem('laceys-v67-layout-tip')) return;
   }catch(e){}
   const ban=document.getElementById('layout-tip-banner');
   if(!ban) return;
@@ -1760,14 +1775,14 @@ function showLayoutTipBannerOnce(){
   const d=document.getElementById('layout-tip-dismiss');
   if(d) d.onclick=()=>{
     ban.style.display='none';
-    try{ localStorage.setItem('laceys-share-v67-layout-tip','1'); }catch(e){}
+    try{ localStorage.setItem('laceys-v67-layout-tip','1'); }catch(e){}
   };
 }
 
 document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
 
 (function wireRestoreButtons(){
-  const rc=document.getElementById('btn-reset-cruiser');
+  const rc=document.getElementById('btn-reset-cruiser') /* view-guarded */;
   if(rc) rc.onclick=()=>resetCruiserDock();
   const ro=document.getElementById('btn-restore-original');
   if(ro) ro.onclick=()=>restoreOriginalChart();
@@ -1828,7 +1843,8 @@ function ensureMapVisible(){
       groups=[];
       try{
         localStorage.removeItem(LAYOUT_STORE);
-        /* share isolated — never touch main laceys-layout keys */
+        localStorage.removeItem("laceys-layout-v2");
+        localStorage.removeItem("laceys-layout-v1");
       }catch(e){}
       saveLayout(false);
       buildSlips();
@@ -1895,17 +1911,87 @@ function saveNow(){
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
   localStorage.setItem(LAYOUT_STORE, s);
+  try{ localStorage.setItem("laceys-layout-v2", s); }catch(e){}
   saveLayersStore();
   lastSnap=s;
   flashSave("Saved on this device · Download JSON for a backup copy");
 }
 
 function saveLayersStore(){
-  try{ localStorage.setItem("laceys-share-layers-v1", JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-view-layers-v1", JSON.stringify(layers)); }catch(e){}
 }
 function renderLayersEditor(){
   const box=document.getElementById("layers-editor");
   if(!box) return;
+  if(VIEW_ONLY){
+    if(!layers.length){
+      box.innerHTML="<p class=\"hint\">No layers on this chart.</p>";
+      return;
+    }
+    box.innerHTML="<p class=\"hint\">View only — pick a layer to color the map, and use 👁 to hide/show options.</p>"+layers.map(layer=>{
+      const on=activeLayerId===layer.id;
+      const layerHidden=!!layer.hidden;
+      const opts=(layer.options||[]).map(o=>`
+      <div class="opt" data-layer="${layer.id}" data-opt="${o.id}">
+        <button type="button" class="btn eye ${o.hidden?"off":""}" data-hide-opt title="${o.hidden?"Show":"Hide"}">${o.hidden?"🙈":"👁"}</button>
+        <span style="width:18px;height:18px;border-radius:4px;background:${o.color||"#ccc"};display:inline-block"></span>
+        <span style="flex:1">${o.name||"Option"}</span>
+      </div>`).join("");
+      return `<div class="layer-card" data-layer-card="${layer.id}" style="${layerHidden?"opacity:.55":""}">
+      <h3>
+        <button type="button" class="btn eye ${layerHidden?"off":""}" data-hide-layer title="${layerHidden?"Show layer":"Hide layer"}">${layerHidden?"🙈":"👁"}</button>
+        <span style="flex:1;font-weight:650">${layer.name||"Layer"}</span>
+        <button type="button" class="btn ${on?"on":""}" data-use-layer>${on?"Coloring on":"View layer"}</button>
+      </h3>
+      <div class="opt" data-unassigned="${layer.id}">
+        <span style="flex:1">Unassigned slips</span>
+        <button type="button" class="btn eye ${layer.hideUnassigned?"off":""}" data-hide-unassigned>${layer.hideUnassigned?"🙈 Hidden":"👁 Visible"}</button>
+      </div>
+      ${opts}
+    </div>`;
+    }).join("");
+    box.querySelectorAll("[data-use-layer]").forEach(btn=>{
+      btn.onclick=()=>{
+        const id=btn.closest("[data-layer-card]").dataset.layerCard;
+        const layer=layers.find(l=>l.id===id);
+        if(layer && layer.hidden){ layer.hidden=false; }
+        activeLayerId = activeLayerId===id ? null : id;
+        layerOptFilter="All";
+        saveLayersStore();
+        renderLayersEditor(); renderChips(); redraw();
+      };
+    });
+    box.querySelectorAll("[data-hide-layer]").forEach(btn=>{
+      btn.onclick=()=>{
+        const id=btn.closest("[data-layer-card]").dataset.layerCard;
+        const layer=layers.find(l=>l.id===id); if(!layer) return;
+        layer.hidden=!layer.hidden;
+        activeLayerId=id;
+        layerOptFilter="All";
+        saveLayersStore(); renderLayersEditor(); renderChips(); redraw();
+      };
+    });
+    box.querySelectorAll("[data-hide-unassigned]").forEach(btn=>{
+      btn.onclick=()=>{
+        const id=btn.closest("[data-unassigned]").dataset.unassigned;
+        const layer=layers.find(l=>l.id===id); if(!layer) return;
+        layer.hideUnassigned=!layer.hideUnassigned;
+        if(activeLayerId!==id){ activeLayerId=id; layerOptFilter="All"; }
+        saveLayersStore(); renderLayersEditor(); renderChips(); redraw();
+      };
+    });
+    box.querySelectorAll("[data-hide-opt]").forEach(btn=>{
+      btn.onclick=()=>{
+        const row=btn.closest(".opt");
+        const layer=layers.find(l=>l.id===row.dataset.layer); if(!layer) return;
+        const opt=(layer.options||[]).find(o=>o.id===row.dataset.opt); if(!opt) return;
+        opt.hidden=!opt.hidden;
+        if(activeLayerId!==layer.id){ activeLayerId=layer.id; layerOptFilter="All"; }
+        saveLayersStore(); renderLayersEditor(); renderChips(); redraw();
+      };
+    });
+    return;
+  }
   if(!layers.length){
     box.innerHTML="<p class=\"hint\">No custom layers yet. Add one to color-code slips (Power, Lease, Season, …).</p>";
     return;
@@ -2024,6 +2110,7 @@ function renderLayersEditor(){
   });
 }
 document.getElementById("add-layer").onclick=()=>{
+  if(VIEW_ONLY){ blockEdit(); return; }
   const name=prompt("Layer name?","Power");
   if(name==null) return;
   layers.push({
@@ -2039,12 +2126,12 @@ document.getElementById("add-layer").onclick=()=>{
 };
 document.getElementById("btn-undo").onclick=()=>undo();
 document.getElementById("btn-redo").onclick=()=>redo();
-document.getElementById("btn-save").onclick=()=>saveNow();
+document.getElementById("btn-save").onclick=()=>{ if(VIEW_ONLY){ saveLayersStore(); flashSave("Layer view saved on this device"); return; } saveNow(); };
 document.getElementById("btn-print").onclick=()=>printChart();
 const _fixBlank=document.getElementById("btn-reset-blank");
 if(_fixBlank) _fixBlank.onclick=()=>{
   if(!confirm("Restore the built-in Lacey\'s dock layout? (clears blank/corrupt offline save on this file)")) return;
-  try{ localStorage.removeItem(LAYOUT_STORE); /* share isolated */ }catch(e){}
+  try{ localStorage.removeItem(LAYOUT_STORE); localStorage.removeItem("laceys-layout-v2"); localStorage.removeItem("laceys-layout-v1"); }catch(e){}
   docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=[]; layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
   multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
 };
@@ -2122,3 +2209,28 @@ const _strip=document.getElementById("strip-cover"); if(_strip) _strip.addEventL
   if(sanitizeLayout()){ saveLayout(); redraw(); renderDockEditor(); alert("Cleared oversized covers."); }
   else alert("Nothing oversized found. Select the orange piece and Delete it.");
 });
+
+/* ---- view-only hard guards ---- */
+if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){
+  editing=false;
+  document.body.classList.remove("editing");
+  const et=document.getElementById("edit-toggle"); if(et){ et.hidden=true; et.onclick=()=>{ blockEdit(); }; }
+  const etm=document.getElementById("edit-toggle-mobile"); if(etm) etm.onclick=()=>{ blockEdit(); };
+  ["btn-photo-move","btn-dock-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
+   "photo-reset-align","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
+   "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all",
+   "btn-group-all","btn-group","btn-ungroup","strip-cover","btn-save-layout","add-layer"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.addEventListener("click", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+  });
+  ["photo-scale-x","photo-scale-y","photo-rot"].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.addEventListener("input", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+    el.addEventListener("change", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+  });
+  const boat=document.getElementById("boat"); if(boat) boat.readOnly=true;
+  const notes=document.getElementById("notes"); if(notes) notes.readOnly=true;
+}
+
