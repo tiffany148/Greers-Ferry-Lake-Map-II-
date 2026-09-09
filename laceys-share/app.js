@@ -141,9 +141,16 @@ let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
 const PHOTO_ALIGN_STORE="laceys-share-photo-align-v1";
+const LABEL_SIZE_STORE="laceys-share-label-size-v1";
+const LABEL_PX={small:10,normal:12,large:14,xl:18};
+let labelSizeKey="normal";
 let photoMoveMode=false;
+let dockAlignMode=false;
+let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
 let photoDrag=null;
+let dockAlignDrag=null;
 const photoPointers=new Map(); // pinch while moving photo
+const dockAlignPointers=new Map();
 
 function loadPhotoAlign(){
   try{
@@ -161,6 +168,69 @@ function loadPhotoAlign(){
 function savePhotoAlign(){
   try{ localStorage.setItem(PHOTO_ALIGN_STORE, JSON.stringify(photoAlign)); }catch(e){}
 }
+function loadLabelSize(){
+  try{
+    const raw=localStorage.getItem(LABEL_SIZE_STORE);
+    if(raw && LABEL_PX[raw]!=null) labelSizeKey=raw;
+  }catch(e){}
+}
+function saveLabelSize(){
+  try{ localStorage.setItem(LABEL_SIZE_STORE, labelSizeKey); }catch(e){}
+}
+function targetLabelPx(){ return LABEL_PX[labelSizeKey]||12; }
+/** World/user-unit font size so labels stay ~target CSS px on screen (scale is svg CSS transform). */
+function screenAwareFontSize(worldBase){
+  const need=targetLabelPx()/Math.max(1e-6, scale||1);
+  // Never smaller than the designed world size when zoomed in; grow when zoomed out / layout scaled down
+  return Math.round(Math.max(Number(worldBase)||9, Math.min(96, need))*10)/10;
+}
+function labelStrokeWidth(fs){
+  // ~2–3 CSS px outline, in user units
+  return Math.round(Math.max(0.8, Math.min(8, (targetLabelPx()*0.22)/Math.max(1e-6, scale||1)))*100)/100;
+}
+function slipLabelAttrs(x,y,worldBase){
+  const fs=screenAwareFontSize(worldBase);
+  const sw=labelStrokeWidth(fs);
+  return {
+    x, y, "text-anchor":"middle",
+    fill:"#0a1210", stroke:"#f4fffe", "stroke-width":String(sw),
+    "paint-order":"stroke", "font-size":String(fs), "font-weight":"800",
+    class:"slip-num"
+  };
+}
+function dockNameLabelAttrs(x,y,worldBase){
+  const fs=screenAwareFontSize(worldBase);
+  const sw=labelStrokeWidth(fs);
+  return {
+    x, y, fill:"#0a1210", stroke:"#f4fffe", "stroke-width":String(sw),
+    "paint-order":"stroke", "font-size":String(fs), "font-weight":"800",
+    class:"dock-name-label"
+  };
+}
+function syncLabelFonts(){
+  try{
+    const slipFs=screenAwareFontSize(9);
+    const slipSw=labelStrokeWidth(slipFs);
+    svg.querySelectorAll("text.slip-num").forEach(t=>{
+      t.setAttribute("font-size", String(slipFs));
+      t.setAttribute("stroke-width", String(slipSw));
+    });
+    const dockFs=screenAwareFontSize(14);
+    const dockSw=labelStrokeWidth(dockFs);
+    svg.querySelectorAll("text.dock-name-label").forEach(t=>{
+      t.setAttribute("font-size", String(dockFs));
+      t.setAttribute("stroke-width", String(dockSw));
+    });
+    // Mark text / pill labels that opted in
+    svg.querySelectorAll("text.screen-label").forEach(t=>{
+      const base=Number(t.getAttribute("data-world-fs"))||13;
+      const fs=screenAwareFontSize(base);
+      t.setAttribute("font-size", String(fs));
+      t.setAttribute("stroke-width", String(labelStrokeWidth(fs)));
+    });
+  }catch(e){}
+}
+loadLabelSize();
 function applyPhotoAlign(){
   if(!bgImg) return;
   const userS=Math.max(0.2, Math.min(3, Number(photoAlign.scale)||1));
@@ -450,9 +520,52 @@ function allLayoutKeys(){ return docks.map(d=>"dock:"+d.id).concat(marks.map(m=>
 function clearLayerNudge(){
   [layerBg, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.removeAttribute("transform"); });
 }
-function nudgeLayers(dx,dy){
-  const t=`translate(${dx} ${dy})`;
-  [layerBg, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.setAttribute("transform", t); });
+function nudgeLayers(dx,dy,scaleF,cx,cy){
+  // Never nudge layerBg — photo stays put while docks/marks move (Move photo owns the aerial)
+  let t=`translate(${dx} ${dy})`;
+  if(scaleF!=null && Math.abs(scaleF-1)>1e-6){
+    const s=scaleF, ox=cx||1200, oy=cy||850;
+    t=`translate(${ox} ${oy}) scale(${s}) translate(${-ox} ${-oy}) translate(${dx} ${dy})`;
+  }
+  [layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.setAttribute("transform", t); });
+}
+function scalePointXY(x,y,cx,cy,f){ return {x:cx+(x-cx)*f, y:cy+(y-cy)*f}; }
+function scaleMembersByKeys(keys,f,cx,cy){
+  f=Number(f)||1; if(Math.abs(f-1)<1e-9) return;
+  const seenD=new Set(), seenM=new Set();
+  (keys||[]).forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="dock"){
+      const d=docks.find(x=>x.id===id); if(!d||seenD.has(d.id)) return; seenD.add(d.id);
+      const p=scalePointXY(Number(d.x)||0, Number(d.y)||0, cx, cy, f);
+      d.x=p.x; d.y=p.y;
+      ["sw","sh","w","h","gap"].forEach(prop=>{ if(d[prop]!=null) d[prop]=Number(d[prop])*f; });
+      (d.extras||[]).forEach(ex=>{
+        if(ex.dx!=null) ex.dx=Number(ex.dx)*f;
+        if(ex.dy!=null) ex.dy=Number(ex.dy)*f;
+        if(ex.w!=null) ex.w=Number(ex.w)*f;
+        if(ex.h!=null) ex.h=Number(ex.h)*f;
+      });
+      if(d.placed){
+        Object.keys(d.placed).forEach(pid=>{
+          const pl=d.placed[pid]; if(!pl) return;
+          if(pl.x!=null && pl.y!=null){
+            const q=scalePointXY(Number(pl.x)||0, Number(pl.y)||0, cx, cy, f);
+            pl.x=q.x; pl.y=q.y;
+          }
+          if(pl.w!=null) pl.w=Number(pl.w)*f;
+          if(pl.h!=null) pl.h=Number(pl.h)*f;
+        });
+      }
+    }else if(kind==="mark"){
+      const m=marks.find(x=>x.id===id); if(!m||seenM.has(m.id)) return; seenM.add(m.id);
+      const p=scalePointXY(Number(m.x)||0, Number(m.y)||0, cx, cy, f);
+      m.x=p.x; m.y=p.y;
+      if(m.w!=null) m.w=Number(m.w)*f;
+      if(m.h!=null) m.h=Number(m.h)*f;
+      if(m.size!=null) m.size=Number(m.size)*f;
+    }
+  });
 }
 function keysForDrag(kind,id){
   const key=kind+":"+id;
@@ -554,15 +667,26 @@ function drawMarks(){
     else if(m.kind==="p"){const rx=m.w?m.w/2:70,ry=m.h?m.h/2:26;g.appendChild(el("ellipse",{class:"walk",cx:m.x,cy:m.y,rx,ry,fill:"none",stroke:"#9ad","stroke-width":3}));g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P")); bucket=layerSite;}
     else if(m.kind==="bridge"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge")); bucket=layerSite;}
     else if(m.kind==="bar"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w||12,height:m.h||20,rx:3,fill:"#bfb9ac",class:"walk"})); bucket=layerWalkMarks;}
-    else if(m.kind==="pill"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:m.ink||"#fff","font-size":10},m.label||"")); bucket=layerLabels;}
-    else if(m.kind==="text"){const fs=m.size||13;const ink=m.ink||"#d7eceb";g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,"font-size":fs,"font-weight":700},m.text||"")); bucket=layerLabels;}
+    else if(m.kind==="pill"){
+      g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));
+      const pfs=screenAwareFontSize(10), psw=labelStrokeWidth(pfs);
+      g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:"#0a1210",stroke:"#f4fffe","stroke-width":String(psw),"paint-order":"stroke","font-size":String(pfs),"font-weight":800,class:"screen-label","data-world-fs":"10"},m.label||""));
+      bucket=layerLabels;
+    }
+    else if(m.kind==="text"){
+      const baseFs=m.size||13; const fs=screenAwareFontSize(baseFs); const sw=labelStrokeWidth(fs);
+      const ink=m.ink||"#0a1210";
+      g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));
+      g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,stroke:"#f4fffe","stroke-width":String(sw),"paint-order":"stroke","font-size":String(fs),"font-weight":800,class:"screen-label","data-world-fs":String(baseFs)},m.text||""));
+      bucket=layerLabels;
+    }
     bucket.appendChild(g);
   });
 }
 function appendWalk(g,d){
   const geom=walkGeomFromDock(d);
   g.appendChild(el("rect",{class:"walk",x:geom.x,y:geom.y,width:geom.w,height:geom.h,rx:3,fill:"#bfb9ac"}));
-  g.appendChild(el("text",{x:d.x,y:d.y-12,fill:"#d7eceb","font-size":14,"font-weight":700},d.name));
+  g.appendChild(el("text",dockNameLabelAttrs(d.x,d.y-12,14),d.name));
 }
 function redraw(){
   buildSlips();drawMarks();layerDocks.innerHTML="";layerSlips.innerHTML="";
@@ -577,7 +701,7 @@ function redraw(){
     if(rot) attrs.transform=`rotate(${rot} ${s.x+s.w/2} ${s.y+s.h/2})`;
     const g=el("g",attrs);
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
-    g.appendChild(el("text",{x:s.x+s.w/2,y:s.y+s.h/2+3,"text-anchor":"middle"},String(s.num).replace(/^F|^C/,"")));
+    g.appendChild(el("text",slipLabelAttrs(s.x+s.w/2,s.y+s.h/2+3,9),String(s.num).replace(/^F|^C/,"")));
     parent.appendChild(g);
   });
   document.getElementById("count").textContent=slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
@@ -807,7 +931,7 @@ function selectEditSlip(id){
   selected=id; selectedDock=s.dockId; selectedMark=null;
   showTab("layout"); if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h){ const num=String(s.num); h.textContent=((/^\d+$/.test(num)?"Slip ":"")+num)+" · drag to move · Tools for properties"; } } renderDockEditor(); redraw(); updateSelChip();
 }
-let dockDrag=null,pan=null,scale=1,tx=0,ty=0;
+let dockDrag=null,pan=null; // scale/tx/ty declared earlier for screen-aware labels
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
 function zoomUnit(){ return scale/Math.max(1e-6, minFitScale()); }
 function applyDeepZoomLod(){
@@ -835,7 +959,7 @@ function applyDeepZoomLod(){
 }
 const chart=document.getElementById("chart");
 const WORLD_W=MAP_W, WORLD_H=MAP_H;
-function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); }
+function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); syncLabelFonts(); }
 function chartSize(){
   const r=chart.getBoundingClientRect();
   return {w:Math.max(320, r.width||800), h:Math.max(240, r.height||560)};
@@ -872,7 +996,7 @@ function defaultMarinaZoom(){
 }
 svg.addEventListener("click",e=>{
   if(dockDrag&&dockDrag.moved)return;
-  if(photoMoveMode){ e.preventDefault(); e.stopPropagation(); return; }
+  if(photoMoveMode||dockAlignMode){ e.preventDefault(); e.stopPropagation(); return; }
   if(editing){
     const sEl=e.target.closest("[data-id]");
     const dEl=e.target.closest("[data-dock]");
@@ -1006,9 +1130,26 @@ function hitEditTarget(e){
   return {sEl,dEl,mEl};
 }
 chart.addEventListener("pointerdown",e=>{
+  if(dockAlignMode){
+    try{ e.preventDefault(); }catch(_){}
+    if(e.target.closest && e.target.closest(".zoom,.pan,#dock-align-chip,#photo-move-chip,button,input,label")) return;
+    dockAlignPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const p=svgPoint(e);
+    const keys = multi.size ? [...multi] : allLayoutKeys();
+    const box = keysBBox(keys) || {x:0,y:0,w:MAP_W,h:MAP_H};
+    const cx = box.x + box.w/2, cy = box.y + box.h/2;
+    if(dockAlignPointers.size>=2){
+      const dist=dockAlignPinchDist();
+      dockAlignDrag={kind:"pinch",keys,startDist:dist,startScale:1,cx,cy,sx:0,sy:0,moved:false};
+    }else{
+      dockAlignDrag={kind:"pan",keys,px:p.x,py:p.y,sx:0,sy:0,cx,cy,scaleF:1,moved:false,startBox:box};
+    }
+    try{ chart.setPointerCapture(e.pointerId); }catch(_){}
+    return;
+  }
   if(photoMoveMode){
     try{ e.preventDefault(); }catch(_){}
-    if(e.target.closest && e.target.closest(".zoom,.pan,#photo-move-chip,button,input,label")) return;
+    if(e.target.closest && e.target.closest(".zoom,.pan,#photo-move-chip,#dock-align-chip,button,input,label")) return;
     photoPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
     const p=svgPoint(e);
     if(photoPointers.size>=2){
@@ -1097,6 +1238,31 @@ chart.addEventListener("pointerdown",e=>{
   pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);
 });
 chart.addEventListener("pointermove",e=>{
+  if(dockAlignMode && dockAlignDrag){
+    try{ e.preventDefault(); }catch(_){}
+    if(dockAlignPointers.has(e.pointerId)) dockAlignPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(dockAlignDrag.kind==="pinch" || dockAlignPointers.size>=2){
+      if(dockAlignDrag.kind!=="pinch"){
+        const dist=dockAlignPinchDist();
+        dockAlignDrag={kind:"pinch",keys:dockAlignDrag.keys,startDist:dist,startScale:1,cx:dockAlignDrag.cx,cy:dockAlignDrag.cy,sx:dockAlignDrag.sx||0,sy:dockAlignDrag.sy||0,moved:false};
+      }
+      const dist=dockAlignPinchDist();
+      if(dist && dockAlignDrag.startDist){
+        const ratio=dist/dockAlignDrag.startDist;
+        if(Math.abs(ratio-1)>0.02) dockAlignDrag.moved=true;
+        dockAlignDrag.scaleF=Math.max(0.35, Math.min(2.8, ratio));
+        nudgeLayers(dockAlignDrag.sx||0, dockAlignDrag.sy||0, dockAlignDrag.scaleF, dockAlignDrag.cx, dockAlignDrag.cy);
+      }
+      return;
+    }
+    const p=svgPoint(e);
+    const dx=p.x-dockAlignDrag.px, dy=p.y-dockAlignDrag.py;
+    if(Math.abs(dx)+Math.abs(dy)>4) dockAlignDrag.moved=true;
+    const c=clampDeltaForBox(dockAlignDrag.startBox||keysBBox(dockAlignDrag.keys), Math.round(dx), Math.round(dy));
+    dockAlignDrag.sx=c.dx; dockAlignDrag.sy=c.dy;
+    nudgeLayers(dockAlignDrag.sx, dockAlignDrag.sy, 1, dockAlignDrag.cx, dockAlignDrag.cy);
+    return;
+  }
   if(photoMoveMode && photoDrag){
     try{ e.preventDefault(); }catch(_){}
     if(photoPointers.has(e.pointerId)) photoPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -1178,6 +1344,31 @@ chart.addEventListener("pointermove",e=>{
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
 chart.addEventListener("pointerup",e=>{
+  if(dockAlignMode){
+    dockAlignPointers.delete(e.pointerId);
+    if(dockAlignDrag){
+      clearLayerNudge();
+      if(dockAlignDrag.moved){
+        const keys=dockAlignDrag.keys||allLayoutKeys();
+        const sf=dockAlignDrag.scaleF!=null?dockAlignDrag.scaleF:1;
+        if(Math.abs(sf-1)>1e-6){
+          scaleMembersByKeys(keys, sf, dockAlignDrag.cx, dockAlignDrag.cy);
+        }
+        if(dockAlignDrag.sx || dockAlignDrag.sy){
+          // If we also scaled, translation was applied in pre-scale space via SVG;
+          // for pan-only, sx/sy are world deltas. When pinch+pan mixed we only pinch for now.
+          if(Math.abs(sf-1)<=1e-6) moveMembersByKeys(keys, dockAlignDrag.sx, dockAlignDrag.sy);
+        }
+        sanitizeLayout();
+        saveLayout();
+        redraw();
+        renderDockEditor();
+      }
+    }
+    if(dockAlignPointers.size===0) dockAlignDrag=null;
+    else dockAlignDrag=null;
+    return;
+  }
   if(photoMoveMode){
     photoPointers.delete(e.pointerId);
     if(photoDrag && photoDrag.moved) saveLayout(false);
@@ -1299,7 +1490,7 @@ document.getElementById("edit-toggle").onclick=()=>{
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
   const em=document.getElementById("edit-toggle-mobile");
   if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
-  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); }
+  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
         ? "Tools = panel · drag docks · empty water pans · Done exits"
@@ -1357,6 +1548,7 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
 
 function setPhotoMoveMode(on){
   photoMoveMode=!!on;
+  if(photoMoveMode && dockAlignMode) setDockAlignMode(false);
   if(!photoMoveMode){
     photoDrag=null;
     photoPointers.clear();
@@ -1371,10 +1563,45 @@ function setPhotoMoveMode(on){
   if(chip) chip.hidden=!photoMoveMode;
   const hint=document.getElementById("hint");
   if(hint){
-    if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale";
+    if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale · docks locked";
+    else if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked";
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
-  chart.style.cursor=photoMoveMode?"move":"";
+  chart.style.cursor=photoMoveMode?"move":(dockAlignMode?"grab":"");
+}
+function setDockAlignMode(on){
+  dockAlignMode=!!on;
+  if(dockAlignMode){
+    if(photoMoveMode) setPhotoMoveMode(false);
+    if(!editing){
+      const t=document.getElementById("edit-toggle");
+      if(t) t.click();
+    }
+    // Treat whole layout as one group under the photo
+    selectAllLayout();
+    clearLayerNudge();
+    dockAlignDrag=null;
+    dockAlignPointers.clear();
+  }else{
+    clearLayerNudge();
+    dockAlignDrag=null;
+    dockAlignPointers.clear();
+  }
+  document.body.classList.toggle("dock-aligning", dockAlignMode);
+  const btn=document.getElementById("btn-dock-align");
+  if(btn){
+    btn.classList.toggle("on", dockAlignMode);
+    btn.textContent=dockAlignMode?"Done aligning":"Align docks to photo";
+  }
+  const chip=document.getElementById("dock-align-chip");
+  if(chip) chip.hidden=!dockAlignMode;
+  const hint=document.getElementById("hint");
+  if(hint){
+    if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked · labels stay readable";
+    else if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale · docks locked";
+    else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
+  }
+  chart.style.cursor=dockAlignMode?"grab":(photoMoveMode?"move":"");
 }
 function photoPinchDist(){
   const pts=[...photoPointers.values()];
@@ -1382,9 +1609,42 @@ function photoPinchDist(){
   const dx=pts[0].x-pts[1].x, dy=pts[0].y-pts[1].y;
   return Math.hypot(dx,dy)||null;
 }
+function dockAlignPinchDist(){
+  const pts=[...dockAlignPointers.values()];
+  if(pts.length<2) return null;
+  const dx=pts[0].x-pts[1].x, dy=pts[0].y-pts[1].y;
+  return Math.hypot(dx,dy)||null;
+}
 function bumpPhotoScale(delta){
   photoAlign.scale=Math.max(0.2, Math.min(3, (Number(photoAlign.scale)||1)+delta));
   savePhotoAlign(); applyPhotoAlign();
+}
+function bumpDockLayoutScale(delta){
+  const keys = multi.size ? [...multi] : allLayoutKeys();
+  const box = keysBBox(keys) || {x:0,y:0,w:MAP_W,h:MAP_H};
+  const cx = box.x + box.w/2, cy = box.y + box.h/2;
+  const f = Math.max(0.35, Math.min(2.8, 1 + delta));
+  scaleMembersByKeys(keys, f, cx, cy);
+  sanitizeLayout();
+  saveLayout();
+  redraw();
+  renderDockEditor();
+}
+function setLabelSizeKey(key){
+  if(LABEL_PX[key]==null) return;
+  labelSizeKey=key;
+  saveLabelSize();
+  syncLabelSizeUI();
+  syncLabelFonts();
+  // Full redraw keeps mark hit boxes in sync with new text metrics
+  try{ redraw(); }catch(e){}
+}
+function syncLabelSizeUI(){
+  const sel=document.getElementById("label-size");
+  if(sel) sel.value=labelSizeKey;
+  document.querySelectorAll("[data-label-size]").forEach(b=>{
+    b.classList.toggle("on", b.getAttribute("data-label-size")===labelSizeKey);
+  });
 }
 
 (function wirePhotoOpacity(){
@@ -1425,7 +1685,35 @@ function bumpPhotoScale(delta){
   if(moveBtn) moveBtn.onclick=()=> setPhotoMoveMode(!photoMoveMode);
   const doneChip=document.getElementById("photo-move-done");
   if(doneChip) doneChip.onclick=()=> setPhotoMoveMode(false);
+  const alignBtn=document.getElementById("btn-dock-align");
+  if(alignBtn) alignBtn.onclick=()=> setDockAlignMode(!dockAlignMode);
+  const alignDone=document.getElementById("dock-align-done");
+  if(alignDone) alignDone.onclick=()=> setDockAlignMode(false);
+  const dockScaleMinus=document.getElementById("dock-align-scale-minus");
+  if(dockScaleMinus) dockScaleMinus.onclick=()=> bumpDockLayoutScale(-0.05);
+  const dockScalePlus=document.getElementById("dock-align-scale-plus");
+  if(dockScalePlus) dockScalePlus.onclick=()=> bumpDockLayoutScale(0.05);
+  document.querySelectorAll("[data-align-opacity]").forEach(b=>{
+    b.onclick=()=>{
+      const pct=+b.getAttribute("data-align-opacity");
+      if(!(pct>=0)) return;
+      photoMax=Math.max(0, Math.min(1, pct/100));
+      const sl=document.getElementById("photo-op");
+      if(sl) sl.value=String(Math.round(photoMax*100));
+      saveLayout(false); applyDeepZoomLod();
+    };
+  });
+  const labelSel=document.getElementById("label-size");
+  if(labelSel){
+    labelSel.value=labelSizeKey;
+    labelSel.onchange=()=> setLabelSizeKey(labelSel.value);
+  }
+  document.querySelectorAll("[data-label-size]").forEach(b=>{
+    b.onclick=()=> setLabelSizeKey(b.getAttribute("data-label-size"));
+  });
+  syncLabelSizeUI();
   applyDeepZoomLod();
+  syncLabelFonts();
 })();
 document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
 document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
