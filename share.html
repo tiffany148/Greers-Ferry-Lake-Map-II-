@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="theme-color" content="#0a2438" />
-<title>Greers Ferry Lake Explorer (view only)</title>
+<title>Greers Ferry Lake Explorer (share)</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
@@ -61,8 +61,7 @@
   .marina-block a { color:#7bdff2; }
   .marina-svc { margin-top:4px; color:#c9dce8; }
   .crowd-meta { font-size:11px; color:#9bb4c4; margin-top:4px; }
-  .public-view #btn-pin, .public-view #pin-form, .public-view #pw-form, .public-view .unlock-row, .public-view #place-hint { display:none !important; }
-  .public-view .popup-actions { display:none !important; }
+  .public-view #pw-form, .public-view .unlock-row { display:none !important; }
 
   .opacity-box {
     position:absolute; right:10px; bottom:calc(78px + var(--safe-bot)); z-index:800;
@@ -222,7 +221,7 @@ const MARINA_INFO = {
 function colorFor(cat){ return COLORS[cat] || "#c49a58"; }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]; }); }
 function stockKey(p){ return p.name+"|"+p.lat+"|"+p.lng; }
-const STORE_USER = "gfl-user-pins";
+const STORE_USER = PUBLIC_VIEW ? "gfl-share-user-pins" : "gfl-user-pins";
 const STORE_OVR = "gfl-pin-overrides";
 const STORE_UNLOCK = "gfl-shared-unlocked";
 const SHARED_PW_HASH = "249aed4359f903fdfd01ed7b14d007c6f7a0c4a80dd75d44e05e054107b7c948";
@@ -520,7 +519,7 @@ function popupHtml(p){
   if (p.tip) body += "<br><i>"+esc(p.tip)+"</i>";
   if (p.cat==="Marina" || (p.kind==="stock" && MARINA_INFO[p.name])) body += marinaHtml(p.name);
   if ((p.kind==="hazard"||p.kind==="water") && p.updatedAt) body += '<div class="crowd-meta">Updated '+esc(formatWhen(p.updatedAt))+'</div>';
-  if (PUBLIC_VIEW) return body;
+  if (PUBLIC_VIEW && p.kind!=="user") return body;
   return body+'<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button></div>';
 }
 function bindPopupActions(marker, p){
@@ -659,6 +658,7 @@ function closePinForm(){
   editing = null;
   pinDelete.hidden = true;
   document.getElementById("pin-move").hidden = true;
+  if (!PUBLIC_VIEW) pinCat.disabled = false;
 }
 function syncExtraFields(){
   const cat = pinCat.value;
@@ -666,17 +666,22 @@ function syncExtraFields(){
   document.getElementById("extra-water").hidden = cat !== "Water";
 }
 function openPinForm(p){
+  if (PUBLIC_VIEW && p.kind!=="new" && p.kind!=="user") return;
   editing = p;
   pinFormTitle.textContent = p.kind==="new" ? "Drop a pin" : "Edit pin";
   pinName.value = p.name || "";
-  var preferred = p.kind==="shared" ? "Shared"
-    : p.kind==="hazard" ? "Hazards"
-    : p.kind==="water" ? "Water"
-    : (p.kind==="new" ? (sharedUnlocked ? "Shared" : "My pins") : (p.cat || "My pins"));
+  var preferred = "My pins";
+  if (!PUBLIC_VIEW) {
+    preferred = p.kind==="shared" ? "Shared"
+      : p.kind==="hazard" ? "Hazards"
+      : p.kind==="water" ? "Water"
+      : (p.kind==="new" ? (sharedUnlocked ? "Shared" : "My pins") : (p.cat || "My pins"));
+  }
   pinCat.value = preferred;
   if (![].some.call(pinCat.options, function(o){ return o.value===pinCat.value; })) {
     pinCat.value = "My pins";
   }
+  pinCat.disabled = !!PUBLIC_VIEW;
   document.getElementById("hazard-type").value = p.hazardType || "Trees / logs";
   document.getElementById("water-depth").value = (p.depthFt!=null && p.depthFt!=="") ? p.depthFt : "";
   document.getElementById("water-temp").value = (p.tempF!=null && p.tempF!=="") ? p.tempF : "";
@@ -689,12 +694,14 @@ function openPinForm(p){
 }
 pinCat.onchange = syncExtraFields;
 function beginMove(p){
+  if (PUBLIC_VIEW && p.kind!=="user") return;
   closePinForm();
   placing = false;
   moving = p;
   syncPlaceUi();
 }
 function movePinTo(p, ll){
+  if (PUBLIC_VIEW && p.kind!=="user") return;
   if (p.kind==="shared") {
     requireSharedUnlock().then(function(ok){
       if (!ok) return;
@@ -730,6 +737,7 @@ function movePinTo(p, ll){
   renderPins();
 }
 function removePin(p){
+  if (PUBLIC_VIEW && p.kind!=="user") return;
   if (p.kind==="shared") {
     requireSharedUnlock().then(function(ok){
       if (!ok) return;
@@ -752,7 +760,6 @@ function removePin(p){
   renderPins();
 }
 btnPin.onclick = function(){
-  if (PUBLIC_VIEW) return;
   if (pinForm.classList.contains("open")) closePinForm();
   moving = null;
   placing = !placing;
@@ -777,7 +784,8 @@ document.getElementById("btn-unlock-shared").onclick = function(){
   requireSharedUnlock();
 };
 document.getElementById("pin-save").onclick = function(){
-  const cat = pinCat.value || "My pins";
+  let cat = pinCat.value || "My pins";
+  if (PUBLIC_VIEW) cat = "My pins";
   let name = pinName.value.trim();
   const fact = pinFact.value.trim();
   const hazardType = document.getElementById("hazard-type").value;
@@ -848,11 +856,14 @@ document.getElementById("pin-save").onclick = function(){
 
 
 if (PUBLIC_VIEW) {
-  document.title = "Greers Ferry Lake Explorer (view only)";
+  document.title = "Greers Ferry Lake Explorer";
   var h1 = document.querySelector("header h1");
   if (h1) h1.textContent = "Greers Ferry Lake";
   var note = document.querySelector("p.note");
-  if (note) note.textContent = "View only — not a navigation chart. USACE / public map data.";
+  if (note) note.textContent = "Add your own pins — lake pins stay put. Not a navigation chart.";
+  document.body.classList.add("public-view");
+  var unlockRow = document.querySelector(".unlock-row");
+  if (unlockRow) unlockRow.style.display = "none";
 }
 
 if ("serviceWorker" in navigator) {
