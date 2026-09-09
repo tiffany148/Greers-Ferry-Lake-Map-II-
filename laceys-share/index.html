@@ -364,6 +364,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <div id="edit-sel-chip-desk" hidden></div>
 <div id="error-banner"></div>
+<div id="layout-tip-banner" style="display:none;margin:8px 16px;padding:8px 12px;border-radius:10px;background:#1a4a5c;color:#eef6f8;font-size:13px">Layout looks off? Use <b>Restore original chart</b> or <b>Reset Cruiser dock</b> in Dock tools. <button type="button" class="btn" id="layout-tip-dismiss" style="margin-left:8px">Got it</button></div>
   <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
     <h1>Lacey's Narrows</h1>
@@ -406,13 +407,13 @@ body.dock-aligning #dock-align-chip{ display:flex; }
     <option value="large">Large</option>
     <option value="xl">XL</option>
   </select>
-  <span style="opacity:.85;font-size:12px">stays readable when zoomed out or docks scaled to photo</span>
+  <span style="opacity:.85;font-size:12px">stays readable when zoomed out</span>
 </div>
 <div class="photo-align" id="photo-align-bar">
   <span>Align</span>
-  <span style="opacity:.85;font-size:12px">full aerial · Move photo <b>or</b> Align docks (not both)</span>
+  <span style="opacity:.85;font-size:12px">optional aerial · Move photo / Reset photo align · chart stays chart-first</span>
   <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; pinch or slider to scale">Move photo</button>
-  <button type="button" class="btn" id="btn-dock-align" title="Drag docks to pan; pinch or −/+ to scale docks onto the aerial — labels stay readable">Align docks to photo</button>
+  <button type="button" class="btn" id="btn-dock-align" hidden title="Advanced: scale docks onto aerial (can warp layout — prefer Restore original chart)">Align docks to photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
   <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
@@ -422,7 +423,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   <button type="button" class="btn" id="photo-scale-plus" title="Scale up">+</button>
   <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
   <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
-  <button type="button" class="btn" id="photo-reset-align" title="Reset photo position">Reset align</button>
+  <button type="button" class="btn" id="photo-reset-align" title="Reset photo position/scale/rotation to default">Reset photo align</button>
 </div>
 <div class="layout">
   <div class="chart" id="chart">
@@ -479,7 +480,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
     </div>
     <div id="pane-layout" hidden>
       <h2>Move & edit</h2>
-      <p class="hint">Cruiser and houseboat docks start unlocked. Use Lock / Unlock on any dock.</p>
+      <p class="hint">Chart-first layout. <b>Reset Cruiser dock</b> restores the baked double-row cruiser. <b>Restore original chart</b> resets all docks/marks (keeps slip occupancy). Use Lock / Unlock on any dock.</p>
       <div class="st">
         <button class="btn" id="add-dock">+ Dock</button>
         <button class="btn" id="add-slip-free">+ Slip</button>
@@ -497,6 +498,8 @@ body.dock-aligning #dock-align-chip{ display:flex; }
       <div id="pick-list" hidden></div>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
+        <button class="btn" id="btn-reset-cruiser" title="Restore Cruiser dock from baked defaults (double-row a+b + 801)">Reset Cruiser dock</button>
+        <button class="btn" id="btn-restore-original" title="Reset all docks/marks/groups to baked chart (keeps slip occupancy)">Restore original chart</button>
         <button class="btn" id="btn-save-layout">Save layout</button>
         <button class="btn" id="export-layout">Copy layout JSON</button>
         <button class="btn" id="download-layout">Download</button>
@@ -516,7 +519,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=66"></script>
-<script src="app.js?v=66"></script>
+<script src="app-data.js?v=67"></script>
+<script src="app.js?v=67"></script>
 </body>
 </html>
