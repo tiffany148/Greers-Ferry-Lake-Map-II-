@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's Narrows · View-only · layers</title>
+<title>Lacey's Narrows · View-only</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -23,7 +23,7 @@ h1{margin:4px 0 0;font-size:28px;font-weight:650}
 .chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
 .layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
-.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539;touch-action:none;-ms-touch-action:none}
 .chart.editing{cursor:default}
 svg{transform-origin:0 0}
 .slip{cursor:pointer}
@@ -31,10 +31,23 @@ svg{transform-origin:0 0}
 .slip.on rect{stroke:#fff;stroke-width:2}
 .slip.dim{opacity:.2}
 .slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
+.slip text,.slip-num,.dock-name-label,.screen-label{pointer-events:none;font-weight:800}
+.slip-num,.dock-name-label,.screen-label{paint-order:stroke;stroke-linejoin:round}
 .dock-hit{cursor:grab}
 .dock-hit.on .walk{stroke:#fff;stroke-width:2}
-.zoom{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px}
-.zoom button{width:36px;height:36px;border:0;border-radius:10px;background:#fff;color:#173;font-size:18px;cursor:pointer}
+.zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;z-index:5}
+.zoom button,.pan button{width:48px;height:48px;border:0;border-radius:12px;background:#fff;color:#173;font-size:22px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.pan{position:absolute;left:10px;bottom:10px;display:grid;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px 48px;gap:6px;z-index:5}
+.pan .spacer{visibility:hidden;pointer-events:none}
+.pan #pan-up{grid-column:2;grid-row:1}
+.pan #pan-left{grid-column:1;grid-row:2}
+.pan #pan-right{grid-column:3;grid-row:2}
+.pan #pan-down{grid-column:2;grid-row:3}
+.pan #pan-center{grid-column:2;grid-row:2;font-size:16px}
+@media (max-width:700px){
+  .zoom button,.pan button{width:52px;height:52px;font-size:24px}
+  .pan{grid-template-columns:52px 52px 52px;grid-template-rows:52px 52px 52px}
+}
 aside{background:#0a3338;padding:16px;overflow:auto}
 .tabs{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
@@ -64,7 +77,7 @@ body.editing .edit-banner{display:block}
 @media print{
   @page{ size: landscape; margin: 0.4in; }
   body{ background:#fff !important; color:#111 !important; }
-  header .kicker,.search,.chips,.zoom,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
+  header .kicker,.search,.chips,.zoom,.pan,.photo-op,.photo-align,.label-size-bar,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
   header{ padding:0 0 6px !important; }
   h1{ color:#111 !important; font-size:18px !important; }
   .layout{ display:block !important; height:auto !important; }
@@ -72,10 +85,294 @@ body.editing .edit-banner{display:block}
   svg{ width:10.5in !important; height:7.2in !important; max-width:100% !important; transform:none !important; }
 }
 
+
+.chart{min-height:420px}
+.layout{min-height:420px}
+#error-banner{display:none;margin:8px 16px;padding:10px 12px;border-radius:10px;background:#7a1f1f;color:#fff;font-size:14px}
+
+
+.dock-hit.multi .walk{stroke:#ffe08a;stroke-width:3;filter:drop-shadow(0 0 3px #ffe08a)}
+.dock-hit.multi text{fill:#ffe08a !important}
+.multi-bar{display:none;margin:8px 16px 0;padding:10px 12px;border-radius:12px;background:#1a5c62;align-items:center;gap:8px;flex-wrap:wrap}
+body.editing.multipick .multi-bar{display:flex}
+.multi-bar b{flex:1 1 auto;font-size:14px}
+.multi-bar .btn{padding:10px 14px;font-size:14px;min-height:44px}
+.pick-list{max-height:42vh;overflow:auto;margin:10px 0;border-radius:12px;background:#0a3539}
+.pick-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #15565b;font-size:15px;cursor:pointer;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
+.pick-row:last-child{border-bottom:0}
+.pick-row.on{background:#2a6a55}
+.pick-row input{width:22px;height:22px;accent-color:#d5ecea;flex:0 0 auto}
+.pick-row span{flex:1}
+.pick-section{font-size:12px;letter-spacing:.08em;color:var(--muted);padding:10px 14px 4px;text-transform:uppercase}
+#btn-multi-hdr{display:none}
+body.editing #btn-multi-hdr{display:inline-block}
+
+
+.photo-op{display:flex;align-items:center;gap:10px;margin:6px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
+.photo-op input[type=range]{flex:1;min-width:120px;accent-color:#d5ecea}
+.photo-op b{min-width:2.5em;text-align:right;font-variant-numeric:tabular-nums}
+#btn-deep-zoom{display:inline-block}
+
+
+.photo-align{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 8px;padding:8px 12px;border-radius:12px;background:#0f3f44;font-size:13px}
+.photo-align .btn{min-height:40px;padding:8px 12px}
+.photo-align label{display:flex;align-items:center;gap:6px;margin:0}
+.photo-align input[type=range]{width:120px;accent-color:#d5ecea}
+.photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
+body.photo-moving{ cursor:move; }
+body.photo-moving .chart{ cursor:move; outline:2px solid #f0c14b; outline-offset:-2px; }
+/* Edit working area = chart viewBox; SVG #map-edit-bound draws the legal edge */
+body.editing .chart{ outline:1px solid rgba(154,213,208,.35); outline-offset:-1px; }
+#photo-move-chip{
+  display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  z-index:40; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;
+  max-width:min(92%,520px); padding:8px 12px; border-radius:12px;
+  background:rgba(26,92,74,.94); color:#eef4f3; font-size:13px; font-weight:650;
+  box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:auto;
+}
+body.photo-moving #photo-move-chip{ display:flex; }
+#photo-move-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#f0c14b; color:#1a1a1a; font-weight:700; cursor:pointer; }
+body.dock-aligning{ cursor:grab; }
+body.dock-aligning .chart{ cursor:grab; outline:2px solid #7ec8ff; outline-offset:-2px; }
+#dock-align-chip{
+  display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  z-index:40; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+  max-width:min(94%,560px); padding:8px 12px; border-radius:12px;
+  background:rgba(20,70,110,.95); color:#eef4f3; font-size:13px; font-weight:650;
+  box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:auto;
+}
+body.dock-aligning #dock-align-chip{ display:flex; }
+#dock-align-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#7ec8ff; color:#0a1a28; font-weight:700; cursor:pointer; }
+#dock-align-chip .op-preset{ background:#15565b; color:#eef4f3; }
+.label-size-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
+.label-size-bar select{border:0;border-radius:8px;padding:6px 10px;background:#15565b;color:var(--ink);font-size:13px}
+.label-size-bar .btn.on{outline:2px solid #f0c14b}
+/* Keep align controls reachable while moving photo / aligning docks (incl. mobile edit) */
+@media (max-width:860px){
+  body.editing.photo-moving .photo-align,
+  body.editing.photo-moving .photo-op,
+  body.editing.photo-moving .label-size-bar,
+  body.editing.dock-aligning .photo-align,
+  body.editing.dock-aligning .photo-op,
+  body.editing.dock-aligning .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
+}
+
+/* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
+#edit-sel-chip-desk{ display:none; }
+@media (min-width:861px){
+  body.editing #edit-sel-chip-desk{
+    display:block; margin:6px 16px 0; padding:8px 12px; border-radius:10px;
+    background:#1a5c62; font-size:13px; font-weight:650; color:#e7f6f5;
+  }
+  body.editing #edit-sel-chip-desk:empty,
+  body.editing #edit-sel-chip-desk[hidden]{ display:none !important; }
+}
+
+/* Mobile full-screen edit: sticky chrome always on top; map below; Tools sheet on demand */
+#edit-chrome{ display:none; }
+@media (max-width:860px){
+  body.editing .search,
+  body.editing .chips,
+  body.editing .photo-op,
+  body.editing .photo-align,
+  body.editing .label-size-bar,
+  body.editing .kicker,
+  body.editing .multi-bar,
+  body.editing .edit-banner,
+  body.editing .meta #hint,
+  body.editing .meta #count,
+  body.editing header .top h1,
+  body.editing header .hdr-actions{ display:none !important; }
+  body.editing header{
+    position:fixed; left:0; right:0; top:0; z-index:80;
+    padding:0; margin:0; background:#0a3338;
+    border-bottom:1px solid #15565b;
+    box-shadow:0 4px 16px rgba(0,0,0,.35);
+  }
+  body.editing #edit-chrome{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+    padding:8px 8px calc(8px + env(safe-area-inset-top));
+    padding-top:calc(8px + env(safe-area-inset-top));
+    background:#0a3338;
+  }
+  body.editing #edit-chrome .ec-title{
+    font-weight:700; font-size:13px; margin-right:auto; white-space:nowrap;
+  }
+  body.editing #edit-chrome button{
+    min-height:40px; padding:8px 12px; font-size:13px; border-radius:10px;
+  }
+  body.editing #edit-chrome #btn-panel-toggle.on{ background:#d5ecea; color:#0a3338; }
+  body.editing #edit-chrome #edit-toggle-mobile.on{ background:#f0c14b; color:#1a1a1a; }
+
+  body.editing #edit-chrome .ec-sel{
+    flex:1 1 100%;
+    order:99;
+    margin-top:2px;
+    padding:6px 10px;
+    border-radius:10px;
+    background:#13494e;
+    border:1px solid #2a6a70;
+    font-size:13px;
+    font-weight:650;
+    color:#e7f6f5;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    min-height:28px;
+    line-height:1.3;
+  }
+  body.editing #edit-chrome .ec-sel:empty,
+  body.editing #edit-chrome .ec-sel[hidden]{ display:none !important; }
+
+  body.editing .layout{
+    display:block;
+    position:fixed;
+    left:0; right:0;
+    top: var(--edit-chrome-h, 56px);
+    bottom: 0;
+    height:auto !important;
+    min-height:0 !important;
+    z-index:5;
+    background:var(--water);
+  }
+  body.editing .chart{
+    position:absolute !important;
+    inset:0 !important;
+    height:100% !important;
+    width:100% !important;
+    min-height:0 !important;
+    margin:0 !important;
+    border-radius:0 !important;
+  }
+  body.editing aside{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    z-index:70;
+    max-height:min(70dvh, 580px);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -10px 30px rgba(0,0,0,.45);
+    transform:translateY(110%);
+    transition:transform .22s ease;
+    padding:0 14px calc(12px + env(safe-area-inset-bottom));
+    overflow:auto;
+    -webkit-overflow-scrolling:touch;
+    pointer-events:none;
+    background:#0a3338;
+  }
+  body.editing.panel-open aside{
+    transform:translateY(0);
+    pointer-events:auto;
+  }
+  body.editing .sheet-handle{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    position:sticky; top:0; z-index:2;
+    background:#0a3338;
+    padding:10px 0 8px;
+    margin:0 -14px 8px;
+    border-bottom:1px solid #15565b;
+  }
+  body.editing .sheet-handle .grab{
+    width:44px; height:5px; border-radius:99px; background:#3a6a70;
+  }
+  body.editing #edit-chrome .ec-coach{
+    flex:1 1 100%;
+    order:98;
+    margin:0;
+    padding:4px 2px 0;
+    font-size:12px;
+    font-weight:500;
+    color:#b7d4d2;
+    line-height:1.35;
+  }
+
+  /* Floating Tools / Done — always above full-screen map (z above chart, below sheet) */
+  #edit-fabs{ display:none; }
+  body.editing #edit-fabs{
+    display:flex; position:fixed; left:0; right:0;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    z-index:75;
+    justify-content:center; align-items:center; gap:10px;
+    pointer-events:none; padding:0 14px;
+  }
+  body.editing #edit-fabs button{
+    pointer-events:auto;
+    min-height:52px; min-width:112px;
+    padding:12px 22px; font-size:16px; font-weight:750;
+    border:0; border-radius:999px;
+    box-shadow:0 4px 18px rgba(0,0,0,.45);
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  body.editing #edit-fab-tools{ background:#d5ecea; color:#0a3338; }
+  body.editing.panel-open #edit-fab-tools{ background:#f0c14b; color:#1a1a1a; }
+  body.editing #edit-fab-done{ background:#f0c14b; color:#1a1a1a; }
+  /* FABs stay at screen bottom (z-index 75 > sheet 70) so Map/Done remain tappable over the sheet */
+
+  /* Thin always-visible peek when Tools sheet closed */
+  #edit-tools-peek{ display:none; }
+  body.editing:not(.panel-open) #edit-tools-peek{
+    display:flex; position:fixed; left:50%; transform:translateX(-50%);
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    z-index:74;
+    align-items:center; justify-content:center; gap:6px;
+    min-height:28px; padding:6px 16px;
+    border:0; border-radius:999px 999px 0 0;
+    background:rgba(10,51,56,.92); color:#d5ecea;
+    font-size:13px; font-weight:700; letter-spacing:.02em;
+    box-shadow:0 -2px 12px rgba(0,0,0,.35);
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+    pointer-events:auto;
+  }
+  body.editing.panel-open #edit-tools-peek{ display:none !important; }
+
+  /* Clear pan/zoom away from FABs */
+  body.editing .pan{ bottom:88px; left:8px; }
+  body.editing .zoom{ bottom:88px; right:8px; }
+  body.editing.panel-open .pan,
+  body.editing.panel-open .zoom{ opacity:.35; pointer-events:none; }
+}
+@media (min-width:861px){
+  .sheet-handle{ display:none !important; }
+  #edit-chrome{ display:none !important; }
+  #btn-panel-toggle{ display:none !important; }
+  #edit-fabs{ display:none !important; }
+  #edit-tools-peek{ display:none !important; }
+  /* Desktop: keep side panel in grid while editing; do not trap in sheet */
+  body.editing .layout{ display:grid; grid-template-columns:1fr 320px; }
+  body.editing aside{
+    position:relative; transform:none; pointer-events:auto;
+    max-height:none; box-shadow:none; border-radius:0;
+  }
+}
+
+
+</style>
+
+<style id="view-only-chrome">
+  #edit-chrome, #edit-fabs, #edit-tools-peek, .edit-banner { display:none !important; }
+  #photo-align-bar { display:none !important; }
+  #pane-layout .st, #pane-layout #dock-editor, #pane-layout #pick-list, #pane-layout #sel-hint { display:none !important; }
+  #add-layer { display:none !important; }
+  body.editing #edit-chrome { display:none !important; }
 </style>
 </head>
 <body>
 <header>
+
+<div id="edit-chrome" aria-label="Edit toolbar">
+  <span class="ec-title">Editing</span>
+  <button type="button" id="btn-undo-m" title="Undo">Undo</button>
+  <button type="button" id="btn-redo-m" title="Redo">Redo</button>
+  <button type="button" id="btn-save-m" title="Save">Save</button>
+  <button type="button" id="btn-panel-toggle">Tools</button>
+  <button type="button" id="edit-toggle-mobile" class="on">Done</button>
+  <div class="ec-coach" id="edit-coach">Tools = panel · drag docks · empty water pans</div>
+  <div id="edit-sel-chip" class="ec-sel" hidden></div>
+</div>
+<div id="edit-sel-chip-desk" hidden></div>
+<div id="error-banner"></div>
+<div id="layout-tip-banner" style="display:none;margin:8px 16px;padding:8px 12px;border-radius:10px;background:#1a4a5c;color:#eef6f8;font-size:13px">Layout looks off? Use <b>Restore original chart</b> or <b>Reset Cruiser dock</b> in Dock tools. <button type="button" class="btn" id="layout-tip-dismiss" style="margin-left:8px">Got it</button></div>
   <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
     <h1>Lacey's Narrows</h1>
@@ -86,22 +383,83 @@ body.editing .edit-banner{display:block}
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
         <button id="btn-save" type="button" title="Save layer view on this device">Save view</button>
+        <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
         <button id="edit-toggle" hidden>Edit docks</button>
       </div>
     </div>
   </div>
 </header>
-<div class="share-banner" style="margin:0 16px 8px;padding:8px 12px;border-radius:10px;background:#4a2a1a;font-size:13px">View-only chart — switch layers and hide/show options. Docks and slips are locked.</div>
-<div class="edit-banner" hidden>Edit: move / recolor / duplicate / delete any dock, slip, parking, building, or label. Undo and Redo go one step at a time (also Ctrl/Cmd+Z).</div>
+<div class="multi-bar" id="multi-bar">
+  <b id="multi-count">0 selected</b>
+  <button type="button" class="btn" id="btn-multi-clear">Clear</button>
+  <button type="button" class="btn" id="btn-multi-move">Move selected</button>
+  <button type="button" class="btn" id="btn-multi-done">Done</button>
+</div>
+<div class="edit-banner">Edit: drag docks on the map · use the right panel (Dock / Layers) for tools · Undo/Redo/Save in the header. Empty water pans; pinch/zoom stays on the map.</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
 <div class="chips" id="chips"></div>
+<div class="photo-op" id="photo-op-bar" title="Aerial photo overlay">
+  <span>Photo</span>
+  <input id="photo-op" type="range" min="0" max="100" value="90"/>
+  <b id="photo-op-val">90%</b>
+  <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
+</div>
+
+<div class="label-size-bar" id="label-size-bar" hidden title="Slip number on-screen size (independent of map zoom)">
+  <span>Label size</span>
+  <select id="label-size" aria-label="Slip label size">
+    <option value="small">Small</option>
+    <option value="normal" selected>Normal</option>
+    <option value="large">Large</option>
+    <option value="xl">XL</option>
+  </select>
+  <span style="opacity:.85;font-size:12px">stays readable when zoomed out</span>
+</div>
+<div class="photo-align" id="photo-align-bar">
+  <span>Align</span>
+  <span style="opacity:.85;font-size:12px">optional aerial · Move photo / Reset photo align · chart stays chart-first</span>
+  <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; Stretch width/height or pinch">Move photo</button>
+  <button type="button" class="btn" id="btn-dock-align" hidden title="Advanced: scale docks onto aerial (can warp layout — prefer Restore original chart)">Align docks to photo</button>
+  <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
+  <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
+  <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
+  <button type="button" class="btn" id="photo-nudge-d" title="Nudge down">↓</button>
+  <label>Stretch width <input id="photo-scale-x" type="range" min="50" max="200" value="100"/><span id="photo-scale-x-val">100%</span></label>
+  <label>Stretch height <input id="photo-scale-y" type="range" min="50" max="200" value="100"/><span id="photo-scale-y-val">100%</span></label>
+  <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
+  <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
+  <button type="button" class="btn" id="photo-reset-align" title="Reset photo position/scale/rotation to default">Reset photo align</button>
+</div>
 <div class="layout">
   <div class="chart" id="chart">
-    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700"></svg>
-    <div class="zoom"><button id="z-in" title="Zoom in">+</button><button id="z-out" title="Zoom out">−</button><button id="z-full" title="Fit whole map on screen">⛶</button></div>
+    <div id="photo-move-chip" hidden>
+      <span>Moving photo — drag to pan, Stretch width/height or pinch · docks locked</span>
+      <button type="button" id="photo-move-done">Done moving photo</button>
+    </div>
+    <div id="dock-align-chip" hidden>
+      <span>Aligning docks — drag / pinch / −/+ · photo locked</span>
+      <button type="button" class="op-preset" data-align-opacity="40" title="Photo 40%">40%</button>
+      <button type="button" class="op-preset" data-align-opacity="70" title="Photo 70%">70%</button>
+      <button type="button" id="dock-align-scale-minus" title="Shrink docks">−</button>
+      <button type="button" id="dock-align-scale-plus" title="Grow docks">+</button>
+      <button type="button" id="dock-align-done">Done aligning</button>
+    </div>
+    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
+    <div class="pan" aria-label="Pan map">
+      <button type="button" id="pan-up" title="Move view up">↑</button>
+      <button type="button" id="pan-left" title="Move view left">←</button>
+      <button type="button" id="pan-center" title="Recenter / fit">·</button>
+      <button type="button" id="pan-right" title="Move view right">→</button>
+      <button type="button" id="pan-down" title="Move view down">↓</button>
+    </div>
+    <div class="zoom"><button type="button" id="z-in" title="Zoom in">+</button><button type="button" id="z-out" title="Zoom out">−</button><button type="button" id="z-full" title="Fit whole map on screen">⛶</button></div>
   </div>
   <aside>
+    <div class="sheet-handle" id="sheet-handle">
+      <span class="grab" aria-hidden="true"></span>
+      <button type="button" class="btn" id="btn-sheet-close">Map</button>
+    </div>
     <div class="tabs">
       <button class="on" data-tab="slip">Slip</button>
       <button data-tab="dir">Directory</button>
@@ -110,25 +468,25 @@ body.editing .edit-banner{display:block}
     </div>
     <div id="pane-slip">
       <h2>Find a slip</h2>
-      <p>Click any numbered slip. Occupancy stays on this device.</p>
+      <p>Click any numbered slip. View occupancy on this chart (edits disabled).</p>
       <div id="slip-detail" hidden>
         <h2 id="slip-title"></h2><p id="slip-meta"></p>
         <div class="st"><button data-st="vacant">Vacant</button><button data-st="occupied">Occupied</button><button data-st="reserved">Reserved</button></div>
         <div id="slip-layer-assigns"></div>
-        <label>Boat name<input id="boat"/></label>
-        <label>Notes<textarea id="notes" rows="3"></textarea></label>
+        <label>Boat name<input id="boat" readonly/></label>
+        <label>Notes<textarea id="notes" rows="3" readonly></textarea></label>
       </div>
     </div>
     <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
     <div id="pane-layers" hidden>
       <h2>Color layers</h2>
-      <p class="hint">Create layers (Power, Lease, etc.). Use to color recolors slips. Eye icons hide/show a whole layer or each option. Assign options on a slip, then Save.</p>
-      <div class="st" hidden><button class="btn" id="add-layer">+ Add layer</button></div>
+      <p class="hint">View only — switch layers and hide/show options. Occupancy and docks stay fixed. Save view stores layer visibility on this device.</p>
+      <div class="st"><button class="btn" id="add-layer">+ Add layer</button></div>
       <div id="layers-editor"></div>
     </div>
     <div id="pane-layout" hidden>
       <h2>Move & edit</h2>
-      <p class="hint">Cruiser and houseboat docks start unlocked. Use Lock / Unlock on any dock.</p>
+      <p class="hint">Chart-first layout. <b>Reset Cruiser dock</b> restores the baked double-row cruiser. <b>Restore original chart</b> resets all docks/marks (keeps slip occupancy). Use Lock / Unlock on any dock.</p>
       <div class="st">
         <button class="btn" id="add-dock">+ Dock</button>
         <button class="btn" id="add-slip-free">+ Slip</button>
@@ -136,14 +494,18 @@ body.editing .edit-banner{display:block}
         <button class="btn" id="add-box">+ Building</button>
         <button class="btn" id="add-label">+ Label</button>
         <button class="btn" id="btn-dup">Duplicate</button>
+        <button class="btn" id="btn-multi" type="button" title="Tap docks/labels to add or remove them">Multi-select</button>
         <button class="btn" id="btn-select-all">Select all</button>
         <button class="btn" id="btn-group-all">Select / group all</button>
         <button class="btn" id="btn-group">Group selected</button>
         <button class="btn" id="btn-ungroup">Ungroup</button>
       </div>
-      <p class="hint" id="sel-hint">Select / group all, then drag anywhere on the map to move the whole chart.</p>
+      <p class="hint" id="sel-hint">Turn on Multi-select, then tick items in the list (easiest on phones). You can also tap the map.</p>
+      <div id="pick-list" hidden></div>
       <div id="dock-editor"><p>No element selected.</p></div>
       <div class="st" style="margin-top:16px">
+        <button class="btn" id="btn-reset-cruiser" title="Restore Cruiser dock from baked defaults (double-row a+b + 801)">Reset Cruiser dock</button>
+        <button class="btn" id="btn-restore-original" title="Reset all docks/marks/groups to baked chart (keeps slip occupancy)">Restore original chart</button>
         <button class="btn" id="btn-save-layout">Save layout</button>
         <button class="btn" id="export-layout">Copy layout JSON</button>
         <button class="btn" id="download-layout">Download</button>
@@ -151,12 +513,19 @@ body.editing .edit-banner{display:block}
         <button class="btn" id="strip-cover">Remove covering piece</button>
         <button class="btn" id="reset-layout">Reset positions</button>
       </div>
-      <label>Align photo opacity<input id="bg-op" type="range" min="0" max="80" value="0"/></label>
+      <p class="hint">Photo opacity is the <b>Photo</b> slider above the map (0–100%). Deep zoom uses it as max photo strength.</p>
       <input id="import-file" type="file" accept="application/json" hidden/>
     </div>
   </aside>
 </div>
-<script src="app-data.js?v=2"></script>
-<script src="app.js?v=2"></script>
+
+<div id="edit-fabs" aria-label="Edit quick actions">
+  <button type="button" id="edit-fab-tools">Tools</button>
+  <button type="button" id="edit-fab-done">Done</button>
+</div>
+<button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
+
+<script src="app-data.js?v=69-view"></script>
+<script src="app.js?v=69-view"></script>
 </body>
 </html>

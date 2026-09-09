@@ -1,5 +1,5 @@
-const STORE="laceys-view-slips-v2";
-const LAYOUT_STORE="laceys-view-layout-v2";
+const STORE="laceys-view-slips-v1";
+const LAYOUT_STORE="laceys-view-layout-v1";
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
@@ -16,7 +16,7 @@ const DEFAULT_DOCKS=[
     "id": "7",
     "name": "7",
     "type": "ns",
-    "x": 1414,
+    "x": 1215,
     "y": 750,
     "kind": "std",
     "size": "10x30 Standard",
@@ -61,14 +61,13 @@ const DEFAULT_DOCKS=[
       81
     ],
     "rot": -90,
-    "placed": {},
-    "fill": "#fffafa"
+    "placed": {}
   },
   {
     "id": "8",
     "name": "8",
     "type": "ns",
-    "x": 1414,
+    "x": 1215,
     "y": 650,
     "kind": "std",
     "size": "10x30 Standard",
@@ -113,14 +112,13 @@ const DEFAULT_DOCKS=[
       113
     ],
     "rot": -90,
-    "placed": {},
-    "fill": "#fffefe"
+    "placed": {}
   },
   {
     "id": "9",
     "name": "9",
     "type": "ns",
-    "x": 1414,
+    "x": 1215,
     "y": 550,
     "kind": "std",
     "size": "10x30 Standard",
@@ -166,14 +164,13 @@ const DEFAULT_DOCKS=[
     ],
     "rot": -90,
     "extras": [],
-    "placed": {},
-    "fill": "#fffcfc"
+    "placed": {}
   },
   {
     "id": "10",
     "name": "10",
     "type": "ns",
-    "x": 1414,
+    "x": 1215,
     "y": 450,
     "kind": "std",
     "size": "10x30 Standard",
@@ -218,14 +215,13 @@ const DEFAULT_DOCKS=[
       177
     ],
     "rot": -90,
-    "placed": {},
-    "fill": "#ffffff"
+    "placed": {}
   },
   {
     "id": "11",
     "name": "11",
     "type": "ns",
-    "x": 1414,
+    "x": 1215,
     "y": 350,
     "kind": "std",
     "size": "10x30 Standard",
@@ -270,14 +266,13 @@ const DEFAULT_DOCKS=[
       209
     ],
     "rot": -90,
-    "placed": {},
-    "fill": "#ffffff"
+    "placed": {}
   },
   {
     "id": "12",
     "name": "12",
     "type": "ns",
-    "x": 1414,
+    "x": 1214,
     "y": 250,
     "kind": "std",
     "size": "10x30 Standard",
@@ -322,468 +317,13 @@ const DEFAULT_DOCKS=[
       309
     ],
     "rot": -90,
-    "placed": {},
-    "fill": "#ffffff"
+    "placed": {}
   },
   {
-    "id": "3",
-    "name": "3",
-    "type": "ns",
-    "x": 769,
-    "y": 1034,
-    "kind": "pref",
-    "size": "10x30 Preferred",
-    "locked": true,
-    "sw": 50,
-    "sh": 35,
-    "gap": 3,
-    "a": [
-      64,
-      63,
-      62,
-      61,
-      60,
-      59,
-      58,
-      57,
-      56,
-      55,
-      54,
-      53,
-      52,
-      51,
-      50,
-      49
-    ],
-    "b": [
-      33,
-      34,
-      35,
-      36,
-      37,
-      38,
-      39,
-      40,
-      41,
-      42,
-      43,
-      44,
-      45,
-      46,
-      47,
-      48
-    ],
-    "placed": {},
-    "fill": "#ffffff"
-  },
-  {
-    "id": "2",
-    "name": "2",
-    "type": "ns",
-    "x": 908,
-    "y": 1021,
-    "kind": "wide",
-    "size": "16x42",
-    "locked": true,
-    "sw": 60,
-    "sh": 50,
-    "gap": 3,
-    "a": [
-      272,
-      271,
-      270,
-      269,
-      268,
-      267,
-      266,
-      265,
-      264,
-      263,
-      262,
-      261
-    ],
-    "b": [
-      249,
-      250,
-      251,
-      252,
-      253,
-      254,
-      255,
-      256,
-      257,
-      258,
-      259,
-      260
-    ],
-    "placed": {},
-    "fill": "#ffffff"
-  },
-  {
-    "id": "1",
-    "name": "1",
-    "type": "ns",
-    "x": 1069,
-    "y": 1032,
-    "kind": "wide",
-    "size": "16x42",
-    "locked": true,
-    "sw": 60,
-    "sh": 50,
-    "gap": 3,
-    "a": [
-      "Blank",
-      247,
-      246,
-      245,
-      244,
-      243,
-      242,
-      241,
-      240,
-      239,
-      238,
-      237
-    ],
-    "b": [
-      225,
-      226,
-      227,
-      228,
-      229,
-      230,
-      231,
-      232,
-      233,
-      234,
-      235,
-      236
-    ],
-    "extras": [],
-    "placed": {},
-    "rot": 0,
-    "fill": "#ffffff"
-  },
-  {
-    "id": "sales",
-    "name": "Sales",
-    "type": "col",
-    "x": 1300,
-    "y": 1126,
-    "kind": "sales",
-    "size": "10x34",
-    "locked": true,
-    "gap": 32,
-    "w": 80,
-    "h": 30,
-    "a": [
-      851,
-      852,
-      853,
-      854,
-      855,
-      856,
-      841,
-      842,
-      843,
-      844,
-      845,
-      846,
-      847,
-      848,
-      849,
-      850
-    ],
-    "placed": {},
-    "fill": "#fffcfc"
-  },
-  {
-    "id": "fuel",
-    "name": "Fuel",
-    "type": "ns",
-    "x": 1431,
-    "y": 935,
-    "kind": "fuel",
-    "size": "Fuel stall",
-    "locked": true,
-    "gap": 3,
-    "w": 45,
-    "h": 30,
-    "a": [],
-    "placed": {},
-    "b": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8
-    ],
-    "sw": 60,
-    "sh": 35,
-    "fill": "#6fff6a"
-  },
-  {
-    "id": "courtesy",
-    "name": "Courtesy",
-    "type": "ns",
-    "x": 1442,
-    "y": 1271,
-    "kind": "courtesy",
-    "size": "Courtesy",
-    "locked": true,
-    "gap": 3,
-    "w": 45,
-    "h": 23,
-    "a": [],
-    "placed": {
-      "3": {
-        "x": 1508,
-        "y": 1337
-      }
-    },
-    "b": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6
-    ],
-    "sw": 50,
-    "sh": 30,
-    "fill": "#9882ff"
-  },
-  {
-    "id": "cruiser",
-    "name": "Cruiser",
-    "type": "ew",
-    "x": 1503,
-    "y": 1503,
-    "kind": "cruiser",
-    "size": "Cruiser",
-    "locked": true,
-    "sw": 40,
-    "sh": 60,
-    "gap": 3,
-    "a": [
-      802,
-      803,
-      804,
-      805,
-      806,
-      807
-    ],
-    "b": [
-      "RB",
-      800,
-      808,
-      809,
-      810,
-      811,
-      812,
-      813,
-      814,
-      815,
-      816
-    ],
-    "extras": [
-      {
-        "num": "801",
-        "dx": 0,
-        "dy": -28,
-        "w": 30,
-        "h": 60
-      }
-    ],
-    "placed": {
-      "801": {
-        "x": 1675,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      },
-      "802": {
-        "x": 1718,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      },
-      "803": {
-        "x": 1761,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      },
-      "804": {
-        "x": 1804,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      },
-      "805": {
-        "x": 1847,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      },
-      "806": {
-        "x": 1890,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      },
-      "807": {
-        "x": 1933,
-        "y": 1503,
-        "w": 40,
-        "h": 60
-      }
-    },
-    "fill": "#ffffff",
-    "rot": 0
-  },
-  {
-    "id": "houseboats",
-    "name": "Houseboats",
-    "type": "ns",
-    "x": 1990,
-    "y": 905,
-    "kind": "hb",
-    "size": "12x38",
-    "locked": true,
-    "sw": 90,
-    "sh": 40,
-    "gap": 3,
-    "a": [
-      817,
-      818,
-      819,
-      820,
-      821,
-      822,
-      823,
-      824,
-      825,
-      826,
-      827,
-      828,
-      829,
-      830
-    ],
-    "b": [
-      831,
-      832,
-      833,
-      834,
-      835,
-      836,
-      837,
-      838
-    ],
-    "extras": [],
-    "placed": {},
-    "fill": "#ffffff",
-    "rot": 0
-  },
-  {
-    "id": "dock-ey4v4d",
-    "name": "4",
-    "type": "ns",
-    "x": 561,
-    "y": 1055,
-    "kind": "std",
-    "size": "Custom",
-    "locked": true,
-    "sw": 50,
-    "sh": 40,
-    "gap": 3,
-    "w": 40,
-    "h": 16,
-    "a": [
-      32,
-      31,
-      30,
-      29,
-      28,
-      27,
-      26,
-      25,
-      24,
-      23,
-      22,
-      21,
-      20,
-      19
-    ],
-    "b": [
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14
-    ],
-    "placed": {},
-    "fill": "#ffffff"
-  },
-  {
-    "id": "dock-izumuc",
-    "name": "5",
-    "type": "ew",
-    "x": 91,
-    "y": 1496,
-    "kind": "std",
-    "size": "Custom",
-    "locked": true,
-    "sw": 40,
-    "sh": 50,
-    "gap": 3,
-    "w": 40,
-    "h": 16,
-    "a": [
-      283,
-      284,
-      285,
-      286,
-      287,
-      288,
-      289,
-      290,
-      291,
-      292
-    ],
-    "b": [
-      282,
-      281,
-      280,
-      279,
-      278,
-      277,
-      276,
-      275,
-      274,
-      273
-    ],
-    "placed": {},
-    "fill": "#fffefe",
-    "rot": -10
-  },
-  {
-    "id": "dock-z51nb6",
+    "id": "13",
     "name": "13",
     "type": "ns",
-    "x": 1414,
+    "x": 1215,
     "y": 150,
     "kind": "std",
     "size": "10x30 Standard",
@@ -828,148 +368,699 @@ const DEFAULT_DOCKS=[
       341
     ],
     "rot": -90,
-    "placed": {},
-    "fill": "#ffffff"
+    "placed": {}
   },
   {
-    "id": "dock-f9g1zn",
-    "name": "Fuel Pump 9",
+    "id": "4",
+    "name": "4",
     "type": "ns",
-    "x": 2122,
-    "y": 1277,
+    "x": 413,
+    "y": 1207,
+    "kind": "pref",
+    "size": "10x30 Preferred",
+    "locked": false,
+    "sw": 12,
+    "sh": 12,
+    "gap": 3,
+    "a": [
+      32
+    ],
+    "b": [],
+    "placed": {},
+    "extras": []
+  },
+  {
+    "id": "3",
+    "name": "3",
+    "type": "ns",
+    "x": 596,
+    "y": 923,
+    "kind": "pref",
+    "size": "10x30 Preferred",
+    "locked": true,
+    "sw": 50,
+    "sh": 40,
+    "gap": 3,
+    "a": [
+      64,
+      63,
+      62,
+      61,
+      60,
+      59,
+      58,
+      57,
+      56,
+      55,
+      54,
+      53,
+      52,
+      51,
+      50,
+      49
+    ],
+    "b": [
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48
+    ],
+    "placed": {}
+  },
+  {
+    "id": "2",
+    "name": "2",
+    "type": "ns",
+    "x": 722,
+    "y": 944,
+    "kind": "wide",
+    "size": "16x42",
+    "locked": true,
+    "sw": 50,
+    "sh": 50,
+    "gap": 3,
+    "a": [
+      272,
+      271,
+      270,
+      269,
+      268,
+      267,
+      266,
+      265,
+      264,
+      263,
+      262,
+      261
+    ],
+    "b": [
+      249,
+      250,
+      251,
+      252,
+      253,
+      254,
+      255,
+      256,
+      257,
+      258,
+      259,
+      260
+    ],
+    "placed": {}
+  },
+  {
+    "id": "1",
+    "name": "1",
+    "type": "ns",
+    "x": 856,
+    "y": 942,
+    "kind": "wide",
+    "size": "16x42",
+    "locked": true,
+    "sw": 60,
+    "sh": 50,
+    "gap": 3,
+    "a": [
+      "Blank",
+      247,
+      246,
+      245,
+      244,
+      243,
+      242,
+      241,
+      240,
+      239,
+      238,
+      237
+    ],
+    "b": [
+      225,
+      226,
+      227,
+      228,
+      229,
+      230,
+      231,
+      232,
+      233,
+      234,
+      235,
+      236
+    ],
+    "extras": [],
+    "placed": {},
+    "rot": 0
+  },
+  {
+    "id": "5",
+    "name": "5",
+    "type": "ew",
+    "x": -22,
+    "y": 1121,
+    "kind": "pref",
+    "size": "10x30 Preferred",
+    "locked": true,
+    "sw": 40,
+    "sh": 50,
+    "gap": 3,
+    "a": [
+      283,
+      284,
+      285,
+      286,
+      287,
+      288,
+      289,
+      290,
+      291,
+      292
+    ],
+    "b": [
+      282,
+      281,
+      280,
+      279,
+      278,
+      277,
+      276,
+      275,
+      274,
+      273
+    ],
+    "placed": {}
+  },
+  {
+    "id": "sales",
+    "name": "Sales",
+    "type": "col",
+    "x": 1141,
+    "y": 1138,
+    "kind": "sales",
+    "size": "10x34",
+    "locked": true,
+    "gap": 35,
+    "w": 80,
+    "h": 30,
+    "a": [
+      851,
+      852,
+      853,
+      854,
+      855,
+      856,
+      841,
+      842,
+      843,
+      844,
+      845,
+      846,
+      847,
+      848,
+      849,
+      850
+    ],
+    "placed": {}
+  },
+  {
+    "id": "fuel",
+    "name": "Fuel",
+    "type": "ns",
+    "x": 1317,
+    "y": 958,
+    "kind": "fuel",
+    "size": "Fuel stall",
+    "locked": true,
+    "gap": 3,
+    "w": 45,
+    "h": 30,
+    "a": [],
+    "placed": {
+      "3": {
+        "x": 1393,
+        "y": 1044,
+        "w": 60,
+        "h": 40
+      }
+    },
+    "b": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "sw": 60,
+    "sh": 40
+  },
+  {
+    "id": "courtesy",
+    "name": "Courtesy",
+    "type": "ns",
+    "x": 1332,
+    "y": 1345,
+    "kind": "courtesy",
+    "size": "Courtesy",
+    "locked": true,
+    "gap": 3,
+    "w": 45,
+    "h": 23,
+    "a": [],
+    "placed": {
+      "3": {
+        "x": 1398,
+        "y": 1411
+      }
+    },
+    "b": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "sw": 50,
+    "sh": 30
+  },
+  {
+    "id": "cruiser",
+    "name": "Cruiser",
+    "type": "ew",
+    "x": 1333,
+    "y": 1585,
+    "kind": "cruiser",
+    "size": "Cruiser",
+    "locked": true,
+    "sw": 40,
+    "sh": 60,
+    "gap": 3,
+    "a": [
+      802,
+      803,
+      804,
+      805,
+      806,
+      807
+    ],
+    "b": [
+      "RB",
+      800,
+      808,
+      809,
+      810,
+      811,
+      812,
+      813,
+      814,
+      815,
+      816
+    ],
+    "extras": [
+      {
+        "num": "801",
+        "dx": 0,
+        "dy": -28,
+        "w": 30,
+        "h": 60
+      }
+    ],
+    "placed": {
+      "801": {
+        "x": 1505,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      },
+      "802": {
+        "x": 1548,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      },
+      "803": {
+        "x": 1591,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      },
+      "804": {
+        "x": 1634,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      },
+      "805": {
+        "x": 1677,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      },
+      "806": {
+        "x": 1720,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      },
+      "807": {
+        "x": 1763,
+        "y": 1585,
+        "w": 40,
+        "h": 60
+      }
+    }
+  },
+  {
+    "id": "houseboats",
+    "name": "Houseboats",
+    "type": "ns",
+    "x": 1846,
+    "y": 918,
+    "kind": "hb",
+    "size": "12x38",
+    "locked": true,
+    "sw": 90,
+    "sh": 40,
+    "gap": 3,
+    "a": [
+      817,
+      818,
+      819,
+      820,
+      821,
+      822,
+      823,
+      824,
+      825,
+      826,
+      827,
+      828,
+      829,
+      830
+    ],
+    "b": [
+      831,
+      832,
+      833,
+      834,
+      835,
+      836,
+      837,
+      838
+    ],
+    "extras": [
+      {
+        "num": 839,
+        "dx": 0,
+        "dy": 248,
+        "w": 96,
+        "h": 22,
+        "kind": "fuel",
+        "size": "20x87",
+        "filter": "Fuel"
+      },
+      {
+        "num": 840,
+        "dx": 26,
+        "dy": 248,
+        "w": 96,
+        "h": 22,
+        "kind": "fuel",
+        "size": "20x87",
+        "filter": "Fuel"
+      }
+    ],
+    "placed": {
+      "824": {
+        "x": 1846,
+        "y": 1219,
+        "w": 90,
+        "h": 40
+      },
+      "839": {
+        "x": 1967,
+        "y": 1324,
+        "w": 60,
+        "h": 290
+      },
+      "840": {
+        "x": 2045,
+        "y": 1324,
+        "w": 60,
+        "h": 290
+      }
+    }
+  },
+  {
+    "id": "dock-v1mggn",
+    "name": "Parking",
+    "type": "ew",
+    "x": 82,
+    "y": 781,
+    "kind": "std",
+    "size": "Custom",
+    "locked": false,
+    "gap": 3,
+    "w": 300,
+    "h": 200,
+    "a": [],
+    "b": [
+      2
+    ],
+    "extras": [],
+    "placed": {},
+    "sw": 40,
+    "sh": 36
+  },
+  {
+    "id": "dock-ey4v4d",
+    "name": "4",
+    "type": "ns",
+    "x": 462,
+    "y": 921,
     "kind": "std",
     "size": "Custom",
     "locked": true,
-    "sw": 40,
-    "sh": 350,
-    "gap": 5,
+    "sw": 50,
+    "sh": 40,
+    "gap": 3,
     "w": 40,
     "h": 16,
     "a": [
-      839
+      32,
+      31,
+      30,
+      29,
+      28,
+      27,
+      26,
+      25,
+      24,
+      23,
+      22,
+      21,
+      20,
+      19
     ],
     "b": [
-      840
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
     ],
-    "placed": {},
-    "rot": 0,
-    "fill": "#ffffff"
+    "placed": {}
   }
 ];
 const DEFAULT_MARKS=[
   {
     "id": "shop",
     "kind": "box",
-    "x": 668,
-    "y": 53,
-    "w": 250,
-    "h": 120,
-    "fill": "#b700c3",
+    "x": 601,
+    "y": 81,
+    "w": 220,
+    "h": 70,
+    "fill": "#8a8f62",
     "t1": "SHOP / Service Dept.",
     "t2": "Office"
   },
   {
+    "id": "parking",
+    "kind": "p",
+    "x": 150,
+    "y": 150,
+    "w": 140,
+    "h": 52
+  },
+  {
     "id": "restroom",
     "kind": "pill",
-    "x": 1053,
-    "y": 929,
-    "w": 90,
-    "h": 75,
-    "label": "Restroom",
-    "fill": "#866eff"
+    "x": 801,
+    "y": 813,
+    "w": 120,
+    "h": 100,
+    "label": "Restroom"
+  },
+  {
+    "id": "store",
+    "kind": "box",
+    "x": 1015,
+    "y": 857,
+    "w": 300,
+    "h": 180,
+    "fill": "#2b6d8a",
+    "t1": "Marina Store",
+    "t2": "Wave runners",
+    "ink": "#fff"
   },
   {
     "id": "picnic-store",
     "kind": "pill",
-    "x": 1520,
-    "y": 1502,
-    "w": 150,
-    "h": 60,
+    "x": 1814,
+    "y": 1580,
+    "w": 130,
+    "h": 110,
     "label": "Picnic",
-    "fill": "#ffbaff",
+    "fill": "#e7a0b8",
     "ink": "#4a2430"
   },
   {
     "id": "picnic-cru",
     "kind": "pill",
-    "x": 2075,
-    "y": 1519,
-    "w": 80,
+    "x": 1346,
+    "y": 1574,
+    "w": 140,
     "h": 60,
     "label": "Picnic",
-    "fill": "#feafff",
-    "ink": "#4a2430",
-    "rot": 90
+    "fill": "#e7a0b8",
+    "ink": "#4a2430"
   },
   {
     "id": "picnic-hb",
     "kind": "pill",
-    "x": 1410,
-    "y": 1594,
+    "x": 1245,
+    "y": 1647,
     "w": 80,
     "h": 45,
     "label": "Picnic",
-    "fill": "#fea9ff",
+    "fill": "#e7a0b8",
     "ink": "#4a2430"
   },
   {
     "id": "bridge",
     "kind": "bridge",
-    "x": 1276,
-    "y": 11,
-    "w": 1000,
+    "x": 831,
+    "y": 12,
+    "w": 1100,
     "h": 22
+  },
+  {
+    "id": "label-pref",
+    "kind": "text",
+    "x": 543,
+    "y": 910,
+    "text": "10x30 Preferred",
+    "size": 13
   },
   {
     "id": "label-std",
     "kind": "text",
-    "x": 2296,
-    "y": 291,
+    "x": 1805,
+    "y": 221,
     "text": "10x30 Standard",
     "size": 13,
     "rot": -90
   },
   {
+    "id": "label-d5",
+    "kind": "text",
+    "x": 278,
+    "y": 919,
+    "text": "Dock 5 access",
+    "size": 11,
+    "rot": 90
+  },
+  {
     "id": "label-walk",
     "kind": "text",
-    "x": 1046,
-    "y": 609,
+    "x": 897,
+    "y": 518,
     "text": "Main walkway",
     "size": 11,
-    "rot": 38
+    "rot": 63
+  },
+  {
+    "id": "label-sales",
+    "kind": "text",
+    "x": 1116,
+    "y": 1246,
+    "text": "Sales 10x34",
+    "size": 12,
+    "rot": -90
+  },
+  {
+    "id": "label-fuel",
+    "kind": "text",
+    "x": 584,
+    "y": 342,
+    "text": "Fuel / courtesy",
+    "size": 11
   },
   {
     "id": "label-emma",
     "kind": "text",
-    "x": 1996,
-    "y": 1514,
+    "x": 1838,
+    "y": 1553,
     "text": "Emma's Room",
-    "size": 11,
-    "ink": "#00ced4",
-    "rot": 90
+    "size": 11
   },
   {
     "id": "std-walk",
     "kind": "bar",
-    "x": 1362,
-    "y": 750,
-    "w": 750,
-    "h": 12,
+    "x": 1171,
+    "y": 852,
+    "w": 1080,
+    "h": 14,
     "rot": -90
   },
   {
     "id": "north",
     "kind": "text",
-    "x": 1289,
-    "y": 130,
+    "x": 1095,
+    "y": 101,
     "text": "NORTH",
     "size": 13
   },
   {
     "id": "channel",
     "kind": "text",
-    "x": 2309,
-    "y": 687,
+    "x": 2288,
+    "y": 860,
     "text": "NARROWS CHANNEL",
     "size": 14,
     "rot": 90
@@ -977,21 +1068,21 @@ const DEFAULT_MARKS=[
   {
     "id": "mainwalk-16bjl6",
     "kind": "bar",
-    "x": 982,
-    "y": 624,
+    "x": 846,
+    "y": 489,
     "w": 14,
     "h": 400,
     "title": "Walkway",
-    "rot": -52
+    "rot": -25
   },
   {
     "id": "box-pgvqry",
     "kind": "box",
-    "x": 1265,
-    "y": 1032,
-    "w": 50,
-    "h": 40,
-    "fill": "#00004f",
+    "x": 1088,
+    "y": 1044,
+    "w": 80,
+    "h": 60,
+    "fill": "#2b6d8a",
     "t1": "Dock House ",
     "t2": "",
     "ink": "#fff",
@@ -1000,8 +1091,8 @@ const DEFAULT_MARKS=[
   {
     "id": "label-9haiji",
     "kind": "text",
-    "x": 1323,
-    "y": 1065,
+    "x": 1184,
+    "y": 1068,
     "text": "Office 1",
     "size": 13,
     "rot": 0
@@ -1009,8 +1100,8 @@ const DEFAULT_MARKS=[
   {
     "id": "label-rlhuce",
     "kind": "text",
-    "x": 1323,
-    "y": 1093,
+    "x": 1182,
+    "y": 1108,
     "text": "Office 2",
     "size": 13,
     "rot": 0
@@ -1018,215 +1109,20 @@ const DEFAULT_MARKS=[
   {
     "id": "mainwalk-13wys1",
     "kind": "bar",
-    "x": 613,
-    "y": 861,
+    "x": 245,
+    "y": 878,
     "w": 14,
-    "h": 190,
+    "h": 220,
     "title": "Walkway",
     "rot": 0
   },
   {
-    "id": "box-gmqkx3",
-    "kind": "box",
-    "x": 399,
-    "y": 550,
-    "w": 420,
-    "h": 50,
-    "fill": "#000249",
-    "t1": "Parking",
-    "t2": "",
-    "ink": "#fff",
-    "rot": 0
-  },
-  {
-    "id": "box-7hdicj",
-    "kind": "box",
-    "x": 394,
-    "y": 824,
-    "w": 420,
-    "h": 50,
-    "fill": "#000345",
-    "t1": "Parking",
-    "t2": "",
-    "ink": "#fff",
-    "rot": 0
-  },
-  {
-    "id": "box-te32az",
-    "kind": "box",
-    "x": 951,
-    "y": 368,
-    "w": 500,
-    "h": 50,
-    "fill": "#000056",
-    "t1": "Parking",
-    "t2": "",
-    "ink": "#fff",
-    "rot": 90
-  },
-  {
-    "id": "label-mjx5uv",
+    "id": "label-waj0ir",
     "kind": "text",
-    "x": 1089,
-    "y": 394,
-    "text": "Dock 10 Access",
+    "x": 1970,
+    "y": 1296,
+    "text": "Fuel Pump 9",
     "size": 13,
-    "rot": 16
-  },
-  {
-    "id": "bar-te5tw0",
-    "kind": "bar",
-    "x": 939,
-    "y": 317,
-    "w": 14,
-    "h": 400,
-    "title": "Walkway",
-    "rot": -74
-  },
-  {
-    "id": "box-23nmbb",
-    "kind": "box",
-    "x": 404,
-    "y": 285,
-    "w": 420,
-    "h": 50,
-    "fill": "#000249",
-    "t1": "",
-    "t2": "",
-    "ink": "#fff",
     "rot": 0
-  },
-  {
-    "id": "box-gq3gar",
-    "kind": "box",
-    "x": 1026,
-    "y": 507,
-    "w": 80,
-    "h": 50,
-    "fill": "#00005f",
-    "t1": "Carports ",
-    "t2": "",
-    "ink": "#fff",
-    "rot": 90
-  },
-  {
-    "id": "box-zyezo6",
-    "kind": "box",
-    "x": 1268,
-    "y": 882,
-    "w": 170,
-    "h": 130,
-    "fill": "#fa51ff",
-    "t1": "Marina Store",
-    "t2": "",
-    "ink": "#fff",
-    "rot": 0
-  }
-];
-const DEFAULT_LAYERS=[
-  {
-    "id": "layer-ov5r7o",
-    "name": "Available",
-    "options": [
-      {
-        "id": "opt-g3qp21",
-        "name": "Vacant",
-        "color": "#10e9ff"
-      },
-      {
-        "id": "opt-0yhx94",
-        "name": "Occupied",
-        "color": "#0bf400"
-      }
-    ]
-  },
-  {
-    "id": "layer-nskmae",
-    "name": "Winterized?",
-    "options": [
-      {
-        "id": "opt-uc3ps3",
-        "name": "Winterized",
-        "color": "#5aa0c4"
-      },
-      {
-        "id": "opt-vera6l",
-        "name": "Not Winterized",
-        "color": "#db0000"
-      }
-    ]
-  },
-  {
-    "id": "layer-ebev5d",
-    "name": "Size",
-    "options": [
-      {
-        "id": "opt-knlcjh",
-        "name": "10x30 Standard",
-        "color": "#ff805c",
-        "hidden": true
-      },
-      {
-        "id": "opt-gfievj",
-        "name": "10x30 Premium",
-        "color": "#086b00"
-      },
-      {
-        "id": "opt-xau23q",
-        "name": "10x30 Preferred",
-        "color": "#f5f400"
-      },
-      {
-        "id": "opt-pbib7h",
-        "name": "10x34 Preferred",
-        "color": "#4dfeff"
-      },
-      {
-        "id": "opt-l34i0t",
-        "name": "10x42 Preferred",
-        "color": "#0000e2"
-      },
-      {
-        "id": "opt-5qe1aa",
-        "name": "12x30 Premium",
-        "color": "#8d68ff"
-      },
-      {
-        "id": "opt-ilp8a9",
-        "name": "12x38 Preferred",
-        "color": "#5900fc"
-      },
-      {
-        "id": "opt-d9h0lh",
-        "name": "14x42 Preferred",
-        "color": "#40ff9c"
-      },
-      {
-        "id": "opt-odysj7",
-        "name": "16x42 Preferred",
-        "color": "#f69aff"
-      },
-      {
-        "id": "opt-zx49ly",
-        "name": "20x87 Houseboat",
-        "color": "#ff0f86"
-      },
-      {
-        "id": "opt-epizyh",
-        "name": "24x100 Houseboat",
-        "color": "#470089"
-      }
-    ]
-  },
-  {
-    "id": "layer-alhzt0",
-    "name": "Empty",
-    "options": [
-      {
-        "id": "opt-d0br1q",
-        "name": "Blank",
-        "color": "#000000"
-      }
-    ]
   }
 ];
