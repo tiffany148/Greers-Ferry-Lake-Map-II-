@@ -117,7 +117,7 @@ body.editing #btn-multi-hdr{display:inline-block}
 .photo-align{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 8px;padding:8px 12px;border-radius:12px;background:#0f3f44;font-size:13px}
 .photo-align .btn{min-height:40px;padding:8px 12px}
 .photo-align label{display:flex;align-items:center;gap:6px;margin:0}
-.photo-align input[type=range]{width:110px;accent-color:#d5ecea}
+.photo-align input[type=range]{width:120px;accent-color:#d5ecea}
 .photo-align input[type=number]{width:64px;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink)}
 body.photo-moving{ cursor:move; }
 body.photo-moving .chart{ cursor:move; outline:2px solid #f0c14b; outline-offset:-2px; }
@@ -411,15 +411,14 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 <div class="photo-align" id="photo-align-bar">
   <span>Align</span>
   <span style="opacity:.85;font-size:12px">optional aerial · Move photo / Reset photo align · chart stays chart-first</span>
-  <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; pinch or slider to scale">Move photo</button>
+  <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; Stretch width/height or pinch">Move photo</button>
   <button type="button" class="btn" id="btn-dock-align" hidden title="Advanced: scale docks onto aerial (can warp layout — prefer Restore original chart)">Align docks to photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
   <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
   <button type="button" class="btn" id="photo-nudge-d" title="Nudge down">↓</button>
-  <button type="button" class="btn" id="photo-scale-minus" title="Scale down">−</button>
-  <label>Scale <input id="photo-scale" type="range" min="20" max="300" value="100"/><span id="photo-scale-val">100%</span></label>
-  <button type="button" class="btn" id="photo-scale-plus" title="Scale up">+</button>
+  <label>Stretch width <input id="photo-scale-x" type="range" min="50" max="200" value="100"/><span id="photo-scale-x-val">100%</span></label>
+  <label>Stretch height <input id="photo-scale-y" type="range" min="50" max="200" value="100"/><span id="photo-scale-y-val">100%</span></label>
   <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
   <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
   <button type="button" class="btn" id="photo-reset-align" title="Reset photo position/scale/rotation to default">Reset photo align</button>
@@ -427,7 +426,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 <div class="layout">
   <div class="chart" id="chart">
     <div id="photo-move-chip" hidden>
-      <span>Moving photo — drag to pan, pinch/slider to scale · docks locked</span>
+      <span>Moving photo — drag to pan, Stretch width/height or pinch · docks locked</span>
       <button type="button" id="photo-move-done">Done moving photo</button>
     </div>
     <div id="dock-align-chip" hidden>
@@ -518,7 +517,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=68"></script>
-<script src="app.js?v=68"></script>
+<script src="app-data.js?v=69"></script>
+<script src="app.js?v=69"></script>
 </body>
 </html>
