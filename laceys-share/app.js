@@ -139,8 +139,28 @@ function syncMapBoundVisual(){
 function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|5|sales|fuel|courtesy|cruiser|houseboats)$/.test(id); }
 let deepZoom=true;
 let photoMax=0.9;
-let photoAlign={x:0,y:0,scale:1,rot:0}; // overlay registration vs chart
+let photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0}; // overlay registration vs chart
 const PHOTO_ALIGN_STORE="laceys-share-photo-align-v1";
+
+function clampPhotoScale(v){ return Math.max(0.2, Math.min(3, Number(v)||1)); }
+/** Normalize saved align: old `scale` → both axes; prefer scaleX/scaleY when present. */
+function normalizePhotoAlign(raw){
+  if(!raw || typeof raw!=="object") return {x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
+  const hasXY = raw.scaleX!=null || raw.scaleY!=null;
+  const legacy = clampPhotoScale(raw.scale);
+  const scaleX = clampPhotoScale(hasXY ? (raw.scaleX!=null?raw.scaleX:legacy) : legacy);
+  const scaleY = clampPhotoScale(hasXY ? (raw.scaleY!=null?raw.scaleY:legacy) : legacy);
+  return {
+    x:Number(raw.x)||0,
+    y:Number(raw.y)||0,
+    scaleX, scaleY,
+    scale: clampPhotoScale((scaleX+scaleY)/2),
+    rot:Number(raw.rot)||0
+  };
+}
+function syncPhotoAlignScaleAvg(){
+  photoAlign.scale = clampPhotoScale(((Number(photoAlign.scaleX)||1)+(Number(photoAlign.scaleY)||1))/2);
+}
 const LABEL_SIZE_STORE="laceys-share-label-size-v1";
 const LABEL_PX={classic:9,small:10,normal:12,large:14,xl:18};
 let labelSizeKey="classic";
@@ -156,17 +176,15 @@ function loadPhotoAlign(){
   try{
     const raw=JSON.parse(localStorage.getItem(PHOTO_ALIGN_STORE)||"null");
     if(raw && typeof raw==="object"){
-      photoAlign={
-        x:Number(raw.x)||0,
-        y:Number(raw.y)||0,
-        scale:Math.max(0.2, Math.min(3, Number(raw.scale)||1)),
-        rot:Number(raw.rot)||0
-      };
+      photoAlign=normalizePhotoAlign(raw);
     }
   }catch(e){}
 }
 function savePhotoAlign(){
-  try{ localStorage.setItem(PHOTO_ALIGN_STORE, JSON.stringify(photoAlign)); }catch(e){}
+  try{
+    syncPhotoAlignScaleAvg();
+    localStorage.setItem(PHOTO_ALIGN_STORE, JSON.stringify(photoAlign));
+  }catch(e){}
 }
 function loadLabelSize(){
   try{
@@ -204,36 +222,45 @@ function syncLabelFonts(){
 loadLabelSize();
 function applyPhotoAlign(){
   if(!bgImg) return;
-  const userS=Math.max(0.2, Math.min(3, Number(photoAlign.scale)||1));
+  const sx=clampPhotoScale(photoAlign.scaleX!=null?photoAlign.scaleX:photoAlign.scale);
+  const sy=clampPhotoScale(photoAlign.scaleY!=null?photoAlign.scaleY:photoAlign.scale);
+  photoAlign.scaleX=sx; photoAlign.scaleY=sy; syncPhotoAlignScaleAvg();
   const cx=1200, cy=850; // chart working-area center (viewBox 2400×1700)
   const W=2400, H=1700;
   const rot=Number(photoAlign.rot)||0;
-  // meet = show FULL aerial inside the image rect (letterbox OK). User scales up to cover.
-  // Do NOT use slice/cover — that crops marina pixels she needs to align.
-  const iw=W*userS;
-  const ih=H*userS;
+  // Base image rect stays chart-sized with meet (full aerial, no slice crop — v64+).
+  // Non-uniform scaleX/scaleY applied via transform so Stretch width pulls docks L/R
+  // without the same height change; uniform sx=sy matches prior scale behavior.
   const dx=Number(photoAlign.x)||0;
   const dy=Number(photoAlign.y)||0;
-  const x=cx - iw/2 + dx;
-  const y=cy - ih/2 + dy;
-  bgImg.setAttribute("x", String(x));
-  bgImg.setAttribute("y", String(y));
-  bgImg.setAttribute("width", String(iw));
-  bgImg.setAttribute("height", String(ih));
+  bgImg.setAttribute("x", "0");
+  bgImg.setAttribute("y", "0");
+  bgImg.setAttribute("width", String(W));
+  bgImg.setAttribute("height", String(H));
   bgImg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-  if(rot){
-    const px=cx+dx, py=cy+dy;
-    bgImg.setAttribute("transform", `rotate(${rot} ${px} ${py})`);
+  // Center of photo working area after pan is (cx+dx, cy+dy); scale/rotate about that.
+  const px=cx+dx, py=cy+dy;
+  if(dx||dy||rot||Math.abs(sx-1)>1e-6||Math.abs(sy-1)>1e-6){
+    const parts=[`translate(${px} ${py})`];
+    if(rot) parts.push(`rotate(${rot})`);
+    if(Math.abs(sx-1)>1e-6||Math.abs(sy-1)>1e-6) parts.push(`scale(${sx} ${sy})`);
+    parts.push(`translate(${-cx} ${-cy})`);
+    bgImg.setAttribute("transform", parts.join(" "));
   }else{
     bgImg.removeAttribute("transform");
   }
-  const sv=document.getElementById("photo-scale-val");
+  const sxEl=document.getElementById("photo-scale-x");
+  const syEl=document.getElementById("photo-scale-y");
+  const sxv=document.getElementById("photo-scale-x-val");
+  const syv=document.getElementById("photo-scale-y-val");
   const rv=document.getElementById("photo-rot-val");
-  const sc=document.getElementById("photo-scale");
   const rr=document.getElementById("photo-rot");
-  if(sc) sc.value=String(Math.round(userS*100));
+  // UI range 50–200%; still allow internal values outside via pinch/legacy
+  if(sxEl) sxEl.value=String(Math.round(Math.max(50, Math.min(200, sx*100))));
+  if(syEl) syEl.value=String(Math.round(Math.max(50, Math.min(200, sy*100))));
+  if(sxv) sxv.textContent=Math.round(sx*100)+"%";
+  if(syv) syv.textContent=Math.round(sy*100)+"%";
   if(rr) rr.value=String(rot);
-  if(sv) sv.textContent=Math.round(userS*100)+"%";
   if(rv) rv.textContent=(Math.round(rot*10)/10)+"°";
 }
 
@@ -254,12 +281,7 @@ function loadLayout(){
     const marks=clone((raw.marks||[]).filter(m=>m && !isDockPieceMark(m.id)));
     const layers=Array.isArray(raw.layers)?clone(raw.layers):loadLayersStandalone();
     if(raw.photoAlign){
-      photoAlign={
-        x:Number(raw.photoAlign.x)||0,
-        y:Number(raw.photoAlign.y)||0,
-        scale:Math.max(0.2, Math.min(3, Number(raw.photoAlign.scale)||1)),
-        rot:Number(raw.photoAlign.rot)||0
-      };
+      photoAlign=normalizePhotoAlign(raw.photoAlign);
       savePhotoAlign();
     }
     if(raw.photoMax!=null){ photoMax=Math.max(0, Math.min(1, Number(raw.photoMax))); }
@@ -274,12 +296,7 @@ function restoreSnap(s){
   docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
   if(Array.isArray(raw.layers)) layers=raw.layers;
   if(raw.photoAlign){
-    photoAlign={
-      x:Number(raw.photoAlign.x)||0,
-      y:Number(raw.photoAlign.y)||0,
-      scale:Math.max(0.2, Math.min(3, Number(raw.photoAlign.scale)||1)),
-      rot:Number(raw.photoAlign.rot)||0
-    };
+    photoAlign=normalizePhotoAlign(raw.photoAlign);
     savePhotoAlign();
   }
   if(raw.photoMax!=null) photoMax=Math.max(0, Math.min(1, Number(raw.photoMax)));
@@ -1125,7 +1142,7 @@ chart.addEventListener("pointerdown",e=>{
     const p=svgPoint(e);
     if(photoPointers.size>=2){
       const dist=photoPinchDist();
-      photoDrag={kind:"pinch",startDist:dist,startScale:Number(photoAlign.scale)||1,moved:false};
+      photoDrag={kind:"pinch",startDist:dist,startScaleX:clampPhotoScale(photoAlign.scaleX!=null?photoAlign.scaleX:photoAlign.scale),startScaleY:clampPhotoScale(photoAlign.scaleY!=null?photoAlign.scaleY:photoAlign.scale),moved:false};
     }else{
       photoDrag={kind:"pan",ox:Number(photoAlign.x)||0,oy:Number(photoAlign.y)||0,px:p.x,py:p.y,moved:false};
     }
@@ -1240,13 +1257,15 @@ chart.addEventListener("pointermove",e=>{
     if(photoDrag.kind==="pinch" || photoPointers.size>=2){
       if(photoDrag.kind!=="pinch"){
         const dist=photoPinchDist();
-        photoDrag={kind:"pinch",startDist:dist,startScale:Number(photoAlign.scale)||1,moved:false};
+        photoDrag={kind:"pinch",startDist:dist,startScaleX:clampPhotoScale(photoAlign.scaleX!=null?photoAlign.scaleX:photoAlign.scale),startScaleY:clampPhotoScale(photoAlign.scaleY!=null?photoAlign.scaleY:photoAlign.scale),moved:false};
       }
       const dist=photoPinchDist();
       if(dist && photoDrag.startDist){
         const ratio=dist/photoDrag.startDist;
         if(Math.abs(ratio-1)>0.02) photoDrag.moved=true;
-        photoAlign.scale=Math.max(0.2, Math.min(3, photoDrag.startScale*ratio));
+        photoAlign.scaleX=clampPhotoScale(photoDrag.startScaleX*ratio);
+        photoAlign.scaleY=clampPhotoScale(photoDrag.startScaleY*ratio);
+        syncPhotoAlignScaleAvg();
         savePhotoAlign(); applyPhotoAlign();
       }
       return;
@@ -1534,7 +1553,7 @@ function setPhotoMoveMode(on){
   if(chip) chip.hidden=!photoMoveMode;
   const hint=document.getElementById("hint");
   if(hint){
-    if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale · docks locked";
+    if(photoMoveMode) hint.textContent="Moving photo — drag to pan, Stretch width/height or pinch · docks locked";
     else if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked";
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
@@ -1569,7 +1588,7 @@ function setDockAlignMode(on){
   const hint=document.getElementById("hint");
   if(hint){
     if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked · labels stay readable";
-    else if(photoMoveMode) hint.textContent="Moving photo — drag to pan, pinch or slider to scale · docks locked";
+    else if(photoMoveMode) hint.textContent="Moving photo — drag to pan, Stretch width/height or pinch · docks locked";
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
   chart.style.cursor=dockAlignMode?"grab":(photoMoveMode?"move":"");
@@ -1587,7 +1606,9 @@ function dockAlignPinchDist(){
   return Math.hypot(dx,dy)||null;
 }
 function bumpPhotoScale(delta){
-  photoAlign.scale=Math.max(0.2, Math.min(3, (Number(photoAlign.scale)||1)+delta));
+  photoAlign.scaleX=clampPhotoScale((Number(photoAlign.scaleX)||1)+delta);
+  photoAlign.scaleY=clampPhotoScale((Number(photoAlign.scaleY)||1)+delta);
+  syncPhotoAlignScaleAvg();
   savePhotoAlign(); applyPhotoAlign();
 }
 function bumpDockLayoutScale(delta){
@@ -1642,16 +1663,25 @@ function syncLabelSizeUI(){
   bind("photo-nudge-r", ()=>nudge(stepEl(),0));
   bind("photo-nudge-u", ()=>nudge(0,-stepEl()));
   bind("photo-nudge-d", ()=>nudge(0,stepEl()));
-  const sc=document.getElementById("photo-scale");
-  if(sc){ sc.oninput=()=>{ photoAlign.scale=Math.max(0.2, Math.min(3, (+sc.value)/100)); savePhotoAlign(); applyPhotoAlign(); }; sc.onchange=()=>saveLayout(false); }
+  const bindStretch=(id, axis)=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.oninput=()=>{
+      const v=clampPhotoScale((+el.value)/100);
+      if(axis==="x") photoAlign.scaleX=v; else photoAlign.scaleY=v;
+      syncPhotoAlignScaleAvg();
+      savePhotoAlign(); applyPhotoAlign();
+    };
+    el.onchange=()=>saveLayout(false);
+  };
+  bindStretch("photo-scale-x", "x");
+  bindStretch("photo-scale-y", "y");
   const rr=document.getElementById("photo-rot");
   if(rr){ rr.oninput=()=>{ photoAlign.rot=+rr.value||0; savePhotoAlign(); applyPhotoAlign(); }; rr.onchange=()=>saveLayout(false); }
   bind("photo-reset-align", ()=>{
-    photoAlign={x:0,y:0,scale:1,rot:0};
+    photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
     savePhotoAlign(); saveLayout(false); applyPhotoAlign();
   });
-  bind("photo-scale-minus", ()=>{ bumpPhotoScale(-0.05); saveLayout(false); });
-  bind("photo-scale-plus", ()=>{ bumpPhotoScale(0.05); saveLayout(false); });
   const moveBtn=document.getElementById("btn-photo-move");
   if(moveBtn) moveBtn.onclick=()=> setPhotoMoveMode(!photoMoveMode);
   const doneChip=document.getElementById("photo-move-done");
@@ -1709,7 +1739,7 @@ function restoreOriginalChart(){
   docks=clone(DEFAULT_DOCKS);
   marks=clone(DEFAULT_MARKS);
   groups=[];
-  photoAlign={x:0,y:0,scale:1,rot:0};
+  photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
   try{ savePhotoAlign(); }catch(e){}
   multi.clear(); moveWholeChart=false; selected=null; selectedDock=null; selectedMark=null;
   if(typeof dockAlignMode!=='undefined' && dockAlignMode) setDockAlignMode(false);
