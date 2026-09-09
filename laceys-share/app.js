@@ -162,7 +162,7 @@ function syncPhotoAlignScaleAvg(){
   photoAlign.scale = clampPhotoScale(((Number(photoAlign.scaleX)||1)+(Number(photoAlign.scaleY)||1))/2);
 }
 const LABEL_SIZE_STORE="laceys-share-label-size-v1";
-const LABEL_PX={small:8,classic:9,normal:10,large:12,xl:16};
+const LABEL_PX={small:8,classic:9,normal:11,large:14,xl:20};
 let labelSizeKey="normal";
 let photoMoveMode=false;
 let dockAlignMode=false;
@@ -209,6 +209,7 @@ function slipLabelAttrs(x,y,worldBase){
   return {
     x, y, "text-anchor":"middle",
     fill:"#1b2423", "font-size":String(fs), "font-weight":"700",
+    style:"font-size:"+fs+"px",
     class:"slip-num"
   };
 }
@@ -225,10 +226,12 @@ function syncLabelFonts(){
     const slipFs=screenAwareFontSize(9);
     svg.querySelectorAll("text.slip-num").forEach(t=>{
       t.setAttribute("font-size", String(slipFs));
+      t.style.fontSize=slipFs+"px";
     });
     const dockFs=Math.round(14*(slipFs/9));
     svg.querySelectorAll("text.dock-name-label").forEach(t=>{
       t.setAttribute("font-size", String(dockFs));
+      t.style.fontSize=dockFs+"px";
     });
   }catch(e){}
 }
