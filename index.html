@@ -86,7 +86,7 @@
 <div id="map"></div>
 <div id="sheet" class="sheet" role="dialog" aria-label="Map layers">
   <h2>Base map</h2>
-  <label class="row"><input type="radio" name="base" value="auto" checked /> Auto (topo to satellite)</label>
+  <label class="row"><input type="radio" name="base" value="auto" checked /> Auto (topo to satellite to streets)</label>
   <label class="row"><input type="radio" name="base" value="satellite" /> Satellite</label>
   <label class="row"><input type="radio" name="base" value="streets" /> Streets</label>
   <label class="row"><input type="radio" name="base" value="topo" /> Topo</label>
@@ -396,19 +396,57 @@ function clearBaseLayers(){
     if (map.hasLayer(layers[k])) map.removeLayer(layers[k]);
   });
 }
-function autoSatOpacity(z){
-  if (z <= 12) return 0;
-  if (z >= 15) return 1;
-  return (z - 12) / 3;
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function lerp(a,b,t){ return a + (b-a)*t; }
+// Auto stack: topo (wide) → satellite (mid) → streets (close), Google Earth–style.
+function autoOpacities(z){
+  // topo fades 11→13.5, sat peaks mid, streets rise 15→17.5
+  var topo, sat, streets;
+  if (z <= 11) {
+    topo = 1; sat = 0; streets = 0;
+  } else if (z < 13.5) {
+    sat = clamp01((z - 11) / 2.5);
+    topo = 1; // under sat
+    streets = 0;
+  } else if (z < 15) {
+    topo = 1; sat = 1; streets = 0;
+  } else if (z < 17.5) {
+    topo = 0;
+    streets = clamp01((z - 15) / 2.5);
+    sat = 1; // under streets
+  } else {
+    topo = 0; sat = 1; streets = 1;
+  }
+  // once streets fully cover, sat can stay underneath at 1 for instant zoom-out
+  return {topo:topo, sat:sat, streets:streets};
 }
 function applyAutoBase(){
-  if (!map.hasLayer(layers.topo)) layers.topo.addTo(map);
-  if (!map.hasLayer(layers.satellite)) layers.satellite.addTo(map);
-  // keep topo under satellite
-  if (layers.topo.bringToBack) layers.topo.bringToBack();
-  if (layers.satellite.bringToFront) layers.satellite.bringToFront();
-  layers.topo.setOpacity(1);
-  layers.satellite.setOpacity(autoSatOpacity(map.getZoom()));
+  var o = autoOpacities(map.getZoom());
+  // ensure needed layers exist; remove unused for bandwidth when fully off
+  function ensure(layer, on){
+    if (on) {
+      if (!map.hasLayer(layer)) layer.addTo(map);
+    } else if (map.hasLayer(layer)) {
+      map.removeLayer(layer);
+    }
+  }
+  ensure(layers.topo, o.topo > 0.02);
+  ensure(layers.satellite, o.sat > 0.02);
+  ensure(layers.streets, o.streets > 0.02);
+  if (map.hasLayer(layers.topo)) {
+    layers.topo.setOpacity(1);
+    if (layers.topo.bringToBack) layers.topo.bringToBack();
+  }
+  if (map.hasLayer(layers.satellite)) {
+    layers.satellite.setOpacity(o.sat);
+  }
+  if (map.hasLayer(layers.streets)) {
+    layers.streets.setOpacity(o.streets);
+    if (layers.streets.bringToFront) layers.streets.bringToFront();
+  }
+  // keep sat above topo
+  if (map.hasLayer(layers.satellite) && layers.satellite.bringToFront) layers.satellite.bringToFront();
+  if (map.hasLayer(layers.streets) && layers.streets.bringToFront) layers.streets.bringToFront();
 }
 function setBaseMode(mode){
   base = mode;
