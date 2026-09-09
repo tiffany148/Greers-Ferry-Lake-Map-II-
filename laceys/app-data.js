@@ -1,5 +1,5 @@
-const STORE="laceys-slips-v5";
-const LAYOUT_STORE="laceys-layout-v2";
+const STORE="laceys-share-slips-v1";
+const LAYOUT_STORE="laceys-share-layout-v2"; /* locked v69/v70 bake */
 const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
 const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
 let data=load();
