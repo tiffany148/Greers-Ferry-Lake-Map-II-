@@ -1719,7 +1719,60 @@ document.getElementById("export-layout").onclick=async()=>{const json=JSON.strin
 document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
 document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;if(Array.isArray(raw.layers)) layers=raw.layers; localStorage.setItem(LAYOUT_STORE,JSON.stringify({docks:raw.docks,marks:raw.marks||[],groups:raw.groups||[],layers})); saveLayersStore(); ({docks,marks,groups,layers}=loadLayout()); if(!Array.isArray(layers)) layers=[]; saveLayout(false);redraw();renderDockEditor();renderLayersEditor();renderChips();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
+
+function resetCruiserDock(){
+  // MUST: deep-clone baked DEFAULT cruiser (locked, a/b sides, extras 801, placed 801-807)
+  const src = (DEFAULT_DOCKS||[]).find(d=>d.id==='cruiser');
+  if(!src){ alert('Built-in Cruiser dock not found.'); return; }
+  const fresh = clone(src); // clone(DEFAULT_DOCKS.find(d=>d.id==='cruiser'))
+  const i = docks.findIndex(d=>d.id==='cruiser');
+  if(i>=0) docks[i]=fresh; else docks.push(fresh);
+  selectedDock='cruiser'; selected=null; selectedMark=null;
+  saveLayout(); // pushes undo
+  redraw(); renderDockEditor(); updateSelHint();
+  const h=document.getElementById('hint');
+  if(h) h.textContent='Cruiser dock restored from original chart';
+}
+function restoreOriginalChart(){
+  if(!confirm('Restore original chart layout? This resets all docks, marks, and groups to the baked defaults. Slip occupancy is kept. Photo align resets too.')) return;
+  docks=clone(DEFAULT_DOCKS);
+  marks=clone(DEFAULT_MARKS);
+  groups=[];
+  photoAlign={x:0,y:0,scale:1,rot:0};
+  try{ savePhotoAlign(); }catch(e){}
+  multi.clear(); moveWholeChart=false; selected=null; selectedDock=null; selectedMark=null;
+  if(typeof dockAlignMode!=='undefined' && dockAlignMode) setDockAlignMode(false);
+  if(typeof photoMoveMode!=='undefined' && photoMoveMode) setPhotoMoveMode(false);
+  saveLayout(); // undoable restore
+  applyPhotoAlign();
+  redraw(); renderDockEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible();
+  const h=document.getElementById('hint');
+  if(h) h.textContent='Original chart restored · slip occupancy kept';
+}
+function showLayoutTipBannerOnce(){
+  try{
+    if(localStorage.getItem('laceys-v67-layout-tip')) return;
+  }catch(e){}
+  const ban=document.getElementById('layout-tip-banner');
+  if(!ban) return;
+  ban.style.display='block';
+  const d=document.getElementById('layout-tip-dismiss');
+  if(d) d.onclick=()=>{
+    ban.style.display='none';
+    try{ localStorage.setItem('laceys-v67-layout-tip','1'); }catch(e){}
+  };
+}
+
 document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
+
+(function wireRestoreButtons(){
+  const rc=document.getElementById('btn-reset-cruiser');
+  if(rc) rc.onclick=()=>resetCruiserDock();
+  const ro=document.getElementById('btn-restore-original');
+  if(ro) ro.onclick=()=>restoreOriginalChart();
+  // Align docks stays available but hidden in UI — do not auto-enter
+  showLayoutTipBannerOnce();
+})();
 document.getElementById("add-walk").onclick=()=>{const m={id:uid("mainwalk"),kind:"bar",x:200,y:200,w:14,h:220,title:"Walkway",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-box").onclick=()=>{const m={id:uid("box"),kind:"box",x:80,y:80,w:140,h:50,fill:"#2b6d8a",t1:"Building",t2:"",ink:"#fff",rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
 document.getElementById("add-label").onclick=()=>{const m={id:uid("label"),kind:"text",x:200,y:80,text:"Label",size:13,rot:0};marks.push(m);selectedMark=m.id;selectedDock=null;selected=null;saveLayout();showTab("layout");redraw();renderDockEditor();};
