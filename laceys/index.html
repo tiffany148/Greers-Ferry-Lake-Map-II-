@@ -30,7 +30,8 @@ svg{transform-origin:0 0}
 .slip rect{stroke:#3a4342;stroke-width:.5}
 .slip.on rect{stroke:#fff;stroke-width:2}
 .slip.dim{opacity:.2}
-.slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
+.slip text,.slip-num,.dock-name-label,.screen-label{pointer-events:none;font-weight:800}
+.slip-num,.dock-name-label,.screen-label{paint-order:stroke;stroke-linejoin:round}
 .dock-hit{cursor:grab}
 .dock-hit.on .walk{stroke:#fff;stroke-width:2}
 .zoom{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:8px;z-index:5}
@@ -75,7 +76,7 @@ body.editing .edit-banner{display:block}
 @media print{
   @page{ size: landscape; margin: 0.4in; }
   body{ background:#fff !important; color:#111 !important; }
-  header .kicker,.search,.chips,.zoom,.pan,.photo-op,.photo-align,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
+  header .kicker,.search,.chips,.zoom,.pan,.photo-op,.photo-align,.label-size-bar,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
   header{ padding:0 0 6px !important; }
   h1{ color:#111 !important; font-size:18px !important; }
   .layout{ display:block !important; height:auto !important; }
@@ -130,10 +131,29 @@ body.editing .chart{ outline:1px solid rgba(154,213,208,.35); outline-offset:-1p
 }
 body.photo-moving #photo-move-chip{ display:flex; }
 #photo-move-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#f0c14b; color:#1a1a1a; font-weight:700; cursor:pointer; }
-/* Keep align controls reachable while moving photo (incl. mobile edit) */
+body.dock-aligning{ cursor:grab; }
+body.dock-aligning .chart{ cursor:grab; outline:2px solid #7ec8ff; outline-offset:-2px; }
+#dock-align-chip{
+  display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  z-index:40; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+  max-width:min(94%,560px); padding:8px 12px; border-radius:12px;
+  background:rgba(20,70,110,.95); color:#eef4f3; font-size:13px; font-weight:650;
+  box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:auto;
+}
+body.dock-aligning #dock-align-chip{ display:flex; }
+#dock-align-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#7ec8ff; color:#0a1a28; font-weight:700; cursor:pointer; }
+#dock-align-chip .op-preset{ background:#15565b; color:#eef4f3; }
+.label-size-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
+.label-size-bar select{border:0;border-radius:8px;padding:6px 10px;background:#15565b;color:var(--ink);font-size:13px}
+.label-size-bar .btn.on{outline:2px solid #f0c14b}
+/* Keep align controls reachable while moving photo / aligning docks (incl. mobile edit) */
 @media (max-width:860px){
   body.editing.photo-moving .photo-align,
-  body.editing.photo-moving .photo-op{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
+  body.editing.photo-moving .photo-op,
+  body.editing.photo-moving .label-size-bar,
+  body.editing.dock-aligning .photo-align,
+  body.editing.dock-aligning .photo-op,
+  body.editing.dock-aligning .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
 }
 
 /* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
@@ -154,6 +174,7 @@ body.photo-moving #photo-move-chip{ display:flex; }
   body.editing .chips,
   body.editing .photo-op,
   body.editing .photo-align,
+  body.editing .label-size-bar,
   body.editing .kicker,
   body.editing .multi-bar,
   body.editing .edit-banner,
@@ -375,10 +396,21 @@ body.photo-moving #photo-move-chip{ display:flex; }
   <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
 </div>
 
+<div class="label-size-bar" id="label-size-bar" title="Slip number on-screen size (independent of map zoom)">
+  <span>Label size</span>
+  <select id="label-size" aria-label="Slip label size">
+    <option value="small">Small</option>
+    <option value="normal" selected>Normal</option>
+    <option value="large">Large</option>
+    <option value="xl">XL</option>
+  </select>
+  <span style="opacity:.85;font-size:12px">stays readable when zoomed out or docks scaled to photo</span>
+</div>
 <div class="photo-align" id="photo-align-bar">
-  <span>Align photo</span>
-  <span style="opacity:.85;font-size:12px">full aerial (no auto-crop) · Move photo to drag/scale</span>
+  <span>Align</span>
+  <span style="opacity:.85;font-size:12px">full aerial · Move photo <b>or</b> Align docks (not both)</span>
   <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; pinch or slider to scale">Move photo</button>
+  <button type="button" class="btn" id="btn-dock-align" title="Drag docks to pan; pinch or −/+ to scale docks onto the aerial — labels stay readable">Align docks to photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
   <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
@@ -393,8 +425,16 @@ body.photo-moving #photo-move-chip{ display:flex; }
 <div class="layout">
   <div class="chart" id="chart">
     <div id="photo-move-chip" hidden>
-      <span>Moving photo — drag to pan, pinch/slider to scale</span>
+      <span>Moving photo — drag to pan, pinch/slider to scale · docks locked</span>
       <button type="button" id="photo-move-done">Done moving photo</button>
+    </div>
+    <div id="dock-align-chip" hidden>
+      <span>Aligning docks — drag / pinch / −/+ · photo locked</span>
+      <button type="button" class="op-preset" data-align-opacity="40" title="Photo 40%">40%</button>
+      <button type="button" class="op-preset" data-align-opacity="70" title="Photo 70%">70%</button>
+      <button type="button" id="dock-align-scale-minus" title="Shrink docks">−</button>
+      <button type="button" id="dock-align-scale-plus" title="Grow docks">+</button>
+      <button type="button" id="dock-align-done">Done aligning</button>
     </div>
     <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
     <div class="pan" aria-label="Pan map">
@@ -474,7 +514,7 @@ body.photo-moving #photo-move-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=65"></script>
-<script src="app.js?v=65"></script>
+<script src="app-data.js?v=66"></script>
+<script src="app.js?v=66"></script>
 </body>
 </html>
