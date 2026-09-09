@@ -162,8 +162,8 @@ function syncPhotoAlignScaleAvg(){
   photoAlign.scale = clampPhotoScale(((Number(photoAlign.scaleX)||1)+(Number(photoAlign.scaleY)||1))/2);
 }
 const LABEL_SIZE_STORE="laceys-label-size-v1";
-const LABEL_PX={classic:9,small:10,normal:12,large:14,xl:18};
-let labelSizeKey="classic";
+const LABEL_PX={small:8,classic:9,normal:10,large:12,xl:16};
+let labelSizeKey="normal";
 let photoMoveMode=false;
 let dockAlignMode=false;
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
@@ -195,14 +195,17 @@ function loadLabelSize(){
 function saveLabelSize(){
   try{ localStorage.setItem(LABEL_SIZE_STORE, labelSizeKey); }catch(e){}
 }
-function targetLabelPx(){ return LABEL_PX[labelSizeKey]||12; }
-/** Classic chart fonts (pre v66) — world units, not screen-boosted. */
+function targetLabelPx(){ return LABEL_PX[labelSizeKey]||10; }
+/** Label size control sets world-unit slip fonts (not zoom-boosted). */
 function screenAwareFontSize(worldBase){
+  // Prefer the Label size setting; fall back to designed world base
+  const fromUi=LABEL_PX[labelSizeKey];
+  if(fromUi!=null) return fromUi;
   return Number(worldBase)||9;
 }
 function labelStrokeWidth(fs){ return 0; }
 function slipLabelAttrs(x,y,worldBase){
-  const fs=Number(worldBase)||9;
+  const fs=screenAwareFontSize(worldBase);
   return {
     x, y, "text-anchor":"middle",
     fill:"#1b2423", "font-size":String(fs), "font-weight":"700",
@@ -210,14 +213,24 @@ function slipLabelAttrs(x,y,worldBase){
   };
 }
 function dockNameLabelAttrs(x,y,worldBase){
-  const fs=Number(worldBase)||14;
+  const slipFs=screenAwareFontSize(9);
+  const fs=Math.round((Number(worldBase)||14) * (slipFs/9));
   return {
     x, y, fill:"#d7eceb", "font-size":String(fs), "font-weight":"700",
     class:"dock-name-label"
   };
 }
 function syncLabelFonts(){
-  // Classic sizing — leave draw-time font-size alone (no zoom boost)
+  try{
+    const slipFs=screenAwareFontSize(9);
+    svg.querySelectorAll("text.slip-num").forEach(t=>{
+      t.setAttribute("font-size", String(slipFs));
+    });
+    const dockFs=Math.round(14*(slipFs/9));
+    svg.querySelectorAll("text.dock-name-label").forEach(t=>{
+      t.setAttribute("font-size", String(dockFs));
+    });
+  }catch(e){}
 }
 loadLabelSize();
 function applyPhotoAlign(){
