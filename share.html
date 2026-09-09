@@ -26,6 +26,9 @@
   .sheet.open { display:block; }
   .sheet h2 { font-size:13px; margin:0 0 10px; letter-spacing:.04em; text-transform:uppercase; color:#9bb4c4; }
   .row { display:flex; align-items:center; gap:8px; margin:8px 0; font-size:14px; }
+  .row.slider { flex-wrap:wrap; }
+  .row.slider input[type=range] { flex:1; min-width:120px; accent-color:var(--accent); }
+  .row.slider .hits-meta { margin-left:auto; }
   .row input { accent-color:var(--accent); }
   .swatch { width:10px; height:10px; border-radius:50%; border:1px solid #fff8; }
   .fabs { position:absolute; right:10px; bottom:calc(18px + var(--safe-bot)); z-index:800; display:flex; flex-direction:column; gap:8px; }
@@ -91,6 +94,7 @@
   <label class="row"><input type="radio" name="base" value="satellite" /> Satellite</label>
   <label class="row"><input type="radio" name="base" value="streets" /> Streets</label>
   <label class="row"><input type="radio" name="base" value="topo" /> Topo</label>
+  <label class="row slider" id="blend-row">Auto switch <input id="blend-speed" type="range" min="1" max="10" value="7" /> <span class="hits-meta" id="blend-label">faster</span></label>
   <h2>Historical overlay</h2>
   <label class="row"><input type="checkbox" id="hist-on" /> USGS historic topo (scanned)</label>
   <label class="row"><input type="checkbox" id="prelake-on" /> Pre-lake valley (1894)</label>
@@ -401,26 +405,21 @@ function clearBaseLayers(){
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 function lerp(a,b,t){ return a + (b-a)*t; }
 // Auto stack: topo (wide) → satellite (mid) → streets (close), Google Earth–style.
+function blendSettings(){
+  var s = 7;
+  var el = document.getElementById("blend-speed");
+  if (el) s = +el.value || 7;
+  var t = (s - 1) / 9; // 0 slow, 1 fast
+  var span = 4 - 3 * t; // 4 zoom levels → 1
+  var satStart = 12 - 2.2 * t; // later → earlier
+  var streetStart = satStart + span + (2.4 - 1.4 * t);
+  return {satStart:satStart, satEnd:satStart+span, streetStart:streetStart, streetEnd:streetStart+span};
+}
 function autoOpacities(z){
-  // topo fades 11→13.5, sat peaks mid, streets rise 15→17.5
-  var topo, sat, streets;
-  if (z <= 11) {
-    topo = 1; sat = 0; streets = 0;
-  } else if (z < 13.5) {
-    sat = clamp01((z - 11) / 2.5);
-    topo = 1; // under sat
-    streets = 0;
-  } else if (z < 15) {
-    topo = 1; sat = 1; streets = 0;
-  } else if (z < 17.5) {
-    topo = 0;
-    streets = clamp01((z - 15) / 2.5);
-    sat = 1; // under streets
-  } else {
-    topo = 0; sat = 1; streets = 1;
-  }
-  // once streets fully cover, sat can stay underneath at 1 for instant zoom-out
-  return {topo:topo, sat:sat, streets:streets};
+  var p = blendSettings();
+  var sat = z <= p.satStart ? 0 : z >= p.satEnd ? 1 : clamp01((z - p.satStart) / (p.satEnd - p.satStart));
+  var streets = z <= p.streetStart ? 0 : z >= p.streetEnd ? 1 : clamp01((z - p.streetStart) / (p.streetEnd - p.streetStart));
+  return {topo:1, sat:sat, streets:streets};
 }
 function applyAutoBase(){
   var o = autoOpacities(map.getZoom());
@@ -464,6 +463,26 @@ setBaseMode("auto");
 map.on("zoom zoomend", function(){
   if (base === "auto") applyAutoBase();
 });
+(function(){
+  var STORE_BLEND = (typeof PUBLIC_VIEW !== "undefined" && PUBLIC_VIEW) ? "gfl-share-blend" : "gfl-blend-speed";
+  var sl = document.getElementById("blend-speed");
+  var lab = document.getElementById("blend-label");
+  var labels = ["slowest","slower","slow","easy","medium","quicker","faster","fast","very fast","snap"];
+  function paintBlend(){
+    if (!sl || !lab) return;
+    lab.textContent = labels[Math.max(0, Math.min(9, (+sl.value||7)-1))];
+    try { localStorage.setItem(STORE_BLEND, sl.value); } catch(e){}
+    if (base === "auto") applyAutoBase();
+  }
+  if (sl) {
+    try {
+      var saved = localStorage.getItem(STORE_BLEND);
+      if (saved) sl.value = saved;
+    } catch(e){}
+    sl.oninput = paintBlend;
+    paintBlend();
+  }
+})();
 
 const hist = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}", {
   maxZoom:15, opacity:0.55, attribution:"Esri / USGS historic topo"
