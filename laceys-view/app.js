@@ -6,7 +6,13 @@ window.addEventListener("error",function(ev){
 
 const VIEW_ONLY=true;
 const LAYERS_EDIT_ONLY=false;
+const IS_LAYOUT_SOURCE=false;
+const SHARE_FOLLOW_MAIN=false;
 function blockEdit(){
+  if(typeof SHARE_FOLLOW_MAIN!=="undefined" && SHARE_FOLLOW_MAIN){
+    alert("Share chart — dock layout follows MAIN. Slip status still editable here.");
+    return true;
+  }
   if(typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY){
     alert("Layers-only chart — dock positions are locked. Use the Layers tab to assign slip colors.");
     return true;
@@ -2032,6 +2038,168 @@ function printChart(){
   w.document.close();
 }
 
+
+const PUBLISHED_LAYOUT_KEY="laceys-published-layout-v1";
+const PUBLISHED_LAYOUT_URLS=[
+  "../laceys/published-layout.json",
+  "./published-layout.json",
+  "https://tiffany148.github.io/Greers-Ferry-Lake-Map-II-/laceys/published-layout.json"
+];
+function buildPublishedPayload(){
+  ensureStackOrder();
+  return {
+    docks: clone(docks),
+    marks: clone(marks),
+    groups: Array.isArray(groups)?clone(groups):[],
+    layers: Array.isArray(layers)?clone(layers):[],
+    stackOrder: Array.isArray(stackOrder)?clone(stackOrder):[],
+    publishedAt: new Date().toISOString()
+  };
+}
+function pruneOrphanLayerOpts(){
+  try{
+    const valid={};
+    (layers||[]).forEach(L=>{
+      valid[L.id]=new Set((L.options||[]).map(o=>o.id));
+    });
+    let changed=false;
+    Object.keys(data||{}).forEach(slipId=>{
+      const rec=data[slipId];
+      if(!rec||!rec.layerOpts||typeof rec.layerOpts!=="object") return;
+      Object.keys(rec.layerOpts).forEach(lid=>{
+        const oid=rec.layerOpts[lid];
+        if(!valid[lid] || (oid && !valid[lid].has(oid))){
+          delete rec.layerOpts[lid];
+          changed=true;
+        }
+      });
+    });
+    if(changed) save(data);
+  }catch(e){}
+}
+function applyPublishedLayout(payload, opts){
+  if(!payload||!Array.isArray(payload.docks)||!payload.docks.length) return false;
+  const quiet=opts&&opts.quiet;
+  docks=clone(payload.docks);
+  marks=clone(payload.marks||[]);
+  groups=Array.isArray(payload.groups)?clone(payload.groups):[];
+  stackOrder=Array.isArray(payload.stackOrder)?clone(payload.stackOrder):[];
+  if(Array.isArray(payload.layers)) layers=clone(payload.layers);
+  ensureStackOrder();
+  pruneOrphanLayerOpts();
+  try{ saveLayersStore(); }catch(e){}
+  saveLayout(false);
+  try{ buildSlips(); }catch(e){}
+  try{ redraw(); }catch(e){}
+  try{ renderDockEditor(); }catch(e){}
+  try{ renderLayersEditor(); }catch(e){}
+  try{ renderChips(); }catch(e){}
+  try{ updateUndoBtns(); }catch(e){}
+  try{ updateSelHint(); }catch(e){}
+  if(!quiet){
+    try{ flashSave("Layout synced from main · "+(payload.publishedAt||"")); }catch(e){}
+  }
+  return true;
+}
+function writePublishedLocal(payload){
+  const json=JSON.stringify(payload);
+  try{ localStorage.setItem(PUBLISHED_LAYOUT_KEY, json); }catch(e){}
+  if(window.laceysDesktop && typeof window.laceysDesktop.writePublishedLayout==="function"){
+    try{ return Promise.resolve(window.laceysDesktop.writePublishedLayout(json)); }catch(e){ return Promise.resolve(false); }
+  }
+  return Promise.resolve(true);
+}
+function downloadPublishedLayoutFile(payload){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));
+  a.download="published-layout.json";
+  a.click();
+  setTimeout(()=>{ try{ URL.revokeObjectURL(a.href); }catch(e){} }, 2000);
+}
+function publishLayoutAfterSave(){
+  if(!IS_LAYOUT_SOURCE) return;
+  const payload=buildPublishedPayload();
+  writePublishedLocal(payload).then(function(){
+    flashSave("Saved · layout shared to copies (Desktop auto / Web localStorage)");
+  }).catch(function(){
+    flashSave("Saved on this device");
+  });
+}
+function publishLayoutToCopies(){
+  if(!IS_LAYOUT_SOURCE) return;
+  const payload=buildPublishedPayload();
+  writePublishedLocal(payload).then(function(){
+    downloadPublishedLayoutFile(payload);
+    flashSave("Published · Desktop copies update on open. Web: upload published-layout.json into laceys/ on GitHub");
+    try{
+      alert("Published layout for live copies.\n\nDesktop: other modes update on open/focus.\nWeb: upload the downloaded published-layout.json into the laceys/ folder on GitHub (replace the existing file), then refresh share/view/layers.");
+    }catch(e){}
+  });
+}
+async function fetchPublishedLayoutJson(){
+  const bust="?t="+Date.now();
+  for(const base of PUBLISHED_LAYOUT_URLS){
+    try{
+      const res=await fetch(base+bust, {cache:"no-store"});
+      if(!res.ok) continue;
+      const raw=await res.json();
+      if(raw&&Array.isArray(raw.docks)&&raw.docks.length) return raw;
+    }catch(e){}
+  }
+  return null;
+}
+async function pullPublishedLayout(opts){
+  if(IS_LAYOUT_SOURCE) return false;
+  const quiet=opts&&opts.quiet;
+  let payload=null;
+  // 1) Electron userData
+  if(window.laceysDesktop && typeof window.laceysDesktop.readPublishedLayout==="function"){
+    try{
+      const raw=await window.laceysDesktop.readPublishedLayout();
+      if(raw){
+        payload=(typeof raw==="string")?JSON.parse(raw):raw;
+      }
+    }catch(e){}
+  }
+  // 2) localStorage broadcast (same browser)
+  if(!payload){
+    try{
+      const ls=localStorage.getItem(PUBLISHED_LAYOUT_KEY);
+      if(ls) payload=JSON.parse(ls);
+    }catch(e){}
+  }
+  // 3) hosted / relative JSON
+  if(!payload){
+    payload=await fetchPublishedLayoutJson();
+  }
+  if(!payload||!Array.isArray(payload.docks)||!payload.docks.length) return false;
+  // Prefer newer publishedAt if we already have something similar — always apply when present
+  applyPublishedLayout(payload, {quiet:quiet});
+  return true;
+}
+function wirePublishedLayoutListeners(){
+  if(IS_LAYOUT_SOURCE) return;
+  if(window.laceysDesktop && typeof window.laceysDesktop.onPublishedLayoutUpdated==="function"){
+    try{
+      window.laceysDesktop.onPublishedLayoutUpdated(function(data){
+        try{
+          const payload=(typeof data==="string")?JSON.parse(data):data;
+          applyPublishedLayout(payload, {quiet:false});
+        }catch(e){}
+      });
+    }catch(e){}
+  }
+  window.addEventListener("focus", function(){ pullPublishedLayout({quiet:true}); });
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState==="visible") pullPublishedLayout({quiet:true});
+  });
+  window.addEventListener("storage", function(ev){
+    if(ev && ev.key===PUBLISHED_LAYOUT_KEY && ev.newValue){
+      try{ applyPublishedLayout(JSON.parse(ev.newValue), {quiet:false}); }catch(e){}
+    }
+  });
+}
+
 function saveNow(){
   // Pull any OOB geometry back inside the chart before persist (undoable)
   const preClamp=snap();
@@ -2050,7 +2218,11 @@ function saveNow(){
   /* view isolated */
   saveLayersStore();
   lastSnap=s;
-  flashSave("Saved on this device · Download JSON for a backup copy");
+  if(IS_LAYOUT_SOURCE){
+    publishLayoutAfterSave();
+  }else{
+    flashSave("Saved on this device · Download JSON for a backup copy");
+  }
 }
 
 function saveLayersStore(){
@@ -2347,7 +2519,7 @@ const _strip=document.getElementById("strip-cover"); if(_strip) _strip.addEventL
 });
 
 /* ---- view-only / layers-edit-only hard guards ---- */
-if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY)){
+if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY) || (typeof SHARE_FOLLOW_MAIN!=="undefined" && SHARE_FOLLOW_MAIN)){
   editing=false;
   document.body.classList.remove("editing");
   const et=document.getElementById("edit-toggle"); if(et){ et.hidden=true; et.onclick=()=>{ blockEdit(); }; }
@@ -2360,14 +2532,14 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
     const el=document.getElementById(id);
     if(!el) return;
     el.addEventListener("click", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
-    if(VIEW_ONLY || LAYERS_EDIT_ONLY){ el.disabled=true; el.style.opacity=".45"; }
+    if(VIEW_ONLY || LAYERS_EDIT_ONLY || SHARE_FOLLOW_MAIN){ el.disabled=true; el.style.opacity=".45"; }
   });
   ["photo-scale-x","photo-scale-y","photo-rot"].forEach(id=>{
     const el=document.getElementById(id);
     if(!el) return;
     el.addEventListener("input", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
     el.addEventListener("change", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
-    if(VIEW_ONLY || LAYERS_EDIT_ONLY) el.disabled=true;
+    if(VIEW_ONLY || LAYERS_EDIT_ONLY || SHARE_FOLLOW_MAIN) el.disabled=true;
   });
   if(VIEW_ONLY){
     const boat=document.getElementById("boat"); if(boat) boat.readOnly=true;
@@ -2391,4 +2563,38 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
     const layoutTab=document.querySelector('.tabs button[data-tab="layout"]');
     if(layoutTab) layoutTab.style.display="none";
   }
+  if(SHARE_FOLLOW_MAIN){
+    let ban=document.getElementById("share-follow-banner");
+    if(!ban){
+      ban=document.createElement("div");
+      ban.id="share-follow-banner";
+      ban.style.cssText="margin:8px 16px;padding:8px 12px;border-radius:10px;background:#1a3a5c;color:#eef6f8;font-size:13px";
+      ban.textContent="Share chart — layout follows MAIN (locked). Slip occupancy stays editable here.";
+      const err=document.getElementById("error-banner");
+      if(err && err.parentNode) err.parentNode.insertBefore(ban, err.nextSibling);
+      else document.body.insertBefore(ban, document.body.firstChild);
+    }
+    const layoutTab=document.querySelector('.tabs button[data-tab="layout"]');
+    if(layoutTab) layoutTab.style.display="none";
+  }
 }
+
+/* ---- published layout sync boot ---- */
+(function(){
+  ["btn-publish-layout","btn-publish-layout-dock"].forEach(function(id){
+    const pubBtn=document.getElementById(id);
+    if(!pubBtn) return;
+    if(IS_LAYOUT_SOURCE){
+      pubBtn.onclick=function(){ publishLayoutToCopies(); };
+    }else{
+      pubBtn.hidden=true;
+    }
+  });
+  wirePublishedLayoutListeners();
+  if(!IS_LAYOUT_SOURCE){
+    pullPublishedLayout({quiet:true}).then(function(ok){
+      if(ok){ try{ ensureMapVisible(); }catch(e){} }
+    }).catch(function(){});
+  }
+})();
+
