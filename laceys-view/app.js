@@ -5,7 +5,18 @@ window.addEventListener("error",function(ev){
 });
 
 const VIEW_ONLY=true;
-function blockEdit(){ if(VIEW_ONLY){ alert("This is a view-only chart. You can switch and hide/show layers, but docks and slips stay fixed."); return true; } return false; }
+const LAYERS_EDIT_ONLY=false;
+function blockEdit(){
+  if(typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY){
+    alert("Layers-only chart — dock positions are locked. Use the Layers tab to assign slip colors.");
+    return true;
+  }
+  if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){
+    alert("This is a view-only chart. You can switch and hide/show layers, but docks and slips stay fixed.");
+    return true;
+  }
+  return false;
+}
 function walkGeomFromDock(d){
   if(d.type==="ns"){const w=d.sw||40,h=d.sh||15,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x+w+2,y:d.y-4,w:12,h:n*(h+g)+10};}
   if(d.type==="ew"){const w=d.sw||16,h=d.sh||36,g=d.gap||3,n=Math.max((d.a||[]).length,(d.b||[]).length);return {x:d.x-4,y:d.y+h+2,w:n*(w+g)+10,h:12};}
@@ -34,6 +45,7 @@ function moveDockSlips(d,dx,dy){
 }
 
 const MAP_W=2400, MAP_H=1700; // SVG viewBox -- hard edit working area
+const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function unionBox(a,b){
   if(!a) return b; if(!b) return a;
   const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y);
@@ -165,11 +177,12 @@ function syncPhotoAlignScaleAvg(){
   photoAlign.scale = clampPhotoScale(((Number(photoAlign.scaleX)||1)+(Number(photoAlign.scaleY)||1))/2);
 }
 const LABEL_SIZE_STORE="laceys-view-label-size-v1";
-const LABEL_PX={classic:9,small:10,normal:12,large:14,xl:18};
-let labelSizeKey="classic";
+const LABEL_PX={small:8,classic:9,normal:11,large:14,xl:20};
+let labelSizeKey="normal";
 let photoMoveMode=false;
 let dockAlignMode=false;
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
+const chart=document.getElementById("chart"); // must exist before first redraw → applyDeepZoomLod → chartSize
 let photoDrag=null;
 let dockAlignDrag=null;
 const photoPointers=new Map(); // pinch while moving photo
@@ -198,29 +211,45 @@ function loadLabelSize(){
 function saveLabelSize(){
   try{ localStorage.setItem(LABEL_SIZE_STORE, labelSizeKey); }catch(e){}
 }
-function targetLabelPx(){ return LABEL_PX[labelSizeKey]||12; }
-/** Classic chart fonts (pre v66) — world units, not screen-boosted. */
+function targetLabelPx(){ return LABEL_PX[labelSizeKey]||10; }
+/** Label size control sets world-unit slip fonts (not zoom-boosted). */
 function screenAwareFontSize(worldBase){
+  // Prefer the Label size setting; fall back to designed world base
+  const fromUi=LABEL_PX[labelSizeKey];
+  if(fromUi!=null) return fromUi;
   return Number(worldBase)||9;
 }
 function labelStrokeWidth(fs){ return 0; }
 function slipLabelAttrs(x,y,worldBase){
-  const fs=Number(worldBase)||9;
+  const fs=screenAwareFontSize(worldBase);
   return {
     x, y, "text-anchor":"middle",
     fill:"#1b2423", "font-size":String(fs), "font-weight":"700",
+    style:"font-size:"+fs+"px",
     class:"slip-num"
   };
 }
 function dockNameLabelAttrs(x,y,worldBase){
-  const fs=Number(worldBase)||14;
+  const slipFs=screenAwareFontSize(9);
+  const fs=Math.round((Number(worldBase)||14) * (slipFs/9));
   return {
     x, y, fill:"#d7eceb", "font-size":String(fs), "font-weight":"700",
     class:"dock-name-label"
   };
 }
 function syncLabelFonts(){
-  // Classic sizing — leave draw-time font-size alone (no zoom boost)
+  try{
+    const slipFs=screenAwareFontSize(9);
+    svg.querySelectorAll("text.slip-num").forEach(t=>{
+      t.setAttribute("font-size", String(slipFs));
+      t.style.fontSize=slipFs+"px";
+    });
+    const dockFs=Math.round(14*(slipFs/9));
+    svg.querySelectorAll("text.dock-name-label").forEach(t=>{
+      t.setAttribute("font-size", String(dockFs));
+      t.style.fontSize=dockFs+"px";
+    });
+  }catch(e){}
 }
 loadLabelSize();
 function applyPhotoAlign(){
@@ -270,33 +299,44 @@ function applyPhotoAlign(){
 function loadLayersStandalone(){
   try{
     const raw=JSON.parse(localStorage.getItem("laceys-view-layers-v1")||"null");
-    return Array.isArray(raw)?raw:[];
-  }catch{return [];}
+    if(Array.isArray(raw)&&raw.length) return raw;
+  }catch(e){}
+  if(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS)) return clone(DEFAULT_LAYERS);
+  return [];
 }
 function loadLayout(){
   try{
-    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||localStorage.getItem("laceys-layout-v2")||localStorage.getItem("laceys-layout-v1")||"null");
+    const raw=JSON.parse(localStorage.getItem(LAYOUT_STORE)||"null");
+    const defaultStack=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER)&&DEFAULT_STACK_ORDER.length)?clone(DEFAULT_STACK_ORDER):[];
+    const defaultLayers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):loadLayersStandalone();
     if(!raw||!Array.isArray(raw.docks)||!raw.docks.length){
-      return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};
+      return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[],layers:defaultLayers,stackOrder:defaultStack};
     }
     // Saved layout is authoritative so deletes (parking oval, etc.) and positions stick.
     const docks=clone(raw.docks);
     const marks=clone((raw.marks||[]).filter(m=>m && !isDockPieceMark(m.id)));
-    const layers=Array.isArray(raw.layers)?clone(raw.layers):loadLayersStandalone();
+    const layers=Array.isArray(raw.layers)?clone(raw.layers):defaultLayers;
+    let stackOrder=Array.isArray(raw.stackOrder)?clone(raw.stackOrder):[];
+    if(!stackOrder.length) stackOrder=defaultStack;
     if(raw.photoAlign){
       photoAlign=normalizePhotoAlign(raw.photoAlign);
       savePhotoAlign();
     }
     if(raw.photoMax!=null){ photoMax=Math.max(0, Math.min(1, Number(raw.photoMax))); }
-    return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers};
-  }catch{return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:loadLayersStandalone()};}
+    return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers,stackOrder};
+  }catch{
+    const defaultStack=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER)&&DEFAULT_STACK_ORDER.length)?clone(DEFAULT_STACK_ORDER):[];
+    const defaultLayers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):loadLayersStandalone();
+    return {docks:clone(DEFAULT_DOCKS),marks:clone(DEFAULT_MARKS),groups:[],layers:defaultLayers,stackOrder:defaultStack};
+  }
 }
 const hist=[], future=[];
 let lastSnap=null;
-function snap(){ return JSON.stringify({docks,marks,groups,layers,photoAlign,photoMax}); }
+function snap(){ return JSON.stringify({docks,marks,groups,layers,photoAlign,photoMax,stackOrder}); }
 function restoreSnap(s){
   const raw=JSON.parse(s);
   docks=raw.docks; marks=raw.marks; groups=raw.groups||[];
+  stackOrder=Array.isArray(raw.stackOrder)?raw.stackOrder:[];
   if(Array.isArray(raw.layers)) layers=raw.layers;
   if(raw.photoAlign){
     photoAlign=normalizePhotoAlign(raw.photoAlign);
@@ -327,8 +367,9 @@ function saveLayout(record){
   localStorage.setItem(LAYOUT_STORE, snap());
   updateUndoBtns();
 }
-let {docks,marks,groups,layers}=loadLayout();
+let {docks,marks,groups,layers,stackOrder}=loadLayout();
 if(!Array.isArray(layers)) layers=[];
+if(!Array.isArray(stackOrder)) stackOrder=[];
 let activeLayerId=null;
 let layerOptFilter="All";
 function sanitizeLayout(){
@@ -479,7 +520,7 @@ function renderPickList(){
 function setMultiPick(on){
   multiPick=!!on;
   if(multiPick){
-    if(!editing){ document.getElementById("edit-toggle").click(); }
+    if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); }
     moveWholeChart=false;
     showTab("layout");
     document.getElementById("hint").textContent="Multi-select · tick the list (or tap the map)";
@@ -508,8 +549,77 @@ function moveMembersByKeys(keys,dx,dy){
 }
 function moveGroupMembers(g,dx,dy){ moveMembersByKeys(g.members||[], dx, dy); }
 function allLayoutKeys(){ return docks.map(d=>"dock:"+d.id).concat(marks.map(m=>"mark:"+m.id)); }
+function markLodBucket(m){
+  if(!m) return "site";
+  if(m.kind==="bar") return "walk";
+  if(m.kind==="pill"||m.kind==="text") return "labels";
+  return "site";
+}
+function defaultStackOrder(){
+  if(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER)&&DEFAULT_STACK_ORDER.length){
+    return clone(DEFAULT_STACK_ORDER);
+  }
+  // Match prior LOD paint order: site marks → walk marks → docks → labels
+  const site=[], walk=[], dockKeys=[], labels=[];
+  marks.forEach(m=>{
+    const k="mark:"+m.id; const b=markLodBucket(m);
+    if(b==="labels") labels.push(k); else if(b==="walk") walk.push(k); else site.push(k);
+  });
+  docks.forEach(d=>dockKeys.push("dock:"+d.id));
+  return site.concat(walk, dockKeys, labels);
+}
+function ensureStackOrder(){
+  const want=allLayoutKeys();
+  const wantSet=new Set(want);
+  const keep=[];
+  const seen=new Set();
+  const src=(stackOrder&&stackOrder.length)?stackOrder:defaultStackOrder();
+  src.forEach(k=>{ if(wantSet.has(k) && !seen.has(k)){ keep.push(k); seen.add(k); } });
+  // New pieces append to front (end of list = painted last)
+  want.forEach(k=>{ if(!seen.has(k)){ keep.push(k); seen.add(k); } });
+  stackOrder=keep;
+}
+function stackCtrlHtml(){
+  return `<p class="hint" style="margin-top:10px">Stack order (what sits in front)</p><div class="st"><button type="button" id="ed-stack-front">Bring to front</button><button type="button" id="ed-stack-forward">Forward</button></div><div class="st"><button type="button" id="ed-stack-back">Send to back</button><button type="button" id="ed-stack-backward">Back</button></div>`;
+}
+function stackKeysForEditor(){
+  if(multi.size>1) return [...multi];
+  if(selectedDock) return ["dock:"+selectedDock];
+  if(selectedMark) return ["mark:"+selectedMark];
+  return [];
+}
+function stackMove(keys, mode){
+  ensureStackOrder();
+  const set=new Set(keys||[]);
+  if(!set.size) return false;
+  const selected=stackOrder.filter(k=>set.has(k));
+  if(!selected.length) return false;
+  const rest=stackOrder.filter(k=>!set.has(k));
+  if(mode==="front") stackOrder=rest.concat(selected);
+  else if(mode==="back") stackOrder=selected.concat(rest);
+  else if(mode==="forward"){
+    const arr=stackOrder.slice();
+    for(let i=arr.length-2;i>=0;i--){
+      if(set.has(arr[i]) && !set.has(arr[i+1])){ const t=arr[i]; arr[i]=arr[i+1]; arr[i+1]=t; }
+    }
+    stackOrder=arr;
+  }else if(mode==="backward"){
+    const arr=stackOrder.slice();
+    for(let i=1;i<arr.length;i++){
+      if(set.has(arr[i]) && !set.has(arr[i-1])){ const t=arr[i]; arr[i]=arr[i-1]; arr[i-1]=t; }
+    }
+    stackOrder=arr;
+  }else return false;
+  return true;
+}
+function bindStackButtons(){
+  const keys=stackKeysForEditor();
+  const go=mode=>{ if(!stackMove(keys, mode)) return; saveLayout(); redraw(); renderDockEditor(); };
+  const map={front:"ed-stack-front",forward:"ed-stack-forward",back:"ed-stack-back",backward:"ed-stack-backward"};
+  Object.keys(map).forEach(mode=>{ const b=document.getElementById(map[mode]); if(b) b.onclick=()=>go(mode); });
+}
 function clearLayerNudge(){
-  [layerBg, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.removeAttribute("transform"); });
+  [layerBg, layerStack, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.removeAttribute("transform"); });
 }
 function nudgeLayers(dx,dy,scaleF,cx,cy){
   // Never nudge layerBg — photo stays put while docks/marks move (Move photo owns the aerial)
@@ -518,7 +628,7 @@ function nudgeLayers(dx,dy,scaleF,cx,cy){
     const s=scaleF, ox=cx||1200, oy=cy||850;
     t=`translate(${ox} ${oy}) scale(${s}) translate(${-ox} ${-oy}) translate(${dx} ${dy})`;
   }
-  [layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.setAttribute("transform", t); });
+  [layerStack, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.setAttribute("transform", t); });
 }
 function scalePointXY(x,y,cx,cy,f){ return {x:cx+(x-cx)*f, y:cy+(y-cy)*f}; }
 function scaleMembersByKeys(keys,f,cx,cy){
@@ -596,14 +706,15 @@ function buildSlips(){
     });
   });
 }
-const layerBg=el("g",{id:"bg"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
+const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
 const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox -- edit canvas = map, not letterbox
 loadPhotoAlign();
 applyPhotoAlign();
-svg.appendChild(layerBg);svg.appendChild(layerSite);svg.appendChild(layerWalkMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);svg.appendChild(layerLabels);svg.appendChild(layerMarks);
+// layerStack paints docks+marks in stackOrder (cross-type z-order). Empty LOD groups kept for nudge/compat.
+svg.appendChild(layerBg);svg.appendChild(layerStack);svg.appendChild(layerSite);svg.appendChild(layerWalkMarks);svg.appendChild(layerDocks);svg.appendChild(layerSlips);svg.appendChild(layerLabels);svg.appendChild(layerMarks);
 syncMapBoundVisual();
 function layerOptionFor(slipId, layerId){
   const rec=data[slipId];
@@ -646,43 +757,49 @@ function slipHiddenByLayer(s){
   const opt=(layer.options||[]).find(o=>o.id===optId);
   return !!(opt && opt.hidden);
 }
-function drawMarks(){
-  layerSite.innerHTML=""; layerWalkMarks.innerHTML=""; layerLabels.innerHTML=""; layerMarks.innerHTML="";
-  marks.forEach(m=>{
-    const rot=Number(m.rot)||0;
-    const attrs={"data-mark":m.id,class:"dock-hit"+(selectedMark===m.id?" on":"")+(multi.has("mark:"+m.id)?" multi":"")};
-    if(rot) attrs.transform=`rotate(${rot} ${m.x} ${m.y})`;
-    const g=el("g",attrs);
-    let bucket=layerSite;
-    if(m.kind==="box"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,rx:8,fill:m.fill||"#2b6d8a"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2-6,"text-anchor":"middle",fill:m.ink||"#243018","font-size":13,"font-weight":700},m.t1||""));if(m.t2)g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+12,"text-anchor":"middle",fill:m.ink||"#243018","font-size":11},m.t2)); bucket=layerSite;}
-    else if(m.kind==="p"){const rx=m.w?m.w/2:70,ry=m.h?m.h/2:26;g.appendChild(el("ellipse",{class:"walk",cx:m.x,cy:m.y,rx,ry,fill:"none",stroke:"#9ad","stroke-width":3}));g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P")); bucket=layerSite;}
-    else if(m.kind==="bridge"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge")); bucket=layerSite;}
-    else if(m.kind==="bar"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w||12,height:m.h||20,rx:3,fill:"#bfb9ac",class:"walk"})); bucket=layerWalkMarks;}
-    else if(m.kind==="pill"){
-      g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));
-      const pfs=screenAwareFontSize(10), psw=labelStrokeWidth(pfs);
-      g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:"#0a1210",stroke:"#f4fffe","stroke-width":String(psw),"paint-order":"stroke","font-size":String(pfs),"font-weight":800,class:"screen-label","data-world-fs":"10"},m.label||""));
-      bucket=layerLabels;
-    }
-    else if(m.kind==="text"){
-      const baseFs=m.size||13; const fs=screenAwareFontSize(baseFs); const sw=labelStrokeWidth(fs);
-      const ink=m.ink||"#0a1210";
-      g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));
-      g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,stroke:"#f4fffe","stroke-width":String(sw),"paint-order":"stroke","font-size":String(fs),"font-weight":800,class:"screen-label","data-world-fs":String(baseFs)},m.text||""));
-      bucket=layerLabels;
-    }
-    bucket.appendChild(g);
-  });
+function buildMarkGroup(m){
+  const rot=Number(m.rot)||0;
+  const attrs={"data-mark":m.id,"data-lod":markLodBucket(m),class:"dock-hit"+(selectedMark===m.id?" on":"")+(multi.has("mark:"+m.id)?" multi":"")};
+  if(rot) attrs.transform=`rotate(${rot} ${m.x} ${m.y})`;
+  const g=el("g",attrs);
+  if(m.kind==="box"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,rx:8,fill:m.fill||"#2b6d8a"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2-6,"text-anchor":"middle",fill:m.ink||"#243018","font-size":13,"font-weight":700},m.t1||""));if(m.t2)g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+12,"text-anchor":"middle",fill:m.ink||"#243018","font-size":11},m.t2));}
+  else if(m.kind==="p"){const rx=m.w?m.w/2:70,ry=m.h?m.h/2:26;g.appendChild(el("ellipse",{class:"walk",cx:m.x,cy:m.y,rx,ry,fill:"none",stroke:"#9ad","stroke-width":3}));g.appendChild(el("text",{x:m.x,y:m.y+6,"text-anchor":"middle",fill:"#8ec4ea","font-size":18,"font-weight":800},"P"));}
+  else if(m.kind==="bridge"){g.appendChild(el("rect",{class:"walk",x:m.x,y:m.y,width:m.w,height:m.h,fill:"#8a8a84"}));g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+16,"text-anchor":"middle",fill:"#222","font-size":12},"Hwy 92 Bridge"));}
+  else if(m.kind==="bar"){g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w||12,height:m.h||20,rx:3,fill:"#bfb9ac",class:"walk"}));}
+  else if(m.kind==="pill"){
+    g.appendChild(el("rect",{x:m.x,y:m.y,width:m.w,height:m.h,rx:4,fill:m.fill||"#2b6d8a",class:"walk"}));
+    const pfs=screenAwareFontSize(10), psw=labelStrokeWidth(pfs);
+    g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:"#0a1210",stroke:"#f4fffe","stroke-width":String(psw),"paint-order":"stroke","font-size":String(pfs),"font-weight":800,class:"screen-label","data-world-fs":"10"},m.label||""));
+  }
+  else if(m.kind==="text"){
+    const baseFs=m.size||13; const fs=screenAwareFontSize(baseFs); const sw=labelStrokeWidth(fs);
+    const ink=m.ink||"#0a1210";
+    g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));
+    g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,stroke:"#f4fffe","stroke-width":String(sw),"paint-order":"stroke","font-size":String(fs),"font-weight":800,class:"screen-label","data-world-fs":String(baseFs)},m.text||""));
+  }
+  return g;
 }
+function drawMarks(){ /* marks drawn in redraw via stackOrder */ }
 function appendWalk(g,d){
   const geom=walkGeomFromDock(d);
   g.appendChild(el("rect",{class:"walk",x:geom.x,y:geom.y,width:geom.w,height:geom.h,rx:3,fill:"#bfb9ac"}));
   g.appendChild(el("text",dockNameLabelAttrs(d.x,d.y-12,14),d.name));
 }
 function redraw(){
-  buildSlips();drawMarks();layerDocks.innerHTML="";layerSlips.innerHTML="";
+  buildSlips();
+  ensureStackOrder();
+  layerStack.innerHTML="";
+  layerSite.innerHTML=""; layerWalkMarks.innerHTML=""; layerLabels.innerHTML=""; layerMarks.innerHTML="";
+  layerDocks.innerHTML=""; layerSlips.innerHTML="";
   const byDock={};
-  docks.forEach(d=>{const rot=Number(d.rot)||0;const attrs={"data-dock":d.id,class:"dock-hit"+(selectedDock===d.id?" on":"")+(multi.has("dock:"+d.id)?" multi":"")};if(rot)attrs.transform=`rotate(${rot} ${d.x} ${d.y})`;const g=el("g",attrs);appendWalk(g,d);byDock[d.id]=g;layerDocks.appendChild(g);});
+  const pieceG={};
+  docks.forEach(d=>{
+    const rot=Number(d.rot)||0;
+    const attrs={"data-dock":d.id,"data-lod":"walk",class:"dock-hit"+(selectedDock===d.id?" on":"")+(multi.has("dock:"+d.id)?" multi":"")};
+    if(rot) attrs.transform=`rotate(${rot} ${d.x} ${d.y})`;
+    const g=el("g",attrs); appendWalk(g,d); byDock[d.id]=g; pieceG["dock:"+d.id]=g;
+  });
+  marks.forEach(m=>{ pieceG["mark:"+m.id]=buildMarkGroup(m); });
   slips.forEach(s=>{
     const parent=byDock[s.dockId]||layerSlips;
     const rot=Number(s.rot)||0;
@@ -695,9 +812,12 @@ function redraw(){
     g.appendChild(el("text",slipLabelAttrs(s.x+s.w/2,s.y+s.h/2+3,9),String(s.num).replace(/^F|^C/,"")));
     parent.appendChild(g);
   });
+  // Paint order = stackOrder (back → front). Orphan slips (no dock) stay in top-level layerSlips.
+  stackOrder.forEach(k=>{ const g=pieceG[k]; if(g) layerStack.appendChild(g); });
   document.getElementById("count").textContent=slips.filter(s=>/^\d+$/.test(String(s.num))).length+" numbered slips";
   if(mapBoundRect && mapBoundRect.parentNode===svg) svg.appendChild(mapBoundRect);
   syncMapBoundVisual();
+  applyDeepZoomLod();
 }
 const DOCK_CHIPS=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
@@ -826,7 +946,8 @@ function renderDockEditor(){
       ${rotCtrl(Number(d.rot)||0)}
       <label>Left / top numbers<textarea id="ed-a" rows="3">${(d.a||[]).join(", ")}</textarea></label>
       <label>Right / bottom numbers<textarea id="ed-b" rows="3">${(d.b||[]).join(", ")}</textarea></label>
-      <div class="st"><button type="button" id="ed-add-slip">+ Slip on this dock</button><button type="button" id="ed-reset-slips">Reset slip layout</button></div>`;
+      <div class="st"><button type="button" id="ed-add-slip">+ Slip on this dock</button><button type="button" id="ed-reset-slips">Reset slip layout</button></div>
+      ${stackCtrlHtml()}`;
     document.getElementById("ed-lock").onclick=()=>{d.locked=!locked;saveLayout();redraw();renderDockEditor();};
     document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value;saveLayout();redraw();};
     document.getElementById("ed-type").onchange=()=>{d.type=document.getElementById("ed-type").value;d.placed={};saveLayout();redraw();renderDockEditor();};
@@ -860,21 +981,23 @@ function renderDockEditor(){
       document.getElementById("ed-fill-dock").onchange=()=>saveLayout();
       document.getElementById("ed-dup-dock").onclick=()=>{
         const copy=clone(d); copy.id=uid("dock"); copy.name=(d.name||"Dock")+" copy"; copy.x+=40; copy.y+=40;
-        docks.push(copy); selectedDock=copy.id; saveLayout(); redraw(); renderDockEditor();
+        docks.push(copy); ensureStackOrder(); stackMove(["dock:"+copy.id],"front"); selectedDock=copy.id; saveLayout(); redraw(); renderDockEditor();
       };
       document.getElementById("ed-del-dock").onclick=()=>{
         if(!confirm("Delete dock "+d.name+" and its slips?")) return;
         docks=docks.filter(x=>x.id!==d.id);
         groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="dock:"+d.id));
+        ensureStackOrder();
         selectedDock=null; selected=null; saveLayout(); redraw(); renderDockEditor();
       };
     }
+    bindStackButtons();
   }else if(m){
     const kindName={bar:"Walkway",box:"Building",pill:"Building",bridge:"Bridge",text:"Label",p:"Parking"}[m.kind]||m.kind;
     const isText=m.kind==="text"||(m.text!=null&&m.kind!=="box"&&m.kind!=="pill");
     const colorVal=isText?(m.ink||"#d7eceb"):(m.fill||m.ink||"#2b6d8a");
     const colorLabel=isText?"Text color":(m.kind==="pill"||m.kind==="box"?"Fill color":"Color");
-    box.innerHTML=`<h2>${kindName}</h2><p class="hint">${isText?"Drag on the map or use X/Y and arrows to move. Change text color below.":(m.title||m.id)}</p><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label></div>${(!isText||m.w!=null)?`<div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(m.w||12)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(m.h||20)}"/></label></div>`:""}${isText?`<label>Font size<input id="ed-size" type="number" min="8" max="48" value="${Math.round(m.size||13)}"/></label>`:""}<label>${colorLabel}<input id="ed-fill" type="color" value="${colorVal}"/></label>${m.kind==="box"||m.kind==="pill"?`<label>Text / ink color<input id="ed-ink" type="color" value="${m.ink||"#ffffff"}"/></label>`:""}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>${rotCtrl(Number(m.rot)||0)}${m.kind==="text"||m.text!=null?`<label>Text<input id="ed-text" value="${(m.text||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.t1!=null?`<label>Title<input id="ed-t1" value="${(m.t1||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.label!=null?`<label>Label<input id="ed-label" value="${(m.label||"").replace(/"/g,"&quot;")}"/></label>`:""}<div class="st"><button type="button" id="ed-dup-mark">Duplicate</button><button type="button" id="ed-del">Delete this piece</button></div>`;
+    box.innerHTML=`<h2>${kindName}</h2><p class="hint">${isText?"Drag on the map or use X/Y and arrows to move. Change text color below.":(m.title||m.id)}</p><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label></div>${(!isText||m.w!=null)?`<div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(m.w||12)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(m.h||20)}"/></label></div>`:""}${isText?`<label>Font size<input id="ed-size" type="number" min="8" max="48" value="${Math.round(m.size||13)}"/></label>`:""}<label>${colorLabel}<input id="ed-fill" type="color" value="${colorVal}"/></label>${m.kind==="box"||m.kind==="pill"?`<label>Text / ink color<input id="ed-ink" type="color" value="${m.ink||"#ffffff"}"/></label>`:""}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>${rotCtrl(Number(m.rot)||0)}${m.kind==="text"||m.text!=null?`<label>Text<input id="ed-text" value="${(m.text||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.t1!=null?`<label>Title<input id="ed-t1" value="${(m.t1||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.label!=null?`<label>Label<input id="ed-label" value="${(m.label||"").replace(/"/g,"&quot;")}"/></label>`:""}${stackCtrlHtml()}<div class="st"><button type="button" id="ed-dup-mark">Duplicate</button><button type="button" id="ed-del">Delete this piece</button></div>`;
     const apply=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;const ew=document.getElementById("ed-w"),eh=document.getElementById("ed-h");if(ew)m.w=+ew.value;if(eh)m.h=+eh.value;const c=clampDeltaForBox(markBBox(Object.assign({},m,{x:m.x,y:m.y})),nx-m.x,ny-m.y);m.x+=c.dx;m.y+=c.dy; clampLayoutIntoMap(); saveLayout();redraw();};
     document.getElementById("ed-x").onchange=apply;document.getElementById("ed-y").onchange=apply;
     const ew=document.getElementById("ed-w"); if(ew) ew.onchange=apply; const eh=document.getElementById("ed-h"); if(eh) eh.onchange=apply;
@@ -888,14 +1011,18 @@ function renderDockEditor(){
     if(cf){ cf.oninput=()=>{ if(m.kind==="text") m.ink=cf.value; else m.fill=cf.value; saveLayout(false); redraw(); }; cf.onchange=()=>saveLayout(); }
     const ink=document.getElementById("ed-ink");
     if(ink){ ink.oninput=()=>{ m.ink=ink.value; saveLayout(false); redraw(); }; ink.onchange=()=>saveLayout(); }
-    document.getElementById("ed-dup-mark").onclick=()=>{ const copy=clone(m); copy.id=uid(m.kind||"mark"); copy.x+=30; copy.y+=30; marks.push(copy); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); };
-    document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));selectedMark=null;saveLayout();redraw();renderDockEditor();};
+    document.getElementById("ed-dup-mark").onclick=()=>{ const copy=clone(m); copy.id=uid(m.kind||"mark"); copy.x+=30; copy.y+=30; marks.push(copy); ensureStackOrder(); stackMove(["mark:"+copy.id],"front"); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); };
+    document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));ensureStackOrder();selectedMark=null;saveLayout();redraw();renderDockEditor();};
+    bindStackButtons();
+  }else if(multi.size>1){
+    box.innerHTML=`<h2>${multi.size} selected</h2><p class="hint">Change stack order for the whole selection.</p>${stackCtrlHtml()}`;
+    bindStackButtons();
   }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label.</p>";
 }
 function renderSlipLayerAssigns(slipId){
   const box=document.getElementById("slip-layer-assigns");
   if(!box) return;
-  if(VIEW_ONLY){
+  if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){
     if(!layers.length||!activeLayerId){ box.innerHTML=""; return; }
     const layer=layers.find(l=>l.id===activeLayerId);
     const rec=data[slipId]||{};
@@ -943,24 +1070,34 @@ function applyDeepZoomLod(){
   if(val) val.textContent=Math.round(photoMax*100)+"%";
   if(!deepZoom || editing || multiPick){
     bgImg.setAttribute("opacity", String(photoMax));
+    if(layerStack) layerStack.setAttribute("opacity","1");
     [layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels].forEach(L=>{ if(L) L.setAttribute("opacity","1"); });
+    if(layerStack) layerStack.querySelectorAll("[data-lod]").forEach(n=>n.setAttribute("opacity","1"));
     return;
   }
   const z=zoomUnit();
   // Photo strong when zoomed out; fades as vectors appear
   const photo = photoMax * (1 - lodFade(z, 0.95, 2.2));
   bgImg.setAttribute("opacity", String(Math.max(0, Math.min(1, photo))));
-  if(layerSite) layerSite.setAttribute("opacity", String(lodFade(z, 0.85, 1.35)));
+  const site = lodFade(z, 0.85, 1.35);
   const walk = lodFade(z, 1.15, 1.75);
+  const labels = lodFade(z, 2.0, 2.9);
+  if(layerStack){
+    layerStack.setAttribute("opacity","1");
+    layerStack.querySelectorAll("[data-lod]").forEach(n=>{
+      const b=n.getAttribute("data-lod");
+      n.setAttribute("opacity", String(b==="site"?site : b==="labels"?labels : walk));
+    });
+  }
+  if(layerSite) layerSite.setAttribute("opacity", String(site));
   if(layerWalkMarks) layerWalkMarks.setAttribute("opacity", String(walk));
   if(layerDocks) layerDocks.setAttribute("opacity", String(walk));
   if(layerSlips) layerSlips.setAttribute("opacity", String(lodFade(z, 1.55, 2.35)));
-  if(layerLabels) layerLabels.setAttribute("opacity", String(lodFade(z, 2.0, 2.9)));
+  if(layerLabels) layerLabels.setAttribute("opacity", String(labels));
 }
-const chart=document.getElementById("chart");
-const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); syncLabelFonts(); }
 function chartSize(){
+  if(!chart) return {w:800, h:560};
   const r=chart.getBoundingClientRect();
   return {w:Math.max(320, r.width||800), h:Math.max(240, r.height||560)};
 }
@@ -1102,17 +1239,17 @@ function hitEditTarget(e){
     if(best){
       if(best.type==="slip"){
         // Synthesize via querying current DOM if present
-        sEl=layerSlips && layerSlips.querySelector('[data-id="'+best.s.id+'"]');
+        sEl=(layerStack && layerStack.querySelector('[data-id="'+best.s.id+'"]')) || (layerSlips && layerSlips.querySelector('[data-id="'+best.s.id+'"]'));
         if(!sEl){
           // fake minimal attrs object
           sEl={ getAttribute:(k)=>k==="data-id"?best.s.id:(k==="data-dock"?best.s.dockId:null), closest:(sel)=>sel.includes("data-id")?sEl:(sel.includes("data-dock")?sEl:null) };
         }
         dEl=sEl;
       }else if(best.type==="dock"){
-        dEl=layerDocks && layerDocks.querySelector('[data-dock="'+best.d.id+'"]');
+        dEl=(layerStack && layerStack.querySelector('[data-dock="'+best.d.id+'"]')) || (layerDocks && layerDocks.querySelector('[data-dock="'+best.d.id+'"]'));
         if(!dEl) dEl={ getAttribute:(k)=>k==="data-dock"?best.d.id:null, closest:()=>dEl };
       }else if(best.type==="mark"){
-        mEl=(layerMarks||layerLabels||layerSite) && (
+        mEl=(layerStack && layerStack.querySelector('[data-mark="'+best.m.id+'"]')) || (
           (layerMarks && layerMarks.querySelector('[data-mark="'+best.m.id+'"]')) ||
           (layerWalkMarks && layerWalkMarks.querySelector('[data-mark="'+best.m.id+'"]')) ||
           (layerLabels && layerLabels.querySelector('[data-mark="'+best.m.id+'"]')) ||
@@ -1466,8 +1603,8 @@ window.addEventListener("resize",()=>{
   // Keep current relative zoom band sane after rotate/resize
   if(scale<minZoomScale()) { scale=minZoomScale(); applyZoom(); }
 });
-document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return; if(VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
-["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return; if(VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
+document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return; if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
+["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return; if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
 document.getElementById("q").addEventListener("input",function(){const hit=slips.find(s=>String(s.num)===this.value.trim());if(hit)select(hit.id);});
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
@@ -1484,8 +1621,7 @@ function setEditPanelOpen(on){
 function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:860px)").matches) setEditPanelOpen(true); }
 function isMobileEdit(){ return !!(window.matchMedia && window.matchMedia("(max-width:860px)").matches); }
 function closeEditPanel(){ setEditPanelOpen(false); }
-document.getElementById("edit-toggle").onclick=()=>{
-  if(VIEW_ONLY){ blockEdit(); return; }
+document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   editing=!editing;
   document.body.classList.toggle("editing",editing);
   chart.classList.toggle("editing",editing);
@@ -1550,7 +1686,6 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
 })();
 
 function setPhotoMoveMode(on){
-  if(VIEW_ONLY && on){ blockEdit(); return; }
   photoMoveMode=!!on;
   if(photoMoveMode && dockAlignMode) setDockAlignMode(false);
   if(!photoMoveMode){
@@ -1574,7 +1709,6 @@ function setPhotoMoveMode(on){
   chart.style.cursor=photoMoveMode?"move":(dockAlignMode?"grab":"");
 }
 function setDockAlignMode(on){
-  if(VIEW_ONLY && on){ blockEdit(); return; }
   dockAlignMode=!!on;
   if(dockAlignMode){
     if(photoMoveMode) setPhotoMoveMode(false);
@@ -1731,10 +1865,10 @@ function syncLabelSizeUI(){
   applyDeepZoomLod();
   syncLabelFonts();
 })();
-document.getElementById("export-layout").onclick=async()=>{const json=JSON.stringify({docks,marks,groups,layers},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
-document.getElementById("download-layout").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
+document.getElementById("export-layout").onclick=async()=>{ensureStackOrder();const json=JSON.stringify({docks,marks,groups,layers,stackOrder},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
+document.getElementById("download-layout").onclick=()=>{ensureStackOrder();const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers,stackOrder},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
-document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;if(Array.isArray(raw.layers)) layers=raw.layers; localStorage.setItem(LAYOUT_STORE,JSON.stringify({docks:raw.docks,marks:raw.marks||[],groups:raw.groups||[],layers})); saveLayersStore(); ({docks,marks,groups,layers}=loadLayout()); if(!Array.isArray(layers)) layers=[]; saveLayout(false);redraw();renderDockEditor();renderLayersEditor();renderChips();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
+document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;if(Array.isArray(raw.layers)) layers=raw.layers; localStorage.setItem(LAYOUT_STORE,JSON.stringify({docks:raw.docks,marks:raw.marks||[],groups:raw.groups||[],layers,stackOrder:Array.isArray(raw.stackOrder)?raw.stackOrder:[]})); saveLayersStore(); ({docks,marks,groups,layers,stackOrder}=loadLayout()); if(!Array.isArray(layers)) layers=[]; if(!Array.isArray(stackOrder)) stackOrder=[]; ensureStackOrder(); saveLayout(false);redraw();renderDockEditor();renderLayersEditor();renderChips();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
 
 function resetCruiserDock(){
   // MUST: deep-clone baked DEFAULT cruiser (locked, a/b sides, extras 801, placed 801-807)
@@ -1753,7 +1887,9 @@ function restoreOriginalChart(){
   if(!confirm('Restore original chart layout? This resets all docks, marks, and groups to the baked defaults. Slip occupancy is kept. Photo align resets too.')) return;
   docks=clone(DEFAULT_DOCKS);
   marks=clone(DEFAULT_MARKS);
-  groups=[];
+  groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[];
+  stackOrder=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER))?clone(DEFAULT_STACK_ORDER):[]; ensureStackOrder();
+  layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):layers;
   photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
   try{ savePhotoAlign(); }catch(e){}
   multi.clear(); moveWholeChart=false; selected=null; selectedDock=null; selectedMark=null;
@@ -1779,10 +1915,10 @@ function showLayoutTipBannerOnce(){
   };
 }
 
-document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=[];multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
+document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[];stackOrder=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER))?clone(DEFAULT_STACK_ORDER):[];ensureStackOrder();layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):layers;multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
 
 (function wireRestoreButtons(){
-  const rc=document.getElementById('btn-reset-cruiser') /* view-guarded */;
+  const rc=document.getElementById('btn-reset-cruiser');
   if(rc) rc.onclick=()=>resetCruiserDock();
   const ro=document.getElementById('btn-restore-original');
   if(ro) ro.onclick=()=>restoreOriginalChart();
@@ -1843,8 +1979,8 @@ function ensureMapVisible(){
       groups=[];
       try{
         localStorage.removeItem(LAYOUT_STORE);
-        localStorage.removeItem("laceys-layout-v2");
-        localStorage.removeItem("laceys-layout-v1");
+        /* view isolated */
+        /* view isolated */
       }catch(e){}
       saveLayout(false);
       buildSlips();
@@ -1911,7 +2047,7 @@ function saveNow(){
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem("laceys-layout-v2", s); }catch(e){}
+  /* view isolated */
   saveLayersStore();
   lastSnap=s;
   flashSave("Saved on this device · Download JSON for a backup copy");
@@ -1923,7 +2059,8 @@ function saveLayersStore(){
 function renderLayersEditor(){
   const box=document.getElementById("layers-editor");
   if(!box) return;
-  if(VIEW_ONLY){
+
+  if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){
     if(!layers.length){
       box.innerHTML="<p class=\"hint\">No layers on this chart.</p>";
       return;
@@ -2109,8 +2246,7 @@ function renderLayersEditor(){
     };
   });
 }
-document.getElementById("add-layer").onclick=()=>{
-  if(VIEW_ONLY){ blockEdit(); return; }
+document.getElementById("add-layer").onclick=()=>{ if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ blockEdit(); return; }
   const name=prompt("Layer name?","Power");
   if(name==null) return;
   layers.push({
@@ -2126,13 +2262,13 @@ document.getElementById("add-layer").onclick=()=>{
 };
 document.getElementById("btn-undo").onclick=()=>undo();
 document.getElementById("btn-redo").onclick=()=>redo();
-document.getElementById("btn-save").onclick=()=>{ if(VIEW_ONLY){ saveLayersStore(); flashSave("Layer view saved on this device"); return; } saveNow(); };
+document.getElementById("btn-save").onclick=()=>{ if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ saveLayersStore(); flashSave("Layer view saved on this device"); return; } saveNow(); };
 document.getElementById("btn-print").onclick=()=>printChart();
 const _fixBlank=document.getElementById("btn-reset-blank");
 if(_fixBlank) _fixBlank.onclick=()=>{
   if(!confirm("Restore the built-in Lacey\'s dock layout? (clears blank/corrupt offline save on this file)")) return;
-  try{ localStorage.removeItem(LAYOUT_STORE); localStorage.removeItem("laceys-layout-v2"); localStorage.removeItem("laceys-layout-v1"); }catch(e){}
-  docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=[]; layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
+  try{ localStorage.removeItem(LAYOUT_STORE); /* view isolated */ /* view isolated */ }catch(e){}
+  docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[]; stackOrder=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER))?clone(DEFAULT_STACK_ORDER):[]; ensureStackOrder(); layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
   multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
 };
 const _btnSaveLayout=document.getElementById("btn-save-layout"); if(_btnSaveLayout) _btnSaveLayout.onclick=()=>saveNow();
@@ -2162,8 +2298,8 @@ function wireMultiButtons(){
   };
 }
 wireMultiButtons();
-document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } multiPick=false; selectAllLayout(); };
-document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ document.getElementById("edit-toggle").click(); } multiPick=false; groupAllLayout(); };
+document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } multiPick=false; selectAllLayout(); };
+document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } multiPick=false; groupAllLayout(); };
 document.getElementById("btn-group").onclick=()=>{
   if(multi.size<2){ alert("Turn on Multi-select and tap at least two docks or labels first (or Shift-click on desktop)."); return; }
   const name=prompt("Group name?","Group "+(groups.length+1));
@@ -2189,12 +2325,12 @@ document.getElementById("btn-dup").onclick=()=>{
   if(selectedDock){
     const d=docks.find(x=>x.id===selectedDock); if(!d) return;
     const copy=clone(d); copy.id=uid("dock"); copy.name=(d.name||"Dock")+" copy"; copy.x+=40; copy.y+=40;
-    docks.push(copy); selectedDock=copy.id; saveLayout(); redraw(); renderDockEditor(); return;
+    docks.push(copy); ensureStackOrder(); stackMove(["dock:"+copy.id],"front"); selectedDock=copy.id; saveLayout(); redraw(); renderDockEditor(); return;
   }
   if(selectedMark){
     const m=marks.find(x=>x.id===selectedMark); if(!m) return;
     const copy=clone(m); copy.id=uid(m.kind||"mark"); copy.x+=30; copy.y+=30;
-    marks.push(copy); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); return;
+    marks.push(copy); ensureStackOrder(); stackMove(["mark:"+copy.id],"front"); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); return;
   }
   alert("Select a dock or label first.");
 };
@@ -2210,27 +2346,49 @@ const _strip=document.getElementById("strip-cover"); if(_strip) _strip.addEventL
   else alert("Nothing oversized found. Select the orange piece and Delete it.");
 });
 
-/* ---- view-only hard guards ---- */
-if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){
+/* ---- view-only / layers-edit-only hard guards ---- */
+if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY)){
   editing=false;
   document.body.classList.remove("editing");
   const et=document.getElementById("edit-toggle"); if(et){ et.hidden=true; et.onclick=()=>{ blockEdit(); }; }
-  const etm=document.getElementById("edit-toggle-mobile"); if(etm) etm.onclick=()=>{ blockEdit(); };
+  const etm=document.getElementById("edit-toggle-mobile"); if(etm){ etm.hidden=true; etm.onclick=()=>{ blockEdit(); }; }
   ["btn-photo-move","btn-dock-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
    "photo-reset-align","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
    "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all",
-   "btn-group-all","btn-group","btn-ungroup","strip-cover","btn-save-layout","add-layer"].forEach(id=>{
+   "btn-group-all","btn-group","btn-ungroup","strip-cover","btn-save-layout","btn-reset-blank",
+   "export-layout","download-layout"].forEach(id=>{
     const el=document.getElementById(id);
     if(!el) return;
     el.addEventListener("click", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+    if(VIEW_ONLY || LAYERS_EDIT_ONLY){ el.disabled=true; el.style.opacity=".45"; }
   });
   ["photo-scale-x","photo-scale-y","photo-rot"].forEach(id=>{
     const el=document.getElementById(id);
     if(!el) return;
     el.addEventListener("input", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
     el.addEventListener("change", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
+    if(VIEW_ONLY || LAYERS_EDIT_ONLY) el.disabled=true;
   });
-  const boat=document.getElementById("boat"); if(boat) boat.readOnly=true;
-  const notes=document.getElementById("notes"); if(notes) notes.readOnly=true;
+  if(VIEW_ONLY){
+    const boat=document.getElementById("boat"); if(boat) boat.readOnly=true;
+    const notes=document.getElementById("notes"); if(notes) notes.readOnly=true;
+    document.querySelectorAll("#pane-slip .st button").forEach(b=>{ b.disabled=true; b.style.opacity=".45"; });
+    const al=document.getElementById("add-layer");
+    if(al){ al.addEventListener("click", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true); al.disabled=true; al.style.opacity=".45"; }
+  }
+  if(LAYERS_EDIT_ONLY){
+    let ban=document.getElementById("layers-only-banner");
+    if(!ban){
+      ban=document.createElement("div");
+      ban.id="layers-only-banner";
+      ban.style.cssText="margin:8px 16px;padding:8px 12px;border-radius:10px;background:#1a4a5c;color:#eef6f8;font-size:13px";
+      ban.textContent="Layers-only chart — assign slip colors; dock positions are locked.";
+      const err=document.getElementById("error-banner");
+      if(err && err.parentNode) err.parentNode.insertBefore(ban, err.nextSibling);
+      else document.body.insertBefore(ban, document.body.firstChild);
+    }
+    // Hide layout pane tools tab content noise but keep Layers tab
+    const layoutTab=document.querySelector('.tabs button[data-tab="layout"]');
+    if(layoutTab) layoutTab.style.display="none";
+  }
 }
-

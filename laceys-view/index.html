@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's Narrows · View-only</title>
+<title>Lacey's Narrows (view only)</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -30,7 +30,7 @@ svg{transform-origin:0 0}
 .slip rect{stroke:#3a4342;stroke-width:.5}
 .slip.on rect{stroke:#fff;stroke-width:2}
 .slip.dim{opacity:.2}
-.slip text{pointer-events:none;font-weight:700;font-size:9px;fill:#1b2423}
+.slip text{pointer-events:none;font-weight:700;fill:#1b2423}
 .slip text,.slip-num,.dock-name-label,.screen-label{pointer-events:none;font-weight:800}
 .slip-num,.dock-name-label,.screen-label{paint-order:stroke;stroke-linejoin:round}
 .dock-hit{cursor:grab}
@@ -175,7 +175,6 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   body.editing .chips,
   body.editing .photo-op,
   body.editing .photo-align,
-  body.editing .label-size-bar,
   body.editing .kicker,
   body.editing .multi-bar,
   body.editing .edit-banner,
@@ -348,14 +347,6 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 
 
 </style>
-
-<style id="view-only-chrome">
-  #edit-chrome, #edit-fabs, #edit-tools-peek, .edit-banner { display:none !important; }
-  #photo-align-bar { display:none !important; }
-  #pane-layout .st, #pane-layout #dock-editor, #pane-layout #pick-list, #pane-layout #sel-hint { display:none !important; }
-  #add-layer { display:none !important; }
-  body.editing #edit-chrome { display:none !important; }
-</style>
 </head>
 <body>
 <header>
@@ -382,10 +373,10 @@ body.dock-aligning #dock-align-chip{ display:flex; }
       <div class="hdr-actions">
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
-        <button id="btn-save" type="button" title="Save layer view on this device">Save view</button>
+        <button id="btn-save" type="button" title="Save current layout on this device">Save</button>
         <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
-        <button id="edit-toggle" hidden>Edit docks</button>
+        <button id="edit-toggle">Edit docks</button>
       </div>
     </div>
   </div>
@@ -406,15 +397,16 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   <button type="button" class="btn" id="btn-deep-zoom" title="Photo when zoomed out; detail fades in as you zoom">Deep zoom</button>
 </div>
 
-<div class="label-size-bar" id="label-size-bar" hidden title="Slip number on-screen size (independent of map zoom)">
+<div class="label-size-bar" id="label-size-bar" title="Slip number on-screen size (independent of map zoom)">
   <span>Label size</span>
   <select id="label-size" aria-label="Slip label size">
     <option value="small">Small</option>
+    <option value="classic">Classic</option>
     <option value="normal" selected>Normal</option>
     <option value="large">Large</option>
     <option value="xl">XL</option>
   </select>
-  <span style="opacity:.85;font-size:12px">stays readable when zoomed out</span>
+  <span style="opacity:.85;font-size:12px">changes slip number size on the chart</span>
 </div>
 <div class="photo-align" id="photo-align-bar">
   <span>Align</span>
@@ -464,23 +456,23 @@ body.dock-aligning #dock-align-chip{ display:flex; }
       <button class="on" data-tab="slip">Slip</button>
       <button data-tab="dir">Directory</button>
       <button data-tab="layers">Layers</button>
-      <button data-tab="layout" hidden>Dock</button>
+      <button data-tab="layout">Dock</button>
     </div>
     <div id="pane-slip">
       <h2>Find a slip</h2>
-      <p>Click any numbered slip. View occupancy on this chart (edits disabled).</p>
+      <p>Click any numbered slip. Occupancy stays on this device.</p>
       <div id="slip-detail" hidden>
         <h2 id="slip-title"></h2><p id="slip-meta"></p>
         <div class="st"><button data-st="vacant">Vacant</button><button data-st="occupied">Occupied</button><button data-st="reserved">Reserved</button></div>
         <div id="slip-layer-assigns"></div>
-        <label>Boat name<input id="boat" readonly/></label>
-        <label>Notes<textarea id="notes" rows="3" readonly></textarea></label>
+        <label>Boat name<input id="boat"/></label>
+        <label>Notes<textarea id="notes" rows="3"></textarea></label>
       </div>
     </div>
     <div id="pane-dir" hidden><h2>Directory</h2><div id="dir-list"></div></div>
     <div id="pane-layers" hidden>
       <h2>Color layers</h2>
-      <p class="hint">View only — switch layers and hide/show options. Occupancy and docks stay fixed. Save view stores layer visibility on this device.</p>
+      <p class="hint">Create layers (Power, Lease, etc.). Use to color recolors slips. Eye icons hide/show a whole layer or each option. Assign options on a slip, then Save.</p>
       <div class="st"><button class="btn" id="add-layer">+ Add layer</button></div>
       <div id="layers-editor"></div>
     </div>
@@ -525,7 +517,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=69-view"></script>
-<script src="app.js?v=69-view"></script>
+<script src="app-data.js?v=76-view"></script>
+<script src="app.js?v=76-view"></script>
 </body>
 </html>
