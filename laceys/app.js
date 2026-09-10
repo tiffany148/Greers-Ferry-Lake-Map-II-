@@ -167,6 +167,7 @@ let labelSizeKey="normal";
 let photoMoveMode=false;
 let dockAlignMode=false;
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
+const chart=document.getElementById("chart"); // must exist before first redraw → applyDeepZoomLod → chartSize
 let photoDrag=null;
 let dockAlignDrag=null;
 const photoPointers=new Map(); // pinch while moving photo
@@ -1058,10 +1059,10 @@ function applyDeepZoomLod(){
   if(layerSlips) layerSlips.setAttribute("opacity", String(lodFade(z, 1.55, 2.35)));
   if(layerLabels) layerLabels.setAttribute("opacity", String(labels));
 }
-const chart=document.getElementById("chart");
 const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); syncLabelFonts(); }
 function chartSize(){
+  if(!chart) return {w:800, h:560};
   const r=chart.getBoundingClientRect();
   return {w:Math.max(320, r.width||800), h:Math.max(240, r.height||560)};
 }
