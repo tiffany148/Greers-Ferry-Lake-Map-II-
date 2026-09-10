@@ -31,6 +31,7 @@ function moveDockSlips(d,dx,dy){
 }
 
 const MAP_W=2400, MAP_H=1700; // SVG viewBox -- hard edit working area
+const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function unionBox(a,b){
   if(!a) return b; if(!b) return a;
   const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y);
@@ -1059,7 +1060,6 @@ function applyDeepZoomLod(){
   if(layerSlips) layerSlips.setAttribute("opacity", String(lodFade(z, 1.55, 2.35)));
   if(layerLabels) layerLabels.setAttribute("opacity", String(labels));
 }
-const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function applyZoom(){ svg.style.transform=`translate(${tx}px,${ty}px) scale(${scale})`; applyDeepZoomLod(); syncLabelFonts(); }
 function chartSize(){
   if(!chart) return {w:800, h:560};
