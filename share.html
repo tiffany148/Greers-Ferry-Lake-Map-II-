@@ -67,10 +67,11 @@
   .public-view #pw-form, .public-view .unlock-row { display:none !important; }
 
   .opacity-box {
-    position:absolute; right:10px; bottom:calc(78px + var(--safe-bot)); z-index:800;
+    position:absolute; right:70px; bottom:calc(22px + var(--safe-bot)); z-index:800;
     background:#fff; color:#123; border-radius:10px; padding:8px 12px;
     display:flex; align-items:center; gap:10px; box-shadow:0 4px 16px #0005;
     font-size:13px; font-weight:600;
+    max-width:calc(100vw - 90px);
   }
   .opacity-box.hidden { display:none; }
   .opacity-box input[type=range] { width:120px; accent-color:#3b82f6; }
@@ -495,62 +496,79 @@ const PRELAKE = { s: 35.50, w: -92.38, n: 35.68, e: -91.97 };
 const prelakeImg = new Image();
 prelakeImg.decoding = "async";
 prelakeImg.src = "hist-prelake-valley.jpg";
-const PrelakeGrid = L.GridLayer.extend({
-  options: {
-    opacity: 0.65,
-    attribution: "USGS Mountain View 15-minute quad, 1894",
-    minZoom: 9,
-    maxZoom: 19,
-    tileSize: 256,
-    keepBuffer: 2
-  },
-  createTile(coords, done) {
-    const tile = L.DomUtil.create("canvas", "leaflet-tile");
-    const size = this.getTileSize();
-    tile.width = size.x;
-    tile.height = size.y;
-    const ctx = tile.getContext("2d");
-    const layer = this;
-    const paint = () => {
-      try {
-        if (!prelakeImg.naturalWidth) { done(null, tile); return; }
-        const bounds = layer._tileCoordsToBounds(coords);
-        const tw = bounds.getWest(), te = bounds.getEast();
-        const tn = bounds.getNorth(), ts = bounds.getSouth();
-        const { s, w, n, e } = PRELAKE;
-        if (te <= w || tw >= e || ts >= n || tn <= s) { done(null, tile); return; }
-        const imgW = prelakeImg.naturalWidth, imgH = prelakeImg.naturalHeight;
-        const sx0 = ((Math.max(tw, w) - w) / (e - w)) * imgW;
-        const sx1 = ((Math.min(te, e) - w) / (e - w)) * imgW;
-        const sy0 = ((n - Math.min(tn, n)) / (n - s)) * imgH;
-        const sy1 = ((n - Math.max(ts, s)) / (n - s)) * imgH;
-        const dx0 = ((Math.max(tw, w) - tw) / (te - tw)) * size.x;
-        const dx1 = ((Math.min(te, e) - tw) / (te - tw)) * size.x;
-        const dy0 = ((tn - Math.min(tn, n)) / (tn - ts)) * size.y;
-        const dy1 = ((tn - Math.max(ts, s)) / (tn - ts)) * size.y;
-        ctx.clearRect(0, 0, size.x, size.y);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(
-          prelakeImg,
-          sx0, sy0, Math.max(1, sx1 - sx0), Math.max(1, sy1 - sy0),
-          dx0, dy0, Math.max(1, dx1 - dx0), Math.max(1, dy1 - dy0)
-        );
-        done(null, tile);
-      } catch (err) {
-        done(err, tile);
-      }
-    };
-    if (prelakeImg.complete && prelakeImg.naturalWidth) paint();
-    else {
-      prelakeImg.addEventListener("load", paint, { once: true });
-      prelakeImg.addEventListener("error", () => done(new Error("prelake load failed"), tile), { once: true });
+/* Canvas overlay (not imageOverlay/GridLayer): redraws from latLngToLayerPoint so it stays locked under leaflet-rotate */
+const PrelakeCanvas = L.Layer.extend({
+  options: { opacity: 0.65, attribution: "USGS Mountain View 15-minute quad, 1894" },
+  onAdd(map) {
+    this._map = map;
+    if (!this._canvas) {
+      this._canvas = L.DomUtil.create("canvas", "leaflet-zoom-animated leaflet-prelake");
+      this._ctx = this._canvas.getContext("2d");
+      this._canvas.style.pointerEvents = "none";
     }
-    return tile;
+    map.getPanes().overlayPane.appendChild(this._canvas);
+    this._canvas.style.opacity = this.options.opacity;
+    map.on("zoom move moveend zoomend viewreset", this._redraw, this);
+    if (typeof map.on === "function") {
+      map.on("rotate rotateend bearingchange", this._redraw, this);
+    }
+    if (prelakeImg.complete && prelakeImg.naturalWidth) this._redraw();
+    else prelakeImg.addEventListener("load", () => this._redraw(), { once: true });
+  },
+  onRemove(map) {
+    map.off("zoom move moveend zoomend viewreset", this._redraw, this);
+    map.off("rotate rotateend bearingchange", this._redraw, this);
+    if (this._canvas && this._canvas.parentNode) this._canvas.parentNode.removeChild(this._canvas);
+    this._map = null;
+  },
+  setOpacity(o) {
+    this.options.opacity = o;
+    if (this._canvas) this._canvas.style.opacity = o;
+    return this;
+  },
+  getAttribution() { return this.options.attribution; },
+  _redraw() {
+    const map = this._map;
+    if (!map || !this._canvas || !prelakeImg.naturalWidth) return;
+    const tl = map.latLngToLayerPoint([PRELAKE.n, PRELAKE.w]);
+    const tr = map.latLngToLayerPoint([PRELAKE.n, PRELAKE.e]);
+    const bl = map.latLngToLayerPoint([PRELAKE.s, PRELAKE.w]);
+    const br = map.latLngToLayerPoint([PRELAKE.s, PRELAKE.e]);
+    const xs = [tl.x, tr.x, bl.x, br.x];
+    const ys = [tl.y, tr.y, bl.y, br.y];
+    const minX = Math.floor(Math.min.apply(null, xs));
+    const maxX = Math.ceil(Math.max.apply(null, xs));
+    const minY = Math.floor(Math.min.apply(null, ys));
+    const maxY = Math.ceil(Math.max.apply(null, ys));
+    const w = maxX - minX;
+    const h = maxY - minY;
+    if (w < 2 || h < 2) return;
+    const canvas = this._canvas;
+    const ctx = this._ctx;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    L.DomUtil.setPosition(canvas, L.point(minX, minY));
+    canvas.style.opacity = this.options.opacity;
+    const ptl = tl.subtract(L.point(minX, minY));
+    const ptr = tr.subtract(L.point(minX, minY));
+    const pbl = bl.subtract(L.point(minX, minY));
+    const imgW = prelakeImg.naturalWidth;
+    const imgH = prelakeImg.naturalHeight;
+    const a = (ptr.x - ptl.x) / imgW;
+    const b = (ptr.y - ptl.y) / imgW;
+    const c = (pbl.x - ptl.x) / imgH;
+    const d = (pbl.y - ptl.y) / imgH;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.setTransform(a, b, c, d, ptl.x, ptl.y);
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = "high"; } catch (e) {}
+    ctx.drawImage(prelakeImg, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 });
-const prelake = new PrelakeGrid();
-prelakeImg.addEventListener("load", () => { if (typeof map !== "undefined" && map.hasLayer(prelake)) prelake.redraw(); });
+const prelake = new PrelakeCanvas();
+prelakeImg.addEventListener("load", () => { if (typeof map !== "undefined" && map.hasLayer(prelake)) prelake._redraw(); });
 
 function anyOverlay(){ return histOn.checked || prelakeOn.checked; }
 function setOverlays(){
