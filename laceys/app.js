@@ -2045,6 +2045,11 @@ const PUBLISHED_LAYOUT_URLS=[
   "./published-layout.json",
   "https://tiffany148.github.io/Greers-Ferry-Lake-Map-II-/laceys/published-layout.json"
 ];
+const GH_PUBLISH_OWNER="tiffany148";
+const GH_PUBLISH_REPO="Greers-Ferry-Lake-Map-II-";
+const GH_PUBLISH_PATH="laceys/published-layout.json";
+const GH_PUBLISH_BRANCH="main";
+const GH_PUBLISH_TOKEN_KEY="laceys-gh-publish-token";
 function buildPublishedPayload(){
   ensureStackOrder();
   return {
@@ -2125,16 +2130,196 @@ function publishLayoutAfterSave(){
     flashSave("Saved on this device");
   });
 }
-function publishLayoutToCopies(){
+function getGhPublishToken(){
+  try{ return localStorage.getItem(GH_PUBLISH_TOKEN_KEY)||""; }catch(e){ return ""; }
+}
+function setGhPublishToken(tok){
+  try{
+    if(tok) localStorage.setItem(GH_PUBLISH_TOKEN_KEY, tok);
+    else localStorage.removeItem(GH_PUBLISH_TOKEN_KEY);
+  }catch(e){}
+}
+function utf8ToBase64(str){
+  const bytes=new TextEncoder().encode(str);
+  let binary="";
+  const chunk=0x8000;
+  for(let i=0;i<bytes.length;i+=chunk){
+    binary+=String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+function updateGhTokenUi(){
+  if(!IS_LAYOUT_SOURCE) return;
+  const inp=document.getElementById("gh-publish-token");
+  const st=document.getElementById("gh-publish-status");
+  const has=!!getGhPublishToken();
+  if(inp && !inp.value){
+    /* leave blank; do not echo token */
+  }
+  if(st){
+    st.textContent=has ? "Token saved on this device" : "No token saved — Publish will prompt or fall back to download";
+  }
+}
+function wireGhPublishTokenUi(){
+  if(!IS_LAYOUT_SOURCE){
+    ["gh-publish-token-wrap","gh-publish-token-wrap-dock"].forEach(function(id){
+      const el=document.getElementById(id);
+      if(el) el.hidden=true;
+    });
+    return;
+  }
+  const saveBtn=document.getElementById("btn-gh-token-save");
+  const clearBtn=document.getElementById("btn-gh-token-clear");
+  const saveBtn2=document.getElementById("btn-gh-token-save-dock");
+  const clearBtn2=document.getElementById("btn-gh-token-clear-dock");
+  const dlBtn=document.getElementById("btn-download-published-layout");
+  const dlBtn2=document.getElementById("btn-download-published-layout-dock");
+  function saveFrom(inputId){
+    const inp=document.getElementById(inputId);
+    const tok=(inp && inp.value ? inp.value : "").trim();
+    if(!tok){ flashSave("Paste a GitHub token first"); return; }
+    setGhPublishToken(tok);
+    if(inp) inp.value="";
+    updateGhTokenUi();
+    flashSave("GitHub publish token saved on this device");
+  }
+  function clearTok(){
+    setGhPublishToken("");
+    ["gh-publish-token","gh-publish-token-dock"].forEach(function(id){
+      const inp=document.getElementById(id);
+      if(inp) inp.value="";
+    });
+    updateGhTokenUi();
+    flashSave("GitHub publish token cleared");
+  }
+  if(saveBtn) saveBtn.onclick=function(){ saveFrom("gh-publish-token"); };
+  if(saveBtn2) saveBtn2.onclick=function(){ saveFrom("gh-publish-token-dock"); };
+  if(clearBtn) clearBtn.onclick=clearTok;
+  if(clearBtn2) clearBtn2.onclick=clearTok;
+  function doDownload(){
+    downloadPublishedLayoutFile(buildPublishedPayload());
+    flashSave("Downloaded published-layout.json (backup)");
+  }
+  if(dlBtn) dlBtn.onclick=doDownload;
+  if(dlBtn2) dlBtn2.onclick=doDownload;
+  updateGhTokenUi();
+}
+async function publishLayoutToGitHub(payload){
+  if(!IS_LAYOUT_SOURCE) return false;
+  let token=getGhPublishToken();
+  if(!token){
+    try{
+      const pasted=window.prompt("Paste a GitHub fine-grained PAT (Contents: Read and write on tiffany148/Greers-Ferry-Lake-Map-II- only). Leave blank to download instead.");
+      if(pasted && pasted.trim()){
+        token=pasted.trim();
+        setGhPublishToken(token);
+        updateGhTokenUi();
+      }
+    }catch(e){}
+  }
+  if(!token){
+    const st=document.getElementById("gh-publish-status");
+    if(st) st.textContent="No GitHub token — falling back to download";
+    return false;
+  }
+  const apiUrl="https://api.github.com/repos/"+GH_PUBLISH_OWNER+"/"+GH_PUBLISH_REPO+"/contents/"+GH_PUBLISH_PATH+"?ref="+encodeURIComponent(GH_PUBLISH_BRANCH);
+  const headers={
+    "Authorization":"Bearer "+token,
+    "Accept":"application/vnd.github+json",
+    "X-GitHub-Api-Version":"2022-11-28"
+  };
+  let sha=null;
+  try{
+    const getRes=await fetch(apiUrl, {headers:headers, cache:"no-store"});
+    if(getRes.status===200){
+      const meta=await getRes.json();
+      if(meta && meta.sha) sha=meta.sha;
+    }else if(getRes.status===404){
+      sha=null;
+    }else if(getRes.status===401 || getRes.status===403){
+      flashSave("GitHub token invalid or missing Contents write permission");
+      try{ alert("GitHub publish failed: token invalid or missing Contents: Read and write on "+GH_PUBLISH_OWNER+"/"+GH_PUBLISH_REPO+"."); }catch(e){}
+      const st=document.getElementById("gh-publish-status");
+      if(st) st.textContent="Token invalid or missing Contents write (HTTP "+getRes.status+")";
+      return false;
+    }else{
+      const st=document.getElementById("gh-publish-status");
+      if(st) st.textContent="GitHub GET failed: HTTP "+getRes.status;
+      flashSave("GitHub publish failed (GET "+getRes.status+")");
+      return false;
+    }
+  }catch(err){
+    const st=document.getElementById("gh-publish-status");
+    if(st) st.textContent="GitHub network error (GET)";
+    flashSave("GitHub publish network error");
+    return false;
+  }
+  const json=JSON.stringify(payload);
+  let contentB64;
+  try{ contentB64=utf8ToBase64(json); }
+  catch(e){
+    try{ contentB64=btoa(unescape(encodeURIComponent(json))); }catch(e2){
+      flashSave("Could not encode layout for GitHub");
+      return false;
+    }
+  }
+  const putBody={
+    message:"Publish Lacey's layout "+(payload.publishedAt||new Date().toISOString()),
+    content:contentB64,
+    branch:GH_PUBLISH_BRANCH
+  };
+  if(sha) putBody.sha=sha;
+  const putUrl="https://api.github.com/repos/"+GH_PUBLISH_OWNER+"/"+GH_PUBLISH_REPO+"/contents/"+GH_PUBLISH_PATH;
+  try{
+    const putRes=await fetch(putUrl, {
+      method:"PUT",
+      headers:Object.assign({"Content-Type":"application/json"}, headers),
+      body:JSON.stringify(putBody)
+    });
+    if(putRes.ok){
+      flashSave("Published to live copies on GitHub");
+      setTimeout(function(){
+        flashSave("Live copies update in about a minute (GitHub Pages).");
+      }, 2000);
+      const st=document.getElementById("gh-publish-status");
+      if(st) st.textContent="Published to GitHub · Pages may lag 30–60s";
+      return true;
+    }
+    if(putRes.status===401 || putRes.status===403){
+      flashSave("GitHub token invalid or missing Contents write permission");
+      try{ alert("GitHub publish failed: token invalid or missing Contents: Read and write on "+GH_PUBLISH_OWNER+"/"+GH_PUBLISH_REPO+"."); }catch(e){}
+      const st=document.getElementById("gh-publish-status");
+      if(st) st.textContent="Token invalid or missing Contents write (HTTP "+putRes.status+")";
+      return false;
+    }
+    let detail="";
+    try{ const j=await putRes.json(); detail=(j && j.message)?(" — "+j.message):""; }catch(e){}
+    const st=document.getElementById("gh-publish-status");
+    if(st) st.textContent="GitHub PUT failed: HTTP "+putRes.status+detail;
+    flashSave("GitHub publish failed (PUT "+putRes.status+")");
+    return false;
+  }catch(err){
+    const st=document.getElementById("gh-publish-status");
+    if(st) st.textContent="GitHub network error (PUT)";
+    flashSave("GitHub publish network error");
+    return false;
+  }
+}
+async function publishLayoutToCopies(){
   if(!IS_LAYOUT_SOURCE) return;
   const payload=buildPublishedPayload();
-  writePublishedLocal(payload).then(function(){
-    downloadPublishedLayoutFile(payload);
-    flashSave("Published · Desktop copies update on open. Web: upload published-layout.json into laceys/ on GitHub");
-    try{
-      alert("Published layout for live copies.\n\nDesktop: other modes update on open/focus.\nWeb: upload the downloaded published-layout.json into the laceys/ folder on GitHub (replace the existing file), then refresh share/view/layers.");
-    }catch(e){}
-  });
+  try{ await writePublishedLocal(payload); }catch(e){}
+  let ghOk=false;
+  try{ ghOk=await publishLayoutToGitHub(payload); }catch(e){ ghOk=false; }
+  if(ghOk){
+    /* GitHub succeeded — download optional; keep backup button available */
+    return;
+  }
+  downloadPublishedLayoutFile(payload);
+  flashSave("Published · Desktop copies update on open. Web: upload published-layout.json into laceys/ on GitHub");
+  try{
+    alert("Published layout for live copies.\\n\\nDesktop: other modes update on open/focus.\\nWeb: set a GitHub publish token (Contents write on tiffany148/Greers-Ferry-Lake-Map-II-) for auto-upload, or upload the downloaded published-layout.json into the laceys/ folder on GitHub, then refresh share/view/layers.");
+  }catch(e){}
 }
 async function fetchPublishedLayoutJson(){
   const bust="?t="+Date.now();
@@ -2590,6 +2775,7 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
       pubBtn.hidden=true;
     }
   });
+  try{ wireGhPublishTokenUi(); }catch(e){}
   wirePublishedLayoutListeners();
   if(!IS_LAYOUT_SOURCE){
     pullPublishedLayout({quiet:true}).then(function(ok){

@@ -373,11 +373,22 @@ body.dock-aligning #dock-align-chip{ display:flex; }
       <div class="hdr-actions">
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
-        <button id="btn-save" type="button" title="Save current layout on this device">Save</button>
-        <button id="btn-publish-layout" type="button" class="btn" title="Download published-layout.json for GitHub + update live copies">Publish to copies</button>
+        <button id="btn-save" type="button" title="Save current layout on this device (local only — does not push to GitHub)">Save</button>
+        <button id="btn-publish-layout" type="button" class="btn" title="Push layout to live copies via GitHub Contents API (or download if no token)">Publish to copies</button>
+        <button id="btn-download-published-layout" type="button" class="btn" title="Download published-layout.json as a backup">Download published-layout.json</button>
         <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
         <button id="edit-toggle">Edit docks</button>
+      </div>
+      <div id="gh-publish-token-wrap" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.18);font-size:12px;max-width:640px">
+        <div style="font-weight:700;margin-bottom:4px">GitHub publish token</div>
+        <div style="opacity:.9;margin-bottom:6px">Create a fine-grained PAT at github.com/settings/tokens with Contents: Read and write on repo tiffany148/Greers-Ferry-Lake-Map-II- only. Saved only on this device — never written into published-layout.json.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <input id="gh-publish-token" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:180px;padding:6px 8px;border-radius:8px;border:0;background:#0c3c41;color:#eef6f8"/>
+          <button type="button" class="btn" id="btn-gh-token-save">Save token</button>
+          <button type="button" class="btn" id="btn-gh-token-clear">Clear token</button>
+        </div>
+        <div id="gh-publish-status" style="margin-top:6px;opacity:.85"></div>
       </div>
     </div>
   </div>
@@ -500,12 +511,22 @@ body.dock-aligning #dock-align-chip{ display:flex; }
         <button class="btn" id="btn-reset-cruiser" title="Restore Cruiser dock from baked defaults (double-row a+b + 801)">Reset Cruiser dock</button>
         <button class="btn" id="btn-restore-original" title="Reset all docks/marks/groups to baked chart (keeps slip occupancy)">Restore original chart</button>
         <button class="btn" id="btn-save-layout">Save layout</button>
-        <button class="btn" id="btn-publish-layout-dock" title="Share docks/marks/layers with share, view, and layers copies">Publish layout to live copies</button>
+        <button class="btn" id="btn-publish-layout-dock" title="Push layout to live copies via GitHub (or download if no token)">Publish layout to live copies</button>
+        <button class="btn" id="btn-download-published-layout-dock" title="Download published-layout.json as a backup">Download published-layout.json</button>
         <button class="btn" id="export-layout">Copy layout JSON</button>
         <button class="btn" id="download-layout">Download</button>
         <button class="btn" id="import-layout">Import</button>
         <button class="btn" id="strip-cover">Remove covering piece</button>
         <button class="btn" id="reset-layout">Reset positions</button>
+      </div>
+      <div id="gh-publish-token-wrap-dock" style="margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.12);font-size:12px">
+        <div style="font-weight:700;margin-bottom:4px">GitHub publish token</div>
+        <p class="hint" style="margin:0 0 6px">Fine-grained PAT · Contents Read and write on tiffany148/Greers-Ferry-Lake-Map-II- only. Main device only.</p>
+        <div class="st" style="margin-top:0">
+          <input id="gh-publish-token-dock" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:160px;padding:6px 8px;border-radius:8px;border:0;background:#0c3c41;color:#eef6f8"/>
+          <button type="button" class="btn" id="btn-gh-token-save-dock">Save token</button>
+          <button type="button" class="btn" id="btn-gh-token-clear-dock">Clear token</button>
+        </div>
       </div>
       <p class="hint">Photo opacity is the <b>Photo</b> slider above the map (0–100%). Deep zoom uses it as max photo strength.</p>
       <input id="import-file" type="file" accept="application/json" hidden/>
@@ -519,7 +540,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=77"></script>
-<script src="app.js?v=77"></script>
+<script src="app-data.js?v=78"></script>
+<script src="app.js?v=78"></script>
 </body>
 </html>
