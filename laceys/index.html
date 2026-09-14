@@ -93,6 +93,8 @@ body.editing .edit-banner{display:block}
 
 .dock-hit.multi .walk{stroke:#ffe08a;stroke-width:3;filter:drop-shadow(0 0 3px #ffe08a)}
 .dock-hit.multi text{fill:#ffe08a !important}
+.slip.multi rect{stroke:#ffe08a;stroke-width:2.5;filter:drop-shadow(0 0 3px #ffe08a)}
+.slip.multi text{fill:#1a1a1a !important; paint-order:stroke; stroke:#ffe08a; stroke-width:3px}
 .multi-bar{display:none;margin:8px 16px 0;padding:10px 12px;border-radius:12px;background:#1a5c62;align-items:center;gap:8px;flex-wrap:wrap}
 body.editing.multipick .multi-bar{display:flex}
 .multi-bar b{flex:1 1 auto;font-size:14px}
@@ -144,6 +146,19 @@ body.dock-aligning .chart{ cursor:grab; outline:2px solid #7ec8ff; outline-offse
 body.dock-aligning #dock-align-chip{ display:flex; }
 #dock-align-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#7ec8ff; color:#0a1a28; font-weight:700; cursor:pointer; }
 #dock-align-chip .op-preset{ background:#15565b; color:#eef4f3; }
+body.gcp-aligning{ cursor:crosshair; }
+body.gcp-aligning .chart{ cursor:crosshair; outline:2px solid #f4a261; outline-offset:-2px; }
+#gcp-align-chip{
+  display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  z-index:40; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+  max-width:min(96%,720px); padding:8px 12px; border-radius:12px;
+  background:rgba(90,50,20,.95); color:#eef4f3; font-size:13px; font-weight:650;
+  box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:auto;
+}
+body.gcp-aligning #gcp-align-chip{ display:flex; }
+#gcp-align-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#f4a261; color:#1a1a1a; font-weight:700; cursor:pointer; }
+#gcp-align-chip button.secondary{ background:#15565b; color:#eef4f3; }
+#gcp-align-chip #gcp-pair-count{ opacity:.95; font-variant-numeric:tabular-nums; }
 .label-size-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
 .label-size-bar select{border:0;border-radius:8px;padding:6px 10px;background:#15565b;color:var(--ink);font-size:13px}
 .label-size-bar .btn.on{outline:2px solid #f0c14b}
@@ -154,7 +169,10 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   body.editing.photo-moving .label-size-bar,
   body.editing.dock-aligning .photo-align,
   body.editing.dock-aligning .photo-op,
-  body.editing.dock-aligning .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
+  body.editing.dock-aligning .label-size-bar,
+  body.editing.gcp-aligning .photo-align,
+  body.editing.gcp-aligning .photo-op,
+  body.editing.gcp-aligning .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
 }
 
 /* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
@@ -424,6 +442,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
   <span>Align</span>
   <span style="opacity:.85;font-size:12px">optional aerial · Move photo / Reset photo align · chart stays chart-first</span>
   <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; Stretch width/height or pinch">Move photo</button>
+  <button type="button" class="btn" id="btn-gcp-align" title="Place matching points on docks and aerial, then Apply to line them up">GCP align</button>
   <button type="button" class="btn" id="btn-dock-align" hidden title="Advanced: scale docks onto aerial (can warp layout — prefer Restore original chart)">Align docks to photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
@@ -448,6 +467,15 @@ body.dock-aligning #dock-align-chip{ display:flex; }
       <button type="button" id="dock-align-scale-minus" title="Shrink docks">−</button>
       <button type="button" id="dock-align-scale-plus" title="Grow docks">+</button>
       <button type="button" id="dock-align-done">Done aligning</button>
+    </div>
+    <div id="gcp-align-chip" hidden>
+      <span>GCP align — tap a dock corner, then the matching spot on the aerial. Need 2+ pairs.</span>
+      <span id="gcp-pair-count">0 pairs</span>
+      <button type="button" class="secondary" id="gcp-undo-pair">Undo last pair</button>
+      <button type="button" class="secondary" id="gcp-clear-pairs">Clear pairs</button>
+      <button type="button" id="gcp-apply-all">Apply to all docks</button>
+      <button type="button" id="gcp-apply-selected">Apply to selected dock only</button>
+      <button type="button" id="gcp-align-done">Done</button>
     </div>
     <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
     <div class="pan" aria-label="Pan map">
@@ -540,7 +568,7 @@ body.dock-aligning #dock-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=78"></script>
-<script src="app.js?v=78"></script>
+<script src="app-data.js?v=79"></script>
+<script src="app.js?v=79"></script>
 </body>
 </html>

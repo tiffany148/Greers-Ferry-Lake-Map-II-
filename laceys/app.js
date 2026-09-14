@@ -49,6 +49,29 @@ function moveDockSlips(d,dx,dy){
   if(!d.placed) return;
   Object.keys(d.placed).forEach(id=>{d.placed[id].x+=dx;d.placed[id].y+=dy;});
 }
+function findDockForSlipId(slipId){
+  const sid=String(slipId);
+  return docks.find(d=> generatedSlips(d).some(s=>String(s.id)===sid)) || null;
+}
+function slipWorldPos(slipId){
+  const d=findDockForSlipId(slipId);
+  if(!d) return null;
+  const base=generatedSlips(d).find(s=>String(s.id)===String(slipId));
+  if(!base) return null;
+  return {dock:d, slip:applyPlaced(d, base)};
+}
+function moveSlipById(slipId,dx,dy){
+  const info=slipWorldPos(slipId);
+  if(!info) return;
+  const s=info.slip, d=info.dock;
+  setPlaced(d, String(slipId), {
+    x:(Number(s.x)||0)+(Number(dx)||0),
+    y:(Number(s.y)||0)+(Number(dy)||0),
+    w:s.w, h:s.h,
+    rot:s.rot||0,
+    fill:s.fill
+  });
+}
 
 const MAP_W=2400, MAP_H=1700; // SVG viewBox -- hard edit working area
 const WORLD_W=MAP_W, WORLD_H=MAP_H;
@@ -90,6 +113,13 @@ function keysBBox(keys){
     const {kind,id}=parseMemberKey(k);
     if(kind==="dock"){ const d=docks.find(x=>x.id===id); if(d) box=unionBox(box,dockBBox(d)); }
     else if(kind==="mark"){ const m=marks.find(x=>x.id===id); if(m) box=unionBox(box,markBBox(m)); }
+    else if(kind==="slip"){
+      const info=slipWorldPos(id);
+      if(info && info.slip){
+        const s=info.slip;
+        box=unionBox(box,{x:Number(s.x)||0,y:Number(s.y)||0,w:Math.max(1,Number(s.w)||10),h:Math.max(1,Number(s.h)||10)});
+      }
+    }
   });
   return box;
 }
@@ -187,6 +217,11 @@ const LABEL_PX={small:8,classic:9,normal:11,large:14,xl:20};
 let labelSizeKey="normal";
 let photoMoveMode=false;
 let dockAlignMode=false;
+let gcpMode=false;
+let gcpPairs=[]; // {ax,ay,bx,by}
+let gcpPending=null; // {ax,ay} waiting for photo point
+let gcpDrag=null; // tap vs pan while in GCP mode
+const GCP_STORE="laceys-gcp-pairs-v1";
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
 const chart=document.getElementById("chart"); // must exist before first redraw → applyDeepZoomLod → chartSize
 let photoDrag=null;
@@ -431,7 +466,7 @@ function updateSelHint(){
   const moveBtn=document.getElementById("btn-multi-move");
   if(moveBtn){ moveBtn.disabled = multi.size<1; moveBtn.textContent = multiPick ? "Move selected" : "Moving…"; }
   if(multiPick){
-    el.textContent = multi.size ? (multi.size+" selected · tick more in the list, or tap Done") : "Tick docks/labels in the list below (or tap the map)";
+    el.textContent = multi.size ? (multi.size+" selected · tick more in the list, or tap Done") : "Tick docks/slips/labels in the list below (or tap the map)";
   }else if(moveWholeChart || multi.size>1){
     el.textContent = (multi.size||"All")+" selected · drag on the map to move them · Multi-select to change the set";
   }else{
@@ -441,6 +476,15 @@ function updateSelHint(){
   updateSelChip();
 }
 function pieceLabel(kind,id){
+  if(kind==="slip"){
+    const info=slipWorldPos(id);
+    if(info && info.slip){
+      const num=String(info.slip.num!=null?info.slip.num:id);
+      const dockName=info.dock && info.dock.name ? (" · Dock "+info.dock.name) : "";
+      return ((/^\d+$/.test(num)?"Slip ":"")+num)+dockName;
+    }
+    return "Slip "+id;
+  }
   if(kind==="dock"){
     const d=docks.find(x=>x.id===id);
     return d ? ("Dock "+(d.name||d.id)) : ("Dock "+id);
@@ -460,7 +504,7 @@ function currentSelectionLabel(){
   if(multi.size===1){
     const k=[...multi][0];
     const {kind,id}=parseMemberKey(k);
-    return pieceLabel(kind==="mark"?"mark":"dock", id);
+    return pieceLabel(kind==="mark"?"mark":(kind==="slip"?"slip":"dock"), id);
   }
   if(selected && editing){
     const s=slips.find(x=>x.id===selected);
@@ -498,6 +542,21 @@ function renderPickList(){
     const on=multi.has(k);
     rows.push(`<label class="pick-row${on?" on":""}" data-k="${k}"><input type="checkbox" ${on?"checked":""}/><span>${pieceLabel("dock",d.id)}</span></label>`);
   });
+  rows.push('<div class="pick-section">Slips</div>');
+  const slipRows=[];
+  docks.forEach(d=>{
+    generatedSlips(d).forEach(s=>{
+      const id=String(s.id);
+      const k="slip:"+id;
+      const on=multi.has(k);
+      const label=pieceLabel("slip", id);
+      slipRows.push({k,on,label,sort:String(s.num!=null?s.num:id)});
+    });
+  });
+  slipRows.sort((a,b)=>String(a.sort).localeCompare(String(b.sort), undefined, {numeric:true}));
+  slipRows.forEach(r=>{
+    rows.push(`<label class="pick-row${r.on?" on":""}" data-k="${r.k}"><input type="checkbox" ${r.on?"checked":""}/><span>${r.label}</span></label>`);
+  });
   rows.push('<div class="pick-section">Labels & pieces</div>');
   marks.forEach(m=>{
     const k="mark:"+m.id;
@@ -512,9 +571,9 @@ function renderPickList(){
       if(inp.checked) multi.add(k); else multi.delete(k);
       if(multi.size<=1) moveWholeChart=false;
       // sync selected for editor
-      if(k.startsWith("dock:")){ selectedDock=k.slice(5); selectedMark=null; }
-      else { selectedMark=k.slice(5); selectedDock=null; }
-      selected=null;
+      if(k.startsWith("dock:")){ selectedDock=k.slice(5); selectedMark=null; selected=null; }
+      else if(k.startsWith("slip:")){ selected=k.slice(5); selectedDock=null; selectedMark=null; }
+      else if(k.startsWith("mark:")){ selectedMark=k.slice(5); selectedDock=null; selected=null; }
       updateSelHint();
       redraw();
       renderDockEditor();
@@ -529,7 +588,7 @@ function setMultiPick(on){
     if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); }
     moveWholeChart=false;
     showTab("layout");
-    document.getElementById("hint").textContent="Multi-select · tick the list (or tap the map)";
+    document.getElementById("hint").textContent="Multi-select · tick docks/slips/labels (or tap the map)";
   }else{
     document.getElementById("hint").textContent = multi.size>1 ? "Drag on the map to move the selection" : "Drag docks/labels · Multi-select to pick several";
   }
@@ -547,10 +606,17 @@ function parseMemberKey(k){
   return {kind:k.slice(0,i), id:k.slice(i+1)};
 }
 function moveMembersByKeys(keys,dx,dy){
+  const dockSet=new Set();
+  (keys||[]).forEach(k=>{ const {kind,id}=parseMemberKey(k); if(kind==="dock") dockSet.add(id); });
   (keys||[]).forEach(k=>{
     const {kind,id}=parseMemberKey(k);
     if(kind==="dock"){ const d=docks.find(x=>x.id===id); if(d){ if(isLocked(d)) moveDockSlips(d,dx,dy); d.x+=dx; d.y+=dy; } }
     else if(kind==="mark"){ const m=marks.find(x=>x.id===id); if(m){ m.x+=dx; m.y+=dy; } }
+    else if(kind==="slip"){
+      const d=findDockForSlipId(id);
+      if(d && dockSet.has(d.id)) return; // parent dock move already covers geometry
+      moveSlipById(id, dx, dy);
+    }
   });
 }
 function moveGroupMembers(g,dx,dy){ moveMembersByKeys(g.members||[], dx, dy); }
@@ -640,6 +706,8 @@ function scalePointXY(x,y,cx,cy,f){ return {x:cx+(x-cx)*f, y:cy+(y-cy)*f}; }
 function scaleMembersByKeys(keys,f,cx,cy){
   f=Number(f)||1; if(Math.abs(f-1)<1e-9) return;
   const seenD=new Set(), seenM=new Set();
+  const dockInKeys=new Set();
+  (keys||[]).forEach(k=>{ const {kind,id}=parseMemberKey(k); if(kind==="dock") dockInKeys.add(id); });
   (keys||[]).forEach(k=>{
     const {kind,id}=parseMemberKey(k);
     if(kind==="dock"){
@@ -671,6 +739,18 @@ function scaleMembersByKeys(keys,f,cx,cy){
       if(m.w!=null) m.w=Number(m.w)*f;
       if(m.h!=null) m.h=Number(m.h)*f;
       if(m.size!=null) m.size=Number(m.size)*f;
+    }else if(kind==="slip"){
+      const info=slipWorldPos(id); if(!info) return;
+      if(dockInKeys.has(info.dock.id)) return; // parent dock scaled
+      const s=info.slip;
+      const q=scalePointXY(Number(s.x)||0, Number(s.y)||0, cx, cy, f);
+      setPlaced(info.dock, String(id), {
+        x:q.x, y:q.y,
+        w:(Number(s.w)||10)*f,
+        h:(Number(s.h)||10)*f,
+        rot:s.rot||0,
+        fill:s.fill
+      });
     }
   });
 }
@@ -811,7 +891,7 @@ function redraw(){
     const rot=Number(s.rot)||0;
     const hidden=slipHiddenByLayer(s);
     const dim=!hidden && !match(s,filter);
-    const attrs={class:"slip"+(selected===s.id?" on":"")+(dim?" dim":"")+(hidden?" layer-hidden":""),"data-id":s.id,"data-dock":s.dockId};
+    const attrs={class:"slip"+(selected===s.id?" on":"")+(multi.has("slip:"+s.id)?" multi":"")+(dim?" dim":"")+(hidden?" layer-hidden":""),"data-id":s.id,"data-dock":s.dockId};
     if(rot) attrs.transform=`rotate(${rot} ${s.x+s.w/2} ${s.y+s.h/2})`;
     const g=el("g",attrs);
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
@@ -824,6 +904,7 @@ function redraw(){
   if(mapBoundRect && mapBoundRect.parentNode===svg) svg.appendChild(mapBoundRect);
   syncMapBoundVisual();
   applyDeepZoomLod();
+  try{ redrawGcpMarkers(); }catch(e){}
 }
 const DOCK_CHIPS=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
@@ -1139,13 +1220,20 @@ function defaultMarinaZoom(){
 }
 svg.addEventListener("click",e=>{
   if(dockDrag&&dockDrag.moved)return;
-  if(photoMoveMode||dockAlignMode){ e.preventDefault(); e.stopPropagation(); return; }
+  if(photoMoveMode||dockAlignMode||gcpMode){ e.preventDefault(); e.stopPropagation(); return; }
   if(editing){
     const sEl=e.target.closest("[data-id]");
     const dEl=e.target.closest("[data-dock]");
     const mEl=e.target.closest("[data-mark]");
     // Desktop Shift-click multi-select (phones use Multi-select + pointerup instead)
     if(e.shiftKey){
+      if(sEl && sEl.getAttribute("data-id")){
+        const id=sEl.getAttribute("data-id");
+        toggleMultiKey("slip:"+id);
+        selected=id; selectedDock=null; selectedMark=null;
+        showTab("layout"); renderDockEditor();
+        return;
+      }
       if(dEl){
         const id=dEl.getAttribute("data-dock");
         toggleMultiKey("dock:"+id);
@@ -1273,6 +1361,14 @@ function hitEditTarget(e){
   return {sEl,dEl,mEl};
 }
 chart.addEventListener("pointerdown",e=>{
+  if(gcpMode){
+    try{ e.preventDefault(); }catch(_){}
+    if(e.target.closest && e.target.closest(".zoom,.pan,#gcp-align-chip,#photo-move-chip,#dock-align-chip,button,input,label")) return;
+    const p=svgPoint(e);
+    gcpDrag={px:p.x,py:p.y,cx:e.clientX,cy:e.clientY,moved:false};
+    try{ chart.setPointerCapture(e.pointerId); }catch(_){}
+    return;
+  }
   if(dockAlignMode){
     try{ e.preventDefault(); }catch(_){}
     if(e.target.closest && e.target.closest(".zoom,.pan,#dock-align-chip,#photo-move-chip,button,input,label")) return;
@@ -1311,21 +1407,21 @@ chart.addEventListener("pointerdown",e=>{
     const p=svgPoint(e);
     // Multi-select: tap toggles; if several already selected, dragging a selected piece moves the set
     if(multiPick){
-      let tapKey=null, tapDock=null, tapMark=null;
-      if(mEl && mEl.getAttribute("data-mark")){ tapMark=mEl.getAttribute("data-mark"); tapKey="mark:"+tapMark; }
+      let tapKey=null, tapDock=null, tapMark=null, tapSlip=null;
+      if(sEl && sEl.getAttribute("data-id")){
+        tapSlip=sEl.getAttribute("data-id");
+        tapKey="slip:"+tapSlip;
+        tapDock=sEl.getAttribute("data-dock")||null;
+      }else if(mEl && mEl.getAttribute("data-mark")){ tapMark=mEl.getAttribute("data-mark"); tapKey="mark:"+tapMark; }
       else if(dEl && dEl.getAttribute("data-dock")){ tapDock=dEl.getAttribute("data-dock"); tapKey="dock:"+tapDock; }
-      else if(sEl){
-        const did=sEl.getAttribute("data-dock");
-        if(did){ tapDock=did; tapKey="dock:"+did; }
-      }
       if(tapKey){
         if(multi.size>1 && multi.has(tapKey)){
-          const _keys=[...multi]; dockDrag={kind:"chart",keys:_keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,fromMultiPick:true,tapKey,tapDock,tapMark,startBox:keysBBox(_keys)};
+          const _keys=[...multi]; dockDrag={kind:"chart",keys:_keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,fromMultiPick:true,tapKey,tapDock,tapMark,tapSlip,startBox:keysBBox(_keys)};
           chart.style.cursor="grabbing";
           chart.setPointerCapture(e.pointerId);
           return;
         }
-        dockDrag={kind:"pick",tapKey,tapDock,tapMark,px:p.x,py:p.y,moved:false};
+        dockDrag={kind:"pick",tapKey,tapDock,tapMark,tapSlip,px:p.x,py:p.y,moved:false};
         chart.setPointerCapture(e.pointerId);
         return;
       }
@@ -1345,15 +1441,30 @@ chart.addEventListener("pointerdown",e=>{
     if(sEl){
       const dock=docks.find(x=>x.id===sEl.getAttribute("data-dock"));
       const slip=slips.find(x=>x.id===sEl.getAttribute("data-id"));
-      const bundle=dock ? keysForDrag("dock", dock.id) : null;
+      const slipId=sEl.getAttribute("data-id");
+      const slipBundle=slipId ? keysForDrag("slip", slipId) : null;
+      const bundle=slipBundle || (dock ? keysForDrag("dock", dock.id) : null);
       if(bundle){
         dockDrag={kind:"chart",keys:bundle,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(bundle)};
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+      // Multi size 1 with this slip (after Move selected): treat as chart move of that slip even if dock locked
+      if(slipId && multi.size===1 && multi.has("slip:"+slipId)){
+        const keys=["slip:"+slipId];
+        dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(keys)};
         chart.setPointerCapture(e.pointerId);
         return;
       }
       if(dock && slip && !isLocked(dock)){
         dockDrag={kind:"slip",dockId:dock.id,id:slip.id,x:slip.x,y:slip.y,px:p.x,py:p.y,moved:false,startBox:slipBBoxFrom(dock,slip.id,slip)};
         selectEditSlip(slip.id);
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+      // Locked dock: still allow dragging a slip alone via placed coords when explicitly selected
+      if(dock && slip && isLocked(dock) && selected===slip.id){
+        dockDrag={kind:"slip",dockId:dock.id,id:slip.id,x:slip.x,y:slip.y,px:p.x,py:p.y,moved:false,startBox:slipBBoxFrom(dock,slip.id,slip)};
         chart.setPointerCapture(e.pointerId);
         return;
       }
@@ -1381,6 +1492,19 @@ chart.addEventListener("pointerdown",e=>{
   pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);
 });
 chart.addEventListener("pointermove",e=>{
+  if(gcpMode && gcpDrag){
+    const p=svgPoint(e);
+    const dx=p.x-gcpDrag.px, dy=p.y-gcpDrag.py;
+    if(!gcpDrag.moved && (Math.hypot(e.clientX-gcpDrag.cx, e.clientY-gcpDrag.cy)>8)){
+      gcpDrag.moved=true;
+      gcpDrag.pan={x:e.clientX-tx,y:e.clientY-ty};
+    }
+    if(gcpDrag.moved && gcpDrag.pan){
+      try{ e.preventDefault(); }catch(_){}
+      tx=e.clientX-gcpDrag.pan.x; ty=e.clientY-gcpDrag.pan.y; applyZoom();
+    }
+    return;
+  }
   if(dockAlignMode && dockAlignDrag){
     try{ e.preventDefault(); }catch(_){}
     if(dockAlignPointers.has(e.pointerId)) dockAlignPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -1489,6 +1613,17 @@ chart.addEventListener("pointermove",e=>{
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
 chart.addEventListener("pointerup",e=>{
+  if(gcpMode){
+    if(gcpDrag){
+      if(!gcpDrag.moved){
+        const p=svgPoint(e);
+        // prefer start point for stability
+        placeGcpClick({x:gcpDrag.px, y:gcpDrag.py});
+      }
+      gcpDrag=null;
+    }
+    return;
+  }
   if(dockAlignMode){
     dockAlignPointers.delete(e.pointerId);
     if(dockAlignDrag){
@@ -1530,8 +1665,11 @@ chart.addEventListener("pointerup",e=>{
     if(dockDrag.kind==="pick"){
       if(!dockDrag.moved && dockDrag.tapKey){
         toggleMultiKey(dockDrag.tapKey);
-        if(dockDrag.tapDock){ selectedDock=dockDrag.tapDock; selectedMark=null; selected=null; }
-        if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
+        if(dockDrag.tapSlip){ selected=dockDrag.tapSlip; selectedDock=null; selectedMark=null; }
+        else if(dockDrag.tapDock){ selectedDock=dockDrag.tapDock; selectedMark=null; selected=null; }
+        else if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
+        else if(dockDrag.tapKey && dockDrag.tapKey.startsWith("slip:")){ selected=dockDrag.tapKey.slice(5); selectedDock=null; selectedMark=null; }
+
         showTab("layout"); renderDockEditor();
       }
     }else if(dockDrag.kind==="chart"){
@@ -1539,8 +1677,11 @@ chart.addEventListener("pointerup",e=>{
       if(dockDrag.fromMultiPick && !dockDrag.moved && dockDrag.tapKey){
         // Tap (not drag) while a multi-selection exists — toggle that piece
         toggleMultiKey(dockDrag.tapKey);
-        if(dockDrag.tapDock){ selectedDock=dockDrag.tapDock; selectedMark=null; selected=null; }
-        if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
+        if(dockDrag.tapSlip){ selected=dockDrag.tapSlip; selectedDock=null; selectedMark=null; }
+        else if(dockDrag.tapDock){ selectedDock=dockDrag.tapDock; selectedMark=null; selected=null; }
+        else if(dockDrag.tapMark){ selectedMark=dockDrag.tapMark; selectedDock=null; selected=null; }
+        else if(dockDrag.tapKey && dockDrag.tapKey.startsWith("slip:")){ selected=dockDrag.tapKey.slice(5); selectedDock=null; selectedMark=null; }
+
         showTab("layout"); renderDockEditor();
       }else if(dockDrag.moved && (dockDrag.sx || dockDrag.sy)){
         // sx/sy already map-clamped during drag; soft-cap absurd pointer glitches
@@ -1635,11 +1776,11 @@ document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
   const em=document.getElementById("edit-toggle-mobile");
   if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
-  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); }
+  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
         ? "Tools = panel · drag docks · empty water pans · Done exits"
-        : (multiPick?"Multi-select on · tap docks/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · use Dock panel on the right · empty water pans")))
+        : (multiPick?"Multi-select on · tap docks/slips/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · use Dock panel on the right · empty water pans")))
     : "Click a numbered slip · drag to pan";
   if(editing){
     showTab("layout");
@@ -1691,9 +1832,298 @@ if(_sheetHandle) _sheetHandle.addEventListener("click", e=>{
   if(peek) peek.onclick=()=> setEditPanelOpen(true);
 })();
 
+
+/** Ground Control Point (GCP) alignment — move docks onto aerial. */
+function fitSimilarity(pairs){
+  const n=(pairs||[]).length;
+  if(n<2) return null;
+  let ax=0,ay=0,bx=0,by=0;
+  for(const p of pairs){ ax+=Number(p.ax)||0; ay+=Number(p.ay)||0; bx+=Number(p.bx)||0; by+=Number(p.by)||0; }
+  ax/=n; ay/=n; bx/=n; by/=n;
+  let sumAxBx=0,sumAyBx=0,sumAxBy=0,sumAyBy=0,sumA2=0;
+  for(const p of pairs){
+    const Ax=(Number(p.ax)||0)-ax, Ay=(Number(p.ay)||0)-ay;
+    const Bx=(Number(p.bx)||0)-bx, By=(Number(p.by)||0)-by;
+    sumAxBx+=Ax*Bx; sumAyBx+=Ay*Bx; sumAxBy+=Ax*By; sumAyBy+=Ay*By;
+    sumA2+=Ax*Ax+Ay*Ay;
+  }
+  if(sumA2<1e-12) return null;
+  const ang=Math.atan2(sumAxBy-sumAyBx, sumAxBx+sumAyBy);
+  const cos=Math.cos(ang), sin=Math.sin(ang);
+  let num=0;
+  for(const p of pairs){
+    const Ax=(Number(p.ax)||0)-ax, Ay=(Number(p.ay)||0)-ay;
+    const Bx=(Number(p.bx)||0)-bx, By=(Number(p.by)||0)-by;
+    num+=Bx*(cos*Ax-sin*Ay)+By*(sin*Ax+cos*Ay);
+  }
+  let s=num/sumA2;
+  if(!isFinite(s) || s<=0) s=1;
+  s=Math.max(0.2, Math.min(5, s));
+  const a=s*cos, b=-s*sin, d=s*sin, e=s*cos;
+  const c=bx-(a*ax+b*ay);
+  const f=by-(d*ax+e*ay);
+  return {kind:"similarity", a,b,c,d,e,f, s, rotDeg:ang*180/Math.PI};
+}
+function solveLeastSquares3(rows){
+  // Solve x*a + y*b + 1*c = rhs via normal equations
+  const A=[[0,0,0],[0,0,0],[0,0,0]];
+  const B=[0,0,0];
+  for(const r of rows){
+    const x=Number(r.x)||0, y=Number(r.y)||0, rhs=Number(r.rhs)||0;
+    const row=[x,y,1];
+    for(let i=0;i<3;i++){
+      B[i]+=row[i]*rhs;
+      for(let j=0;j<3;j++) A[i][j]+=row[i]*row[j];
+    }
+  }
+  // Gaussian elimination with partial pivot
+  const M=[A[0].concat(B[0]), A[1].concat(B[1]), A[2].concat(B[2])];
+  for(let col=0; col<3; col++){
+    let piv=col;
+    for(let r=col+1;r<3;r++) if(Math.abs(M[r][col])>Math.abs(M[piv][col])) piv=r;
+    if(Math.abs(M[piv][col])<1e-12) return null;
+    if(piv!==col){ const t=M[col]; M[col]=M[piv]; M[piv]=t; }
+    const div=M[col][col];
+    for(let j=col;j<4;j++) M[col][j]/=div;
+    for(let r=0;r<3;r++){
+      if(r===col) continue;
+      const f=M[r][col];
+      for(let j=col;j<4;j++) M[r][j]-=f*M[col][j];
+    }
+  }
+  return [M[0][3], M[1][3], M[2][3]];
+}
+function fitAffine(pairs){
+  const n=(pairs||[]).length;
+  if(n<3) return fitSimilarity(pairs);
+  const rowsX=pairs.map(p=>({x:p.ax,y:p.ay,rhs:p.bx}));
+  const rowsY=pairs.map(p=>({x:p.ax,y:p.ay,rhs:p.by}));
+  const abc=solveLeastSquares3(rowsX);
+  const defv=solveLeastSquares3(rowsY);
+  if(!abc || !defv) return fitSimilarity(pairs);
+  const [a,b,c]=abc, [d,e,f]=defv;
+  if(![a,b,c,d,e,f].every(v=>isFinite(v))) return fitSimilarity(pairs);
+  const det=a*e-b*d;
+  if(Math.abs(det)<1e-8) return fitSimilarity(pairs);
+  const sx=Math.hypot(a,d), sy=Math.hypot(b,e);
+  if(sx<0.15||sx>6||sy<0.15||sy>6) return fitSimilarity(pairs);
+  // Prefer similarity when nearly similarity (shear tiny)
+  const shear=Math.abs(a*b+d*e)/(sx*sy+1e-12);
+  if(shear>0.35){
+    // still allow affine if stable
+  }
+  const rotDeg=Math.atan2(d,a)*180/Math.PI;
+  return {kind:"affine", a,b,c,d,e,f, s:(sx+sy)/2, rotDeg};
+}
+function fitGcpTransform(pairs){
+  if(!pairs || pairs.length<2) return null;
+  if(pairs.length>=3){
+    const aff=fitAffine(pairs);
+    if(aff) return aff;
+  }
+  return fitSimilarity(pairs);
+}
+function transformPoint(x,y,T){
+  x=Number(x)||0; y=Number(y)||0;
+  if(!T) return {x,y};
+  return {x:T.a*x+T.b*y+T.c, y:T.d*x+T.e*y+T.f};
+}
+function normalizeRotDeg(v){
+  let r=((Number(v)%360)+360)%360;
+  if(r>180) r-=360;
+  if(Math.abs(r)<0.01) r=0;
+  return r;
+}
+function applyGcpTransformToDock(d, T, opts){
+  if(!d || !T) return;
+  const updateRot=!(opts && opts.updateRot===false);
+  const p=transformPoint(d.x, d.y, T);
+  d.x=p.x; d.y=p.y;
+  if(T.kind==="similarity" && T.s && Math.abs(T.s-1)>1e-6){
+    const s=T.s;
+    ["sw","sh","w","h","gap"].forEach(prop=>{ if(d[prop]!=null) d[prop]=Number(d[prop])*s; });
+    (d.extras||[]).forEach(ex=>{
+      if(ex.dx!=null) ex.dx=Number(ex.dx)*s;
+      if(ex.dy!=null) ex.dy=Number(ex.dy)*s;
+      if(ex.w!=null) ex.w=Number(ex.w)*s;
+      if(ex.h!=null) ex.h=Number(ex.h)*s;
+    });
+  }
+  if(d.placed){
+    Object.keys(d.placed).forEach(id=>{
+      const pl=d.placed[id]; if(!pl) return;
+      if(pl.x!=null && pl.y!=null){
+        const q=transformPoint(pl.x, pl.y, T);
+        pl.x=q.x; pl.y=q.y;
+      }
+      if(T.kind==="similarity" && T.s && Math.abs(T.s-1)>1e-6){
+        if(pl.w!=null) pl.w=Number(pl.w)*T.s;
+        if(pl.h!=null) pl.h=Number(pl.h)*T.s;
+      }
+      if(updateRot && T.rotDeg!=null && isFinite(T.rotDeg) && Math.abs(T.rotDeg)>0.05){
+        pl.rot=normalizeRotDeg((Number(pl.rot)||0)+T.rotDeg);
+      }
+    });
+  }
+  if(updateRot && T.rotDeg!=null && isFinite(T.rotDeg) && Math.abs(T.rotDeg)>0.05){
+    d.rot=normalizeRotDeg((Number(d.rot)||0)+T.rotDeg);
+  }
+}
+function applyGcpTransformToMark(m, T, opts){
+  if(!m || !T) return;
+  const updateRot=!(opts && opts.updateRot===false);
+  const p=transformPoint(m.x, m.y, T);
+  m.x=p.x; m.y=p.y;
+  if(T.kind==="similarity" && T.s && Math.abs(T.s-1)>1e-6){
+    const s=T.s;
+    if(m.w!=null) m.w=Number(m.w)*s;
+    if(m.h!=null) m.h=Number(m.h)*s;
+    if(m.size!=null) m.size=Number(m.size)*s;
+  }
+  if(updateRot && T.rotDeg!=null && isFinite(T.rotDeg) && Math.abs(T.rotDeg)>0.05){
+    m.rot=normalizeRotDeg((Number(m.rot)||0)+T.rotDeg);
+  }
+}
+function loadGcpPairs(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(GCP_STORE)||"null");
+    if(Array.isArray(raw)){
+      gcpPairs=raw.filter(p=>p && isFinite(p.ax)&&isFinite(p.ay)&&isFinite(p.bx)&&isFinite(p.by))
+        .map(p=>({ax:+p.ax,ay:+p.ay,bx:+p.bx,by:+p.by}));
+    }
+  }catch(e){}
+}
+function saveGcpPairs(){
+  try{ localStorage.setItem(GCP_STORE, JSON.stringify(gcpPairs||[])); }catch(e){}
+}
+function clearGcpPairs(persist){
+  gcpPairs=[]; gcpPending=null;
+  if(persist!==false) saveGcpPairs();
+  updateGcpChip();
+  redrawGcpMarkers();
+}
+let gcpLayer=null;
+function ensureGcpLayer(){
+  if(!svg) return null;
+  if(!gcpLayer || gcpLayer.parentNode!==svg){
+    gcpLayer=el("g",{id:"gcp-layer", "pointer-events":"none"});
+    svg.appendChild(gcpLayer);
+  }
+  return gcpLayer;
+}
+function redrawGcpMarkers(){
+  const g=ensureGcpLayer();
+  if(!g) return;
+  g.innerHTML="";
+  if(!gcpMode && !(gcpPairs&&gcpPairs.length)) return;
+  if(!gcpMode) return;
+  const r=Math.max(6, 10/Math.max(0.25, scale));
+  gcpPairs.forEach((p,i)=>{
+    const n=i+1;
+    g.appendChild(el("line",{x1:p.ax,y1:p.ay,x2:p.bx,y2:p.by,stroke:"#ffd166", "stroke-width":Math.max(1,2/Math.max(0.25,scale)), opacity:"0.85"}));
+    g.appendChild(el("circle",{cx:p.ax,cy:p.ay,r:r,fill:"#3a86ff", stroke:"#fff", "stroke-width":1.5}));
+    g.appendChild(el("text",{x:p.ax,y:p.ay-r-2,"text-anchor":"middle",fill:"#3a86ff","font-size":Math.max(10,12/Math.max(0.25,scale)),"font-weight":"700"}, "A"+n));
+    g.appendChild(el("circle",{cx:p.bx,cy:p.by,r:r,fill:"#f4a261", stroke:"#fff", "stroke-width":1.5}));
+    g.appendChild(el("text",{x:p.bx,y:p.by-r-2,"text-anchor":"middle",fill:"#f4a261","font-size":Math.max(10,12/Math.max(0.25,scale)),"font-weight":"700"}, "B"+n));
+  });
+  if(gcpPending){
+    g.appendChild(el("circle",{cx:gcpPending.ax,cy:gcpPending.ay,r:r,fill:"#3a86ff", stroke:"#fff", "stroke-width":1.5, opacity:"0.7"}));
+    g.appendChild(el("text",{x:gcpPending.ax,y:gcpPending.ay-r-2,"text-anchor":"middle",fill:"#3a86ff","font-size":Math.max(10,12/Math.max(0.25,scale)),"font-weight":"700"}, "A?"));
+  }
+  // keep on top
+  svg.appendChild(g);
+  if(mapBoundRect && mapBoundRect.parentNode===svg) svg.appendChild(mapBoundRect);
+}
+function updateGcpChip(){
+  const countEl=document.getElementById("gcp-pair-count");
+  if(countEl) countEl.textContent=(gcpPairs.length||0)+" pair"+(gcpPairs.length===1?"":"s");
+  const applyAll=document.getElementById("gcp-apply-all");
+  const applySel=document.getElementById("gcp-apply-selected");
+  const ready=gcpPairs.length>=2;
+  if(applyAll) applyAll.disabled=!ready;
+  if(applySel) applySel.disabled=!ready;
+}
+function setGcpMode(on){
+  if(!IS_LAYOUT_SOURCE){ gcpMode=false; return; }
+  gcpMode=!!on;
+  if(gcpMode){
+    if(photoMoveMode) setPhotoMoveMode(false);
+    if(dockAlignMode) setDockAlignMode(false);
+    if(!editing){
+      const t=document.getElementById("edit-toggle");
+      if(t) t.click();
+    }
+    gcpDrag=null;
+  }else{
+    gcpDrag=null;
+    gcpPending=null;
+  }
+  document.body.classList.toggle("gcp-aligning", gcpMode);
+  const btn=document.getElementById("btn-gcp-align");
+  if(btn){
+    btn.classList.toggle("on", gcpMode);
+    btn.textContent=gcpMode?"Done GCP":"GCP align";
+  }
+  const chip=document.getElementById("gcp-align-chip");
+  if(chip) chip.hidden=!gcpMode;
+  updateGcpChip();
+  const hint=document.getElementById("hint");
+  if(hint){
+    if(gcpMode) hint.textContent="GCP align — tap dock corner (A), then matching aerial spot (B) · 2+ pairs to Apply";
+    else if(photoMoveMode) hint.textContent="Moving photo — drag to pan, Stretch width/height or pinch · docks locked";
+    else if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked";
+    else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
+  }
+  chart.style.cursor=gcpMode?"crosshair":(photoMoveMode?"move":(dockAlignMode?"grab":""));
+  redrawGcpMarkers();
+}
+function placeGcpClick(p){
+  if(!gcpMode || !p) return;
+  if(!gcpPending){
+    gcpPending={ax:p.x, ay:p.y};
+  }else{
+    gcpPairs.push({ax:gcpPending.ax, ay:gcpPending.ay, bx:p.x, by:p.y});
+    gcpPending=null;
+    saveGcpPairs();
+  }
+  updateGcpChip();
+  redrawGcpMarkers();
+}
+function undoLastGcpPair(){
+  if(gcpPending){ gcpPending=null; updateGcpChip(); redrawGcpMarkers(); return; }
+  if(!gcpPairs.length) return;
+  gcpPairs.pop();
+  saveGcpPairs();
+  updateGcpChip();
+  redrawGcpMarkers();
+}
+function applyGcpToTargets(scope){
+  if(!IS_LAYOUT_SOURCE || !gcpMode) return;
+  if(gcpPairs.length<2){ alert("Need at least 2 GCP pairs before Apply."); return; }
+  const T=fitGcpTransform(gcpPairs);
+  if(!T){ alert("Could not fit a stable transform from these pairs."); return; }
+  if(scope==="selected"){
+    if(!selectedDock){ alert("Select a dock first (or use Apply to all docks)."); return; }
+    const d=docks.find(x=>x.id===selectedDock);
+    if(!d){ alert("Selected dock not found."); return; }
+    applyGcpTransformToDock(d, T);
+  }else{
+    docks.forEach(d=>applyGcpTransformToDock(d, T));
+    marks.forEach(m=>applyGcpTransformToMark(m, T));
+  }
+  sanitizeLayout();
+  saveLayout(true);
+  clearGcpPairs(true);
+  redraw();
+  renderDockEditor();
+  const hint=document.getElementById("hint");
+  if(hint) hint.textContent="GCP applied ("+T.kind+") · Undo in header if needed";
+}
+
 function setPhotoMoveMode(on){
   photoMoveMode=!!on;
   if(photoMoveMode && dockAlignMode) setDockAlignMode(false);
+  if(photoMoveMode && gcpMode) setGcpMode(false);
   if(!photoMoveMode){
     photoDrag=null;
     photoPointers.clear();
@@ -1709,15 +2139,17 @@ function setPhotoMoveMode(on){
   const hint=document.getElementById("hint");
   if(hint){
     if(photoMoveMode) hint.textContent="Moving photo — drag to pan, Stretch width/height or pinch · docks locked";
+    else if(gcpMode) hint.textContent="GCP align — tap dock corner (A), then matching aerial spot (B) · 2+ pairs to Apply";
     else if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked";
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
-  chart.style.cursor=photoMoveMode?"move":(dockAlignMode?"grab":"");
+  chart.style.cursor=photoMoveMode?"move":(gcpMode?"crosshair":(dockAlignMode?"grab":""));
 }
 function setDockAlignMode(on){
   dockAlignMode=!!on;
   if(dockAlignMode){
     if(photoMoveMode) setPhotoMoveMode(false);
+    if(gcpMode) setGcpMode(false);
     if(!editing){
       const t=document.getElementById("edit-toggle");
       if(t) t.click();
@@ -1743,10 +2175,11 @@ function setDockAlignMode(on){
   const hint=document.getElementById("hint");
   if(hint){
     if(dockAlignMode) hint.textContent="Aligning docks — drag to pan, pinch or −/+ to scale · photo locked · labels stay readable";
+    else if(gcpMode) hint.textContent="GCP align — tap dock corner (A), then matching aerial spot (B) · 2+ pairs to Apply";
     else if(photoMoveMode) hint.textContent="Moving photo — drag to pan, Stretch width/height or pinch · docks locked";
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
-  chart.style.cursor=dockAlignMode?"grab":(photoMoveMode?"move":"");
+  chart.style.cursor=dockAlignMode?"grab":(gcpMode?"crosshair":(photoMoveMode?"move":""));
 }
 function photoPinchDist(){
   const pts=[...photoPointers.values()];
@@ -1845,6 +2278,22 @@ function syncLabelSizeUI(){
   if(alignBtn) alignBtn.onclick=()=> setDockAlignMode(!dockAlignMode);
   const alignDone=document.getElementById("dock-align-done");
   if(alignDone) alignDone.onclick=()=> setDockAlignMode(false);
+  const gcpBtn=document.getElementById("btn-gcp-align");
+  if(gcpBtn){
+    if(!IS_LAYOUT_SOURCE){ gcpBtn.hidden=true; }
+    else gcpBtn.onclick=()=> setGcpMode(!gcpMode);
+  }
+  const gcpDone=document.getElementById("gcp-align-done");
+  if(gcpDone) gcpDone.onclick=()=> setGcpMode(false);
+  const gcpUndo=document.getElementById("gcp-undo-pair");
+  if(gcpUndo) gcpUndo.onclick=()=> undoLastGcpPair();
+  const gcpClear=document.getElementById("gcp-clear-pairs");
+  if(gcpClear) gcpClear.onclick=()=> clearGcpPairs(true);
+  const gcpApplyAll=document.getElementById("gcp-apply-all");
+  if(gcpApplyAll) gcpApplyAll.onclick=()=> applyGcpToTargets("all");
+  const gcpApplySel=document.getElementById("gcp-apply-selected");
+  if(gcpApplySel) gcpApplySel.onclick=()=> applyGcpToTargets("selected");
+  if(IS_LAYOUT_SOURCE){ loadGcpPairs(); updateGcpChip(); }
   const dockScaleMinus=document.getElementById("dock-align-scale-minus");
   if(dockScaleMinus) dockScaleMinus.onclick=()=> bumpDockLayoutScale(-0.05);
   const dockScalePlus=document.getElementById("dock-align-scale-plus");
@@ -1901,6 +2350,7 @@ function restoreOriginalChart(){
   multi.clear(); moveWholeChart=false; selected=null; selectedDock=null; selectedMark=null;
   if(typeof dockAlignMode!=='undefined' && dockAlignMode) setDockAlignMode(false);
   if(typeof photoMoveMode!=='undefined' && photoMoveMode) setPhotoMoveMode(false);
+  if(typeof gcpMode!=='undefined' && gcpMode) setGcpMode(false);
   saveLayout(); // undoable restore
   applyPhotoAlign();
   redraw(); renderDockEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible();
@@ -2658,7 +3108,7 @@ wireMultiButtons();
 document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } multiPick=false; selectAllLayout(); };
 document.getElementById("btn-group-all").onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } multiPick=false; groupAllLayout(); };
 document.getElementById("btn-group").onclick=()=>{
-  if(multi.size<2){ alert("Turn on Multi-select and tap at least two docks or labels first (or Shift-click on desktop)."); return; }
+  if(multi.size<2){ alert("Turn on Multi-select and tap at least two docks, slips, or labels first (or Shift-click on desktop)."); return; }
   const name=prompt("Group name?","Group "+(groups.length+1));
   if(name==null) return;
   groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
@@ -2674,6 +3124,7 @@ document.getElementById("btn-ungroup").onclick=()=>{
   const keys=[...multi];
   if(selectedDock) keys.push("dock:"+selectedDock);
   if(selectedMark) keys.push("mark:"+selectedMark);
+  if(selected) keys.push("slip:"+selected);
   if(!keys.length){ alert("Select a grouped item (or multi-select) first."); return; }
   groups=groups.filter(g=>!(g.members||[]).some(k=>keys.includes(k)));
   multi.clear(); moveWholeChart=false; updateSelHint(); saveLayout(); redraw();
