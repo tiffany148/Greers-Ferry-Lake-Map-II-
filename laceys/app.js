@@ -858,9 +858,15 @@ function buildMarkGroup(m){
     g.appendChild(el("text",{x:m.x+m.w/2,y:m.y+m.h/2+4,"text-anchor":"middle",fill:"#0a1210",stroke:"#f4fffe","stroke-width":String(psw),"paint-order":"stroke","font-size":String(pfs),"font-weight":800,class:"screen-label","data-world-fs":"10"},m.label||""));
   }
   else if(m.kind==="text"){
-    const baseFs=m.size||13; const fs=screenAwareFontSize(baseFs); const sw=labelStrokeWidth(fs);
+    const baseFs=Math.max(8, Math.min(72, Number(m.size)||13)); const fs=screenAwareFontSize(baseFs); const sw=labelStrokeWidth(fs);
     const ink=m.ink||"#0a1210";
-    g.appendChild(el("rect",{class:"walk",x:m.x-4,y:m.y-fs,width:Math.max(28,(m.text||"").length*fs*0.62),height:fs+8,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));
+    const tw=Math.max(28,(m.text||"").length*fs*0.62), th=fs+8, bx=m.x-4, by=m.y-fs;
+    if(m.bg){
+      const bgFill=m.bgFill||"#0c1c1a";
+      g.appendChild(el("rect",{class:"walk label-bg",x:bx,y:by,width:tw,height:th,rx:5,fill:bgFill,"fill-opacity":"0.72"}));
+    }else{
+      g.appendChild(el("rect",{class:"walk",x:bx,y:by,width:tw,height:th,fill:editing?"rgba(255,255,255,.12)":"none",stroke:editing?"rgba(255,255,255,.35)":"none","stroke-width":editing?1:0}));
+    }
     g.appendChild(el("text",{x:m.x,y:m.y,fill:ink,stroke:"#f4fffe","stroke-width":String(sw),"paint-order":"stroke","font-size":String(fs),"font-weight":800,class:"screen-label","data-world-fs":String(baseFs)},m.text||""));
   }
   return g;
@@ -962,7 +968,9 @@ renderChips();
 redraw();
 function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const ctm=svg.getScreenCTM();return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};}
 function showTab(name){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));document.getElementById("pane-slip").hidden=name!=="slip";document.getElementById("pane-dir").hidden=name!=="dir";const pl=document.getElementById("pane-layers"); if(pl) pl.hidden=name!=="layers";document.getElementById("pane-layout").hidden=name!=="layout"; if(name==="layers") renderLayersEditor();}
+function nudgeCtrlHtml(){return `<div class="st ed-nudge"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>`;}
 function rotCtrl(val){return `<label>Rotation (degrees)<input id="ed-rot" type="range" min="-180" max="180" step="1" value="${val}"/></label><div class="row2"><label>Angle<input id="ed-rot-num" type="number" step="1" value="${val}"/></label><div class="st"><button type="button" data-rot="-90">-90</button><button type="button" data-rot="-15">-15</button><button type="button" data-rot="15">+15</button><button type="button" data-rot="90">+90</button><button type="button" data-rot="0">0</button></div></div>`;}
+function placementSec(inner){return `<div class="ed-sec"><div class="ed-sec-title">Placement &amp; transform</div>${inner}</div>`;}
 function bindRot(obj,after){const apply=v=>{obj.rot=((Number(v)%360)+360)%360;if(obj.rot>180)obj.rot-=360;if(Math.abs(obj.rot)<0.01)obj.rot=0;saveLayout();redraw();if(after)after();};document.getElementById("ed-rot").oninput=e=>{document.getElementById("ed-rot-num").value=e.target.value;obj.rot=+e.target.value;saveLayout();redraw();};document.getElementById("ed-rot").onchange=e=>apply(e.target.value);document.getElementById("ed-rot-num").onchange=e=>apply(e.target.value);document.querySelectorAll("[data-rot]").forEach(btn=>btn.onclick=()=>{const s=+btn.dataset.rot;apply(s===0?0:(Number(obj.rot)||0)+s);});}
 function nextSlipNumber(){
   const used=new Set(slips.map(s=>s.id));
@@ -986,7 +994,9 @@ function renderDockEditor(){
   const s=slips.find(x=>x.id===selected);
   if(s && editing && selectedDock && d && !isLocked(d)){
     const placed=(d.placed&&d.placed[s.id])||{};
-    box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip on the chart</p><label>Number / label<input id="ed-num" value="${s.num}"/></label><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(s.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(s.y)}"/></label></div><div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(s.w)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(s.h)}"/></label></div><label>Color<input id="ed-fill" type="color" value="${placed.fill||d.fill||COLORS[s.kind]||"#e4dcc8"}"/></label>${rotCtrl(Number(s.rot)||0)}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div><div class="st"><button type="button" id="ed-dup-slip">Duplicate slip</button><button type="button" id="ed-del-slip">Delete this slip</button></div>`;
+    box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip on the chart</p><label>Number / label<input id="ed-num" value="${s.num}"/></label>`+
+      placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(s.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(s.y)}"/></label></div><div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(s.w)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(s.h)}"/></label></div>${rotCtrl(Number(s.rot)||0)}${nudgeCtrlHtml()}`)+
+      `<label>Color<input id="ed-fill" type="color" value="${placed.fill||d.fill||COLORS[s.kind]||"#e4dcc8"}"/></label><div class="st"><button type="button" id="ed-dup-slip">Duplicate slip</button><button type="button" id="ed-del-slip">Delete this slip</button></div>`;
     const apply=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value,nw=+document.getElementById("ed-w").value,nh=+document.getElementById("ed-h").value;const box0={x:nx,y:ny,w:Math.max(1,nw),h:Math.max(1,nh)};const c=clampDeltaForBox(box0,0,0);setPlaced(d,s.id,{x:nx+c.dx,y:ny+c.dy,w:nw,h:nh,fill:document.getElementById("ed-fill").value});saveLayout();redraw();};
     document.getElementById("ed-fill").oninput=()=>{setPlaced(d,s.id,{fill:document.getElementById("ed-fill").value});saveLayout(false);redraw();};
     document.getElementById("ed-fill").onchange=()=>saveLayout();
@@ -1021,16 +1031,16 @@ function renderDockEditor(){
   if(d){
     const locked=isLocked(d);
     box.innerHTML=`<h2>Dock ${d.name}</h2>
-      <div class="st"><button type="button" id="ed-lock">${locked?"Unlock slips":"Lock slips together"}</button></div>
-      <p class="hint">${locked?"Locked: the whole dock moves as one. Unlock to drag slips one at a time.":"Unlocked: drag slips individually. Lock when the layout looks right."}</p>
       <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>
-      <label>Layout<select id="ed-type"><option value="ns"${d.type==="ns"?" selected":""}>North–south finger</option><option value="ew"${d.type==="ew"?" selected":""}>East–west finger</option><option value="col"${d.type==="col"?" selected":""}>Single column</option></select></label>
-      <div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
+      <label>Layout<select id="ed-type"><option value="ns"${d.type==="ns"?" selected":""}>North–south finger</option><option value="ew"${d.type==="ew"?" selected":""}>East–west finger</option><option value="col"${d.type==="col"?" selected":""}>Single column</option></select></label>`+
+      placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
       <div class="row2"><label>Slip width<input id="ed-sw" type="number" value="${Math.round(d.sw||d.w||40)}"/></label><label>Slip height<input id="ed-sh" type="number" value="${Math.round(d.sh||d.h||15)}"/></label></div>
-      <div class="row2"><label>Gap<input id="ed-gap" type="number" value="${Math.round(d.gap||3)}"/></label><label>Side A count<input id="ed-acount" type="number" min="0" max="80" value="${(d.a||[]).length}"/></label></div>
-      <label>Side B count<input id="ed-bcount" type="number" min="0" max="80" value="${(d.b||[]).length}"/></label>
-      <div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>
+      <label>Gap<input id="ed-gap" type="number" value="${Math.round(d.gap||3)}"/></label>
       ${rotCtrl(Number(d.rot)||0)}
+      ${nudgeCtrlHtml()}`)+
+      `<div class="st"><button type="button" id="ed-lock">${locked?"Unlock slips":"Lock slips together"}</button></div>
+      <p class="hint">${locked?"Locked: the whole dock moves as one. Unlock to drag slips one at a time.":"Unlocked: drag slips individually. Lock when the layout looks right."}</p>
+      <div class="row2"><label>Side A count<input id="ed-acount" type="number" min="0" max="80" value="${(d.a||[]).length}"/></label><label>Side B count<input id="ed-bcount" type="number" min="0" max="80" value="${(d.b||[]).length}"/></label></div>
       <label>Left / top numbers<textarea id="ed-a" rows="3">${(d.a||[]).join(", ")}</textarea></label>
       <label>Right / bottom numbers<textarea id="ed-b" rows="3">${(d.b||[]).join(", ")}</textarea></label>
       <div class="st"><button type="button" id="ed-add-slip">+ Slip on this dock</button><button type="button" id="ed-reset-slips">Reset slip layout</button></div>
@@ -1084,7 +1094,14 @@ function renderDockEditor(){
     const isText=m.kind==="text"||(m.text!=null&&m.kind!=="box"&&m.kind!=="pill");
     const colorVal=isText?(m.ink||"#d7eceb"):(m.fill||m.ink||"#2b6d8a");
     const colorLabel=isText?"Text color":(m.kind==="pill"||m.kind==="box"?"Fill color":"Color");
-    box.innerHTML=`<h2>${kindName}</h2><p class="hint">${isText?"Drag on the map or use X/Y and arrows to move. Change text color below.":(m.title||m.id)}</p><div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label></div>${(!isText||m.w!=null)?`<div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(m.w||12)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(m.h||20)}"/></label></div>`:""}${isText?`<label>Font size<input id="ed-size" type="number" min="8" max="48" value="${Math.round(m.size||13)}"/></label>`:""}<label>${colorLabel}<input id="ed-fill" type="color" value="${colorVal}"/></label>${m.kind==="box"||m.kind==="pill"?`<label>Text / ink color<input id="ed-ink" type="color" value="${m.ink||"#ffffff"}"/></label>`:""}<div class="st"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>${rotCtrl(Number(m.rot)||0)}${m.kind==="text"||m.text!=null?`<label>Text<input id="ed-text" value="${(m.text||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.t1!=null?`<label>Title<input id="ed-t1" value="${(m.t1||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.label!=null?`<label>Label<input id="ed-label" value="${(m.label||"").replace(/"/g,"&quot;")}"/></label>`:""}${stackCtrlHtml()}<div class="st"><button type="button" id="ed-dup-mark">Duplicate</button><button type="button" id="ed-del">Delete this piece</button></div>`;
+    const sizeVal=Math.max(8, Math.min(72, Math.round(m.size||13)));
+    const whRow=(!isText||m.w!=null)?`<div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(m.w||12)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(m.h||20)}"/></label></div>`:"";
+    const sizeRow=isText?`<label>Font size<input id="ed-size" type="number" min="8" max="72" step="1" value="${sizeVal}"/></label>`:"";
+    const textFields=`${m.kind==="text"||m.text!=null?`<label>Text<input id="ed-text" value="${(m.text||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.t1!=null?`<label>Title<input id="ed-t1" value="${(m.t1||"").replace(/"/g,"&quot;")}"/></label>`:""}${m.label!=null?`<label>Label<input id="ed-label" value="${(m.label||"").replace(/"/g,"&quot;")}"/></label>`:""}`;
+    const bgRow=isText?`<label class="ed-check"><input id="ed-bg" type="checkbox"${m.bg?" checked":""}/> Background</label>${m.bg?`<label>Background color<input id="ed-bgfill" type="color" value="${m.bgFill||"#0c1c1a"}"/></label>`:""}`:"";
+    box.innerHTML=`<h2>${kindName}</h2><p class="hint">${isText?"Drag on the map or use Placement & transform. Optional background helps labels on the aerial.":(m.title||m.id)}</p>${textFields}`+
+      placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(m.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(m.y)}"/></label></div>${whRow}${sizeRow}${rotCtrl(Number(m.rot)||0)}${nudgeCtrlHtml()}`)+
+      `${bgRow}<label>${colorLabel}<input id="ed-fill" type="color" value="${colorVal}"/></label>${m.kind==="box"||m.kind==="pill"?`<label>Text / ink color<input id="ed-ink" type="color" value="${m.ink||"#ffffff"}"/></label>`:""}${stackCtrlHtml()}<div class="st"><button type="button" id="ed-dup-mark">Duplicate</button><button type="button" id="ed-del">Delete this piece</button></div>`;
     const apply=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;const ew=document.getElementById("ed-w"),eh=document.getElementById("ed-h");if(ew)m.w=+ew.value;if(eh)m.h=+eh.value;const c=clampDeltaForBox(markBBox(Object.assign({},m,{x:m.x,y:m.y})),nx-m.x,ny-m.y);m.x+=c.dx;m.y+=c.dy; clampLayoutIntoMap(); saveLayout();redraw();};
     document.getElementById("ed-x").onchange=apply;document.getElementById("ed-y").onchange=apply;
     const ew=document.getElementById("ed-w"); if(ew) ew.onchange=apply; const eh=document.getElementById("ed-h"); if(eh) eh.onchange=apply;
@@ -1092,7 +1109,11 @@ function renderDockEditor(){
     const t=document.getElementById("ed-text"); if(t) t.oninput=()=>{m.text=t.value;saveLayout();redraw();};
     const t1=document.getElementById("ed-t1"); if(t1) t1.oninput=()=>{m.t1=t1.value;saveLayout();redraw();};
     const lb=document.getElementById("ed-label"); if(lb) lb.oninput=()=>{m.label=lb.value;saveLayout();redraw();};
-    const sz=document.getElementById("ed-size"); if(sz){ sz.oninput=()=>{m.size=+sz.value||13;saveLayout(false);redraw();}; sz.onchange=()=>saveLayout(); }
+    const sz=document.getElementById("ed-size"); if(sz){ sz.oninput=()=>{m.size=Math.max(8,Math.min(72,+sz.value||13));saveLayout(false);redraw();}; sz.onchange=()=>{m.size=Math.max(8,Math.min(72,+sz.value||13));saveLayout();}; }
+    const bgEl=document.getElementById("ed-bg");
+    if(bgEl){ bgEl.onchange=()=>{ m.bg=!!bgEl.checked; if(!m.bg) delete m.bgFill; else if(!m.bgFill) m.bgFill="#0c1c1a"; saveLayout(); redraw(); renderDockEditor(); }; }
+    const bgf=document.getElementById("ed-bgfill");
+    if(bgf){ bgf.oninput=()=>{ m.bgFill=bgf.value; saveLayout(false); redraw(); }; bgf.onchange=()=>saveLayout(); }
     box.querySelectorAll("[data-nudge]").forEach(btn=>btn.onclick=()=>{const [dx,dy]=btn.dataset.nudge.split(",").map(Number);const c=clampDeltaForBox(markBBox(m),dx,dy);m.x+=c.dx;m.y+=c.dy;saveLayout();redraw();renderDockEditor();});
     const cf=document.getElementById("ed-fill");
     if(cf){ cf.oninput=()=>{ if(m.kind==="text") m.ink=cf.value; else m.fill=cf.value; saveLayout(false); redraw(); }; cf.onchange=()=>saveLayout(); }
@@ -1102,10 +1123,11 @@ function renderDockEditor(){
     document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));ensureStackOrder();selectedMark=null;saveLayout();redraw();renderDockEditor();};
     bindStackButtons();
   }else if(multi.size>1){
-    box.innerHTML=`<h2>${multi.size} selected</h2><p class="hint">Change stack order for the whole selection.</p>${stackCtrlHtml()}`;
+    box.innerHTML=`<h2>${multi.size} selected</h2><p class="hint">Group actions for the whole selection — stack order stays here.</p>${stackCtrlHtml()}`;
     bindStackButtons();
   }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label.</p>";
 }
+
 function renderSlipLayerAssigns(slipId){
   const box=document.getElementById("slip-layer-assigns");
   if(!box) return;
@@ -1268,7 +1290,7 @@ svg.addEventListener("click",e=>{
 function markHitBox(m){
   if(!m) return null;
   if(m.kind==="text"){
-    const fs=m.size||13;
+    const fs=Math.max(8, Math.min(72, Number(m.size)||13));
     const w=Math.max(28,(m.text||"").length*fs*0.62);
     return {x:m.x-4,y:m.y-fs,w:w,h:fs+8};
   }
@@ -3160,7 +3182,7 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
   document.body.classList.remove("editing");
   const et=document.getElementById("edit-toggle"); if(et){ et.hidden=true; et.onclick=()=>{ blockEdit(); }; }
   const etm=document.getElementById("edit-toggle-mobile"); if(etm){ etm.hidden=true; etm.onclick=()=>{ blockEdit(); }; }
-  ["btn-photo-move","btn-dock-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
+  ["btn-photo-move","btn-dock-align","btn-gcp-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
    "photo-reset-align","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
    "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all",
    "btn-group-all","btn-group","btn-ungroup","strip-cover","btn-save-layout","btn-reset-blank",
