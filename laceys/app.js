@@ -5,8 +5,8 @@ window.addEventListener("error",function(ev){
 });
 
 const VIEW_ONLY=false;
-const LAYERS_EDIT_ONLY=false;
-const IS_LAYOUT_SOURCE=true;
+const LAYERS_EDIT_ONLY=true;
+const IS_LAYOUT_SOURCE=false;
 const SHARE_FOLLOW_MAIN=false;
 function blockEdit(){
   if(typeof SHARE_FOLLOW_MAIN!=="undefined" && SHARE_FOLLOW_MAIN){
