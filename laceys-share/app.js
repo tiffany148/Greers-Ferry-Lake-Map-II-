@@ -222,6 +222,14 @@ let gcpPairs=[]; // {ax,ay,bx,by}
 let gcpPending=null; // {ax,ay} waiting for photo point
 let gcpDrag=null; // tap vs pan while in GCP mode
 const GCP_STORE="laceys-gcp-pairs-v1";
+const SCALE_STORE="laceys-scale-v1";
+let chartScaleCal={chartUnitsPerFoot:null,feetPerChartUnit:null}; // null = uncalibrated
+let scaleMeasureMode=false;
+let scaleForceCalibrate=false; // next 2-click pair is a calibration
+let scalePts=[]; // [{x,y}, ...] up to 2
+let scaleDrag=null;
+let scaleLive={x2:null,y2:null}; // rubber-band second point while waiting
+let scaleLastRecipe=null; // last calculate() result
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
 const chart=document.getElementById("chart"); // must exist before first redraw → applyDeepZoomLod → chartSize
 let photoDrag=null;
@@ -911,6 +919,7 @@ function redraw(){
   syncMapBoundVisual();
   applyDeepZoomLod();
   try{ redrawGcpMarkers(); }catch(e){}
+  try{ redrawScaleMarkers(); }catch(e){}
 }
 const DOCK_CHIPS=["All","5","4","3","2","1","7","8","9","10","11","12","13","Houseboats","Cruiser","Fuel","Sales"];
 const chipsEl=document.getElementById("chips");
@@ -1383,6 +1392,14 @@ function hitEditTarget(e){
   return {sEl,dEl,mEl};
 }
 chart.addEventListener("pointerdown",e=>{
+  if(scaleMeasureMode){
+    try{ e.preventDefault(); }catch(_){}
+    if(e.target.closest && e.target.closest(".zoom,.pan,#scale-measure-chip,#gcp-align-chip,#photo-move-chip,#dock-align-chip,button,input,label")) return;
+    const p=svgPoint(e);
+    scaleDrag={px:p.x,py:p.y,cx:e.clientX,cy:e.clientY,moved:false};
+    try{ chart.setPointerCapture(e.pointerId); }catch(_){}
+    return;
+  }
   if(gcpMode){
     try{ e.preventDefault(); }catch(_){}
     if(e.target.closest && e.target.closest(".zoom,.pan,#gcp-align-chip,#photo-move-chip,#dock-align-chip,button,input,label")) return;
@@ -1514,6 +1531,22 @@ chart.addEventListener("pointerdown",e=>{
   pan={x:e.clientX-tx,y:e.clientY-ty};chart.setPointerCapture(e.pointerId);
 });
 chart.addEventListener("pointermove",e=>{
+  if(scaleMeasureMode && scaleDrag){
+    const p=svgPoint(e);
+    if(!scaleDrag.moved && (Math.hypot(e.clientX-scaleDrag.cx, e.clientY-scaleDrag.cy)>8)){
+      scaleDrag.moved=true;
+      scaleDrag.pan={x:e.clientX-tx,y:e.clientY-ty};
+    }
+    if(scaleDrag.moved && scaleDrag.pan){
+      try{ e.preventDefault(); }catch(_){}
+      tx=e.clientX-scaleDrag.pan.x; ty=e.clientY-scaleDrag.pan.y; applyZoom();
+    }else if(scalePts.length===1){
+      scaleLive={x2:p.x,y2:p.y};
+      updateScaleChip();
+      redrawScaleMarkers();
+    }
+    return;
+  }
   if(gcpMode && gcpDrag){
     const p=svgPoint(e);
     const dx=p.x-gcpDrag.px, dy=p.y-gcpDrag.py;
@@ -1635,6 +1668,15 @@ chart.addEventListener("pointermove",e=>{
   tx=e.clientX-pan.x; ty=e.clientY-pan.y; applyZoom();
 });
 chart.addEventListener("pointerup",e=>{
+  if(scaleMeasureMode){
+    if(scaleDrag){
+      if(!scaleDrag.moved){
+        placeScaleClick({x:scaleDrag.px, y:scaleDrag.py});
+      }
+      scaleDrag=null;
+    }
+    return;
+  }
   if(gcpMode){
     if(gcpDrag){
       if(!gcpDrag.moved){
@@ -1798,7 +1840,7 @@ document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
   const em=document.getElementById("edit-toggle-mobile");
   if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
-  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); }
+  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); if(scaleMeasureMode) setScaleMeasureMode(false); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
         ? "Tools = panel · drag docks · empty water pans · Done exits"
@@ -2071,6 +2113,7 @@ function setGcpMode(on){
   if(gcpMode){
     if(photoMoveMode) setPhotoMoveMode(false);
     if(dockAlignMode) setDockAlignMode(false);
+    if(scaleMeasureMode) setScaleMeasureMode(false);
     if(!editing){
       const t=document.getElementById("edit-toggle");
       if(t) t.click();
@@ -2146,6 +2189,7 @@ function setPhotoMoveMode(on){
   photoMoveMode=!!on;
   if(photoMoveMode && dockAlignMode) setDockAlignMode(false);
   if(photoMoveMode && gcpMode) setGcpMode(false);
+  if(photoMoveMode && scaleMeasureMode) setScaleMeasureMode(false);
   if(!photoMoveMode){
     photoDrag=null;
     photoPointers.clear();
@@ -2172,6 +2216,7 @@ function setDockAlignMode(on){
   if(dockAlignMode){
     if(photoMoveMode) setPhotoMoveMode(false);
     if(gcpMode) setGcpMode(false);
+    if(scaleMeasureMode) setScaleMeasureMode(false);
     if(!editing){
       const t=document.getElementById("edit-toggle");
       if(t) t.click();
@@ -2215,6 +2260,436 @@ function dockAlignPinchDist(){
   const dx=pts[0].x-pts[1].x, dy=pts[0].y-pts[1].y;
   return Math.hypot(dx,dy)||null;
 }
+
+/* ===== Scale / measurements calculator (laceys-scale-v1) ===== */
+function canEditScaleCalibrate(){
+  // MAIN + share (edit tools) can calibrate; view/layersedit read-only
+  if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) return false;
+  if(typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY) return false;
+  return true;
+}
+function canApplyScaleToDock(){
+  return typeof IS_LAYOUT_SOURCE!=="undefined" && IS_LAYOUT_SOURCE;
+}
+function loadChartScale(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(SCALE_STORE)||"null");
+    if(raw && typeof raw==="object"){
+      const cupf=Number(raw.chartUnitsPerFoot);
+      const fpcu=Number(raw.feetPerChartUnit);
+      if(isFinite(cupf) && cupf>0){
+        chartScaleCal={chartUnitsPerFoot:cupf, feetPerChartUnit:(isFinite(fpcu)&&fpcu>0)?fpcu:(1/cupf)};
+      }
+    }
+  }catch(e){}
+}
+function saveChartScale(){
+  try{
+    if(chartScaleCal.chartUnitsPerFoot==null){
+      localStorage.removeItem(SCALE_STORE);
+    }else{
+      localStorage.setItem(SCALE_STORE, JSON.stringify({
+        chartUnitsPerFoot:chartScaleCal.chartUnitsPerFoot,
+        feetPerChartUnit:chartScaleCal.feetPerChartUnit
+      }));
+    }
+  }catch(e){}
+}
+function clearChartScale(){
+  chartScaleCal={chartUnitsPerFoot:null,feetPerChartUnit:null};
+  saveChartScale();
+  updateScaleReadout();
+  updateScaleChip();
+  redrawScaleMarkers();
+}
+function setChartScaleFromDistance(distChart, feet){
+  const f=Number(feet);
+  const d=Number(distChart);
+  if(!(f>0) || !(d>0)) return false;
+  const cupf=d/f;
+  chartScaleCal={chartUnitsPerFoot:cupf, feetPerChartUnit:1/cupf};
+  saveChartScale();
+  updateScaleReadout();
+  return true;
+}
+function fmtNum(n, digits){
+  if(!isFinite(n)) return "—";
+  const d=digits!=null?digits:2;
+  const s=Number(n).toFixed(d);
+  return s.replace(/\.?0+$/,"");
+}
+function updateScaleReadout(){
+  const el=document.getElementById("scale-calib-readout");
+  if(!el) return;
+  const cupf=chartScaleCal.chartUnitsPerFoot;
+  if(cupf==null || !(cupf>0)){
+    el.textContent="Not calibrated yet — click Calibrate, then two points spanning a known distance (e.g. one slip length).";
+  }else{
+    el.textContent="1 ft ≈ "+fmtNum(cupf,3)+" chart units · 1 chart unit ≈ "+fmtNum(1/cupf,4)+" ft";
+  }
+  // gate apply / calibrate buttons
+  const apply=document.getElementById("btn-scale-apply");
+  if(apply){
+    apply.disabled=!canApplyScaleToDock();
+    apply.title=canApplyScaleToDock()?"Write standard sw/sh (and gap) onto selected dock":"Apply only on MAIN editable chart";
+  }
+  const actions=document.getElementById("scale-calib-actions");
+  if(actions){
+    if(!canEditScaleCalibrate()){
+      actions.querySelectorAll("button").forEach(b=>{ b.disabled=true; b.title="Read-only on this copy — calibrate on MAIN or Share"; });
+    }
+  }
+  const panel=document.getElementById("scale-panel");
+  if(panel && (typeof VIEW_ONLY!=="undefined" && VIEW_ONLY || typeof LAYERS_EDIT_ONLY!=="undefined" && LAYERS_EDIT_ONLY)){
+    // keep panel for recipe + readout; calibrate disabled above
+  }
+}
+function updateScaleChip(){
+  const st=document.getElementById("scale-measure-status");
+  if(!st) return;
+  const cupf=chartScaleCal.chartUnitsPerFoot;
+  if(scalePts.length===0){
+    st.textContent=scaleForceCalibrate?"Calibrate: click first point":"Click first point";
+  }else if(scalePts.length===1){
+    let live="";
+    if(scaleLive.x2!=null){
+      const d=Math.hypot(scaleLive.x2-scalePts[0].x, scaleLive.y2-scalePts[0].y);
+      live=" · "+fmtNum(d,1)+" cu";
+      if(cupf>0) live+=" ≈ "+fmtNum(d/cupf,2)+" ft";
+    }
+    st.textContent=(scaleForceCalibrate?"Calibrate: click second point":"Click second point")+live;
+  }else{
+    const d=Math.hypot(scalePts[1].x-scalePts[0].x, scalePts[1].y-scalePts[0].y);
+    let msg=fmtNum(d,1)+" chart units";
+    if(cupf>0) msg+=" ≈ "+fmtNum(d/cupf,2)+" ft";
+    st.textContent=msg;
+  }
+  const btn=document.getElementById("btn-scale-measure");
+  if(btn) btn.classList.toggle("on", !!scaleMeasureMode);
+}
+let scaleLayer=null;
+function ensureScaleLayer(){
+  if(!svg) return null;
+  if(!scaleLayer || scaleLayer.parentNode!==svg){
+    scaleLayer=el("g",{id:"scale-layer","pointer-events":"none"});
+    svg.appendChild(scaleLayer);
+  }
+  return scaleLayer;
+}
+function redrawScaleMarkers(){
+  const g=ensureScaleLayer();
+  if(!g) return;
+  g.innerHTML="";
+  if(!scaleMeasureMode && scalePts.length===0) return;
+  if(!scaleMeasureMode) return;
+  const r=Math.max(6, 10/Math.max(0.25, scale));
+  const sw=Math.max(1.5, 2.5/Math.max(0.25, scale));
+  const pts=scalePts.slice();
+  if(pts.length===1 && scaleLive.x2!=null) pts.push({x:scaleLive.x2,y:scaleLive.y2, live:true});
+  if(pts.length>=1){
+    g.appendChild(el("circle",{cx:pts[0].x,cy:pts[0].y,r:r,fill:"#7ec8ff",stroke:"#fff","stroke-width":1.5}));
+    g.appendChild(el("text",{x:pts[0].x,y:pts[0].y-r-2,"text-anchor":"middle",fill:"#7ec8ff","font-size":Math.max(10,12/Math.max(0.25,scale)),"font-weight":"700"}, "1"));
+  }
+  if(pts.length>=2){
+    (function(){ const attrs={x1:pts[0].x,y1:pts[0].y,x2:pts[1].x,y2:pts[1].y,stroke:"#7ec8ff","stroke-width":sw,opacity:pts[1].live?"0.7":"0.95"}; if(pts[1].live) attrs["stroke-dasharray"]="6 4"; g.appendChild(el("line",attrs)); })();
+    g.appendChild(el("circle",{cx:pts[1].x,cy:pts[1].y,r:r,fill:pts[1].live?"#aad4ff":"#7ec8ff",stroke:"#fff","stroke-width":1.5,opacity:pts[1].live?"0.8":"1"}));
+    g.appendChild(el("text",{x:pts[1].x,y:pts[1].y-r-2,"text-anchor":"middle",fill:"#7ec8ff","font-size":Math.max(10,12/Math.max(0.25,scale)),"font-weight":"700"}, "2"));
+    const midX=(pts[0].x+pts[1].x)/2, midY=(pts[0].y+pts[1].y)/2;
+    const d=Math.hypot(pts[1].x-pts[0].x, pts[1].y-pts[0].y);
+    const cupf=chartScaleCal.chartUnitsPerFoot;
+    let label=fmtNum(d,1)+" cu";
+    if(cupf>0) label+=" / "+fmtNum(d/cupf,2)+" ft";
+    g.appendChild(el("text",{x:midX,y:midY-8,"text-anchor":"middle",fill:"#eef4f3","font-size":Math.max(11,13/Math.max(0.25,scale)),"font-weight":"700",stroke:"#0a3338","stroke-width":3,"paint-order":"stroke"}, label));
+  }
+  svg.appendChild(g);
+  if(mapBoundRect && mapBoundRect.parentNode===svg) svg.appendChild(mapBoundRect);
+}
+function clearScalePts(){
+  scalePts=[];
+  scaleLive={x2:null,y2:null};
+  updateScaleChip();
+  redrawScaleMarkers();
+}
+function setScaleMeasureMode(on, opts){
+  opts=opts||{};
+  scaleMeasureMode=!!on;
+  if(scaleMeasureMode){
+    if(typeof photoMoveMode!=="undefined" && photoMoveMode) setPhotoMoveMode(false);
+    if(typeof dockAlignMode!=="undefined" && dockAlignMode) setDockAlignMode(false);
+    if(typeof gcpMode!=="undefined" && gcpMode) setGcpMode(false);
+    if(!editing){
+      const t=document.getElementById("edit-toggle");
+      if(t) t.click();
+    }
+    scaleDrag=null;
+    if(opts.forceCalibrate) scaleForceCalibrate=true;
+    clearScalePts();
+  }else{
+    scaleForceCalibrate=false;
+    scaleDrag=null;
+    scaleLive={x2:null,y2:null};
+    // keep last two pts briefly? clear for cleanliness
+    scalePts=[];
+  }
+  document.body.classList.toggle("scale-measuring", scaleMeasureMode);
+  const chip=document.getElementById("scale-measure-chip");
+  if(chip) chip.hidden=!scaleMeasureMode;
+  updateScaleChip();
+  redrawScaleMarkers();
+  const h=document.getElementById("hint");
+  if(h && scaleMeasureMode){
+    h.textContent=scaleForceCalibrate?"Scale calibrate — click two points spanning a known distance":"Scale measure — click two points (calibrate first for feet)";
+  }
+}
+function finishScalePair(){
+  if(scalePts.length<2) return;
+  const d=Math.hypot(scalePts[1].x-scalePts[0].x, scalePts[1].y-scalePts[0].y);
+  const needCal=scaleForceCalibrate || !(chartScaleCal.chartUnitsPerFoot>0);
+  if(needCal && canEditScaleCalibrate()){
+    const def=30;
+    const ans=prompt("This distance is ___ feet", String(def));
+    if(ans!=null && String(ans).trim()!==""){
+      const feet=Number(ans);
+      if(isFinite(feet) && feet>0){
+        setChartScaleFromDistance(d, feet);
+        scaleForceCalibrate=false;
+        const h=document.getElementById("hint");
+        if(h) h.textContent="Calibrated: 1 ft ≈ "+fmtNum(chartScaleCal.chartUnitsPerFoot,3)+" chart units";
+      }else{
+        alert("Enter a positive number of feet.");
+      }
+    }
+  }
+  updateScaleChip();
+  redrawScaleMarkers();
+  // next pair starts fresh after a short beat — keep showing this measure until next click clears
+}
+function placeScaleClick(p){
+  if(!p || !isFinite(p.x) || !isFinite(p.y)) return;
+  if(scalePts.length>=2){
+    // start a new measure
+    scalePts=[{x:p.x,y:p.y}];
+    scaleLive={x2:null,y2:null};
+  }else if(scalePts.length===0){
+    scalePts=[{x:p.x,y:p.y}];
+    scaleLive={x2:null,y2:null};
+  }else{
+    scalePts.push({x:p.x,y:p.y});
+    scaleLive={x2:null,y2:null};
+    finishScalePair();
+    return;
+  }
+  updateScaleChip();
+  redrawScaleMarkers();
+}
+function numInput(id, fallback){
+  const el=document.getElementById(id);
+  if(!el) return fallback;
+  const v=Number(el.value);
+  return isFinite(v)?v:fallback;
+}
+function computeDockRecipe(){
+  const stdN=Math.max(0, numInput("sc-std-n",13));
+  const stdAlong=Math.max(0, numInput("sc-std-along",10));
+  const stdInto=Math.max(0, numInput("sc-std-into",30));
+  const exN=Math.max(0, numInput("sc-ex-n",2));
+  const exAlong=Math.max(0, numInput("sc-ex-along",12));
+  const exInto=Math.max(0, numInput("sc-ex-into",30));
+  const sideN=Math.max(0, numInput("sc-side-n",4));
+  const sideW=Math.max(0, numInput("sc-side-w",2));
+  const endN=Math.max(0, numInput("sc-end-n",0));
+  const endW=Math.max(0, numInput("sc-end-w",2));
+  const centerW=Math.max(0, numInput("sc-center-w",0));
+  const gapFt=Math.max(0, numInput("sc-gap-ft",0));
+  const typeEl=document.getElementById("sc-dock-type");
+  const type=(typeEl && typeEl.value==="ew")?"ew":"ns";
+  const bothEl=document.getElementById("sc-both-sides");
+  const bothSides=!(bothEl && bothEl.value==="no");
+
+  // Along-dock: slips + side walkways + end walkways + gaps between slip slots
+  const slipSlots=stdN+exN;
+  const gapCount=Math.max(0, slipSlots-1); // gaps between adjacent slips along one side
+  const alongSlips=(stdN*stdAlong)+(exN*exAlong);
+  const alongSide=sideN*sideW;
+  const alongEnd=endN*endW;
+  const alongGaps=gapCount*gapFt;
+  const alongFt=alongSlips+alongSide+alongEnd+alongGaps;
+
+  // Across-dock: into-slip (+ opposite side) + center cart path
+  // Use standard into-slip for across width (extras noted separately)
+  const acrossFt = bothSides ? (stdInto + centerW + stdInto) : (stdInto + (centerW>0?centerW:0));
+
+  const cupf=chartScaleCal.chartUnitsPerFoot;
+  const toCu=ft => (cupf>0 ? ft*cupf : null);
+
+  // Suggested sw/sh in chart units for STANDARD slips
+  // NS: stack in Y → sh=along, sw=into; EW: stack in X → sw=along, sh=into
+  let stdSwFt, stdShFt, exSwFt, exShFt;
+  if(type==="ns"){
+    stdSwFt=stdInto; stdShFt=stdAlong;
+    exSwFt=exInto; exShFt=exAlong;
+  }else{
+    stdSwFt=stdAlong; stdShFt=stdInto;
+    exSwFt=exAlong; exShFt=exInto;
+  }
+
+  const result={
+    type, bothSides,
+    alongFt, acrossFt,
+    alongSlips, alongSide, alongEnd, alongGaps,
+    centerW, sideW, endW, endN, sideN,
+    stdN, exN, stdAlong, stdInto, exAlong, exInto, gapFt,
+    stdSwFt, stdShFt, exSwFt, exShFt,
+    stdSwCu:toCu(stdSwFt), stdShCu:toCu(stdShFt),
+    exSwCu:toCu(exSwFt), exShCu:toCu(exShFt),
+    sideWalkCu:toCu(sideW),
+    endWalkCu:toCu(endW),
+    centerCu:toCu(centerW),
+    gapCu:toCu(gapFt),
+    alongCu:toCu(alongFt),
+    acrossCu:toCu(acrossFt),
+    calibrated:cupf>0
+  };
+  scaleLastRecipe=result;
+  return result;
+}
+function formatRecipeOut(r){
+  if(!r) return "Enter sizes and Calculate.";
+  const lines=[];
+  lines.push("Along-dock length: "+fmtNum(r.alongFt,2)+" ft"
+    +(r.calibrated?"  →  "+fmtNum(r.alongCu,1)+" chart units":"  (calibrate for chart units)"));
+  lines.push("  = slips "+fmtNum(r.alongSlips,1)+" + side walkways "+fmtNum(r.alongSide,1)
+    +" + end walkways "+fmtNum(r.alongEnd,1)+" + gaps "+fmtNum(r.alongGaps,1));
+  lines.push("Across-dock width: "+fmtNum(r.acrossFt,2)+" ft"
+    +(r.calibrated?"  →  "+fmtNum(r.acrossCu,1)+" chart units":""));
+  if(r.bothSides){
+    lines.push("  = into-slip "+fmtNum(r.stdInto,1)+" + center cart path "+fmtNum(r.centerW,1)+" + into-slip "+fmtNum(r.stdInto,1));
+  }else{
+    lines.push("  = into-slip "+fmtNum(r.stdInto,1)+(r.centerW>0?" + center cart path "+fmtNum(r.centerW,1):""));
+  }
+  lines.push("");
+  lines.push("Suggested STANDARD slip ("+r.type.toUpperCase()+"): sw="+fmtNum(r.stdSwFt,2)+" ft, sh="+fmtNum(r.stdShFt,2)+" ft"
+    +(r.calibrated?"  →  sw≈"+fmtNum(r.stdSwCu,1)+", sh≈"+fmtNum(r.stdShCu,1)+" cu":""));
+  if(r.exN>0){
+    lines.push("Suggested EXTRA slips (note): sw="+fmtNum(r.exSwFt,2)+" ft, sh="+fmtNum(r.exShFt,2)+" ft"
+      +(r.calibrated?"  →  sw≈"+fmtNum(r.exSwCu,1)+", sh≈"+fmtNum(r.exShCu,1)+" cu":""));
+  }
+  if(r.sideN>0){
+    lines.push("Side walkway mark thickness: "+fmtNum(r.sideW,2)+" ft"
+      +(r.calibrated?"  →  ≈"+fmtNum(r.sideWalkCu,1)+" cu":""));
+  }
+  if(r.endN>0){
+    lines.push("End walkway thickness: "+fmtNum(r.endW,2)+" ft each × "+r.endN
+      +(r.calibrated?"  →  ≈"+fmtNum(r.endWalkCu,1)+" cu":""));
+  }
+  if(r.centerW>0){
+    lines.push("Center cart path (A↔B aisle): "+fmtNum(r.centerW,2)+" ft"
+      +(r.calibrated?"  →  ≈"+fmtNum(r.centerCu,1)+" cu (use as walk/gap between sides)":""));
+  }
+  if(r.gapFt>0 && r.calibrated){
+    lines.push("Gap between slips: "+fmtNum(r.gapFt,2)+" ft → gap≈"+fmtNum(r.gapCu,1)+" cu");
+  }
+  return lines.join("\n");
+}
+function renderScaleRecipe(){
+  const out=document.getElementById("scale-recipe-out");
+  if(!out) return;
+  const r=computeDockRecipe();
+  out.textContent=formatRecipeOut(r);
+}
+function applyScaleRecipeToSelected(){
+  if(!canApplyScaleToDock()){
+    alert("Apply to dock is only available on the MAIN editable chart.");
+    return;
+  }
+  if(blockEdit && blockEdit()) return;
+  const r=scaleLastRecipe || computeDockRecipe();
+  if(!r.calibrated){
+    alert("Calibrate the chart scale first, then Calculate, then Apply.");
+    return;
+  }
+  if(!selectedDock){
+    alert("Select a dock first (Dock tab / tap a dock).");
+    return;
+  }
+  const d=docks.find(x=>x.id===selectedDock);
+  if(!d){ alert("Selected dock not found."); return; }
+  const sw=Math.round(r.stdSwCu);
+  const sh=Math.round(r.stdShCu);
+  const gap=r.gapFt>0?Math.round(r.gapCu): (d.gap!=null?d.gap:3);
+  let msg="Apply to dock \""+(d.name||d.id)+"\"?\n\n"
+    +"type → "+r.type+"\n"
+    +"sw → "+sw+"  sh → "+sh
+    +(r.gapFt>0?"\ngap → "+gap:"")
+    +"\n\nExtras ("+r.exN+" × "+fmtNum(r.exAlong,1)+"×"+fmtNum(r.exInto,1)+" ft) are left as a note only."
+    +(r.centerW>0?"\nCenter cart path ≈ "+fmtNum(r.centerCu,1)+" cu (set walk/mark separately).":"");
+  if(!confirm(msg)) return;
+  d.type=r.type;
+  if(d.type==="col"){ d.w=sw; d.h=sh; }
+  else { d.sw=sw; d.sh=sh; }
+  if(r.gapFt>0) d.gap=gap;
+  d.placed={};
+  // stash note on size field
+  try{
+    const note="recipe: std "+r.stdN+"×"+fmtNum(r.stdAlong,1)+"×"+fmtNum(r.stdInto,1)
+      +(r.exN?(" + extra "+r.exN+"×"+fmtNum(r.exAlong,1)+"×"+fmtNum(r.exInto,1)):"" )
+      +" · center "+fmtNum(r.centerW,1)+"ft · ends "+r.endN+"×"+fmtNum(r.endW,1)+"ft";
+    d.size=note;
+  }catch(_){}
+  saveLayout();
+  redraw();
+  renderDockEditor();
+  const h=document.getElementById("hint");
+  if(h) h.textContent="Applied sw/sh from scale recipe to "+(d.name||d.id);
+}
+function wireScaleUI(){
+  loadChartScale();
+  updateScaleReadout();
+  const measureBtn=document.getElementById("btn-scale-measure");
+  if(measureBtn){
+    if(!canEditScaleCalibrate()){
+      // view/layersedit: allow opening measure if calibrated for read-only quick measure
+      measureBtn.onclick=()=> setScaleMeasureMode(!scaleMeasureMode, {forceCalibrate:false});
+    }else{
+      measureBtn.onclick=()=> setScaleMeasureMode(!scaleMeasureMode, {forceCalibrate:!(chartScaleCal.chartUnitsPerFoot>0)});
+    }
+  }
+  const done=document.getElementById("scale-measure-done");
+  if(done) done.onclick=()=> setScaleMeasureMode(false);
+  const clearPts=document.getElementById("scale-clear-pts");
+  if(clearPts) clearPts.onclick=()=> clearScalePts();
+  const cal=document.getElementById("btn-scale-calibrate");
+  if(cal) cal.onclick=()=>{
+    if(!canEditScaleCalibrate()){ alert("Calibrate on MAIN (or Share). This copy is read-only for scale."); return; }
+    showTab("layout");
+    setScaleMeasureMode(true, {forceCalibrate:true});
+  };
+  const recal=document.getElementById("btn-scale-recalibrate");
+  if(recal) recal.onclick=()=>{
+    if(!canEditScaleCalibrate()){ alert("Calibrate on MAIN (or Share)."); return; }
+    setScaleMeasureMode(true, {forceCalibrate:true});
+  };
+  const clearCal=document.getElementById("btn-scale-clear");
+  if(clearCal) clearCal.onclick=()=>{
+    if(!canEditScaleCalibrate()){ alert("Clear calibration on MAIN (or Share)."); return; }
+    if(!confirm("Clear saved chart scale calibration?")) return;
+    clearChartScale();
+  };
+  const calc=document.getElementById("btn-scale-calc");
+  if(calc) calc.onclick=()=> renderScaleRecipe();
+  const apply=document.getElementById("btn-scale-apply");
+  if(apply) apply.onclick=()=> applyScaleRecipeToSelected();
+  // live recalc on input
+  ["sc-std-n","sc-std-along","sc-std-into","sc-ex-n","sc-ex-along","sc-ex-into",
+   "sc-side-n","sc-side-w","sc-end-n","sc-end-w","sc-center-w","sc-gap-ft","sc-dock-type","sc-both-sides"
+  ].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){ el.addEventListener("input", ()=>renderScaleRecipe()); el.addEventListener("change", ()=>renderScaleRecipe()); }
+  });
+  renderScaleRecipe();
+  updateScaleReadout();
+}
+
 function bumpPhotoScale(delta){
   photoAlign.scaleX=clampPhotoScale((Number(photoAlign.scaleX)||1)+delta);
   photoAlign.scaleY=clampPhotoScale((Number(photoAlign.scaleY)||1)+delta);
@@ -2316,6 +2791,7 @@ function syncLabelSizeUI(){
   const gcpApplySel=document.getElementById("gcp-apply-selected");
   if(gcpApplySel) gcpApplySel.onclick=()=> applyGcpToTargets("selected");
   if(IS_LAYOUT_SOURCE){ loadGcpPairs(); updateGcpChip(); }
+  try{ wireScaleUI(); }catch(e){ console.warn("scale UI", e); }
   const dockScaleMinus=document.getElementById("dock-align-scale-minus");
   if(dockScaleMinus) dockScaleMinus.onclick=()=> bumpDockLayoutScale(-0.05);
   const dockScalePlus=document.getElementById("dock-align-scale-plus");
@@ -2373,6 +2849,7 @@ function restoreOriginalChart(){
   if(typeof dockAlignMode!=='undefined' && dockAlignMode) setDockAlignMode(false);
   if(typeof photoMoveMode!=='undefined' && photoMoveMode) setPhotoMoveMode(false);
   if(typeof gcpMode!=='undefined' && gcpMode) setGcpMode(false);
+  if(typeof scaleMeasureMode!=='undefined' && scaleMeasureMode) setScaleMeasureMode(false);
   saveLayout(); // undoable restore
   applyPhotoAlign();
   redraw(); renderDockEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible();
