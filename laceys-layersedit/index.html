@@ -164,6 +164,29 @@ body.gcp-aligning #gcp-align-chip{ display:flex; }
 #gcp-align-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#f4a261; color:#1a1a1a; font-weight:700; cursor:pointer; }
 #gcp-align-chip button.secondary{ background:#15565b; color:#eef4f3; }
 #gcp-align-chip #gcp-pair-count{ opacity:.95; font-variant-numeric:tabular-nums; }
+
+body.scale-measuring{ cursor:crosshair; }
+body.scale-measuring .chart{ cursor:crosshair; outline:2px solid #7ec8ff; outline-offset:-2px; }
+#scale-measure-chip{
+  display:none; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+  z-index:40; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center;
+  max-width:min(96%,720px); padding:8px 12px; border-radius:12px;
+  background:rgba(20,60,90,.95); color:#eef4f3; font-size:13px; font-weight:650;
+  box-shadow:0 6px 18px rgba(0,0,0,.35); pointer-events:auto;
+}
+body.scale-measuring #scale-measure-chip{ display:flex; }
+#scale-measure-chip button{ border:0; border-radius:10px; padding:8px 12px; background:#7ec8ff; color:#0a1a28; font-weight:700; cursor:pointer; }
+#scale-measure-chip button.secondary{ background:#15565b; color:#eef4f3; }
+#scale-measure-chip #scale-measure-status{ opacity:.95; font-variant-numeric:tabular-nums; }
+.scale-panel{margin-top:14px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.14);font-size:13px}
+.scale-panel h3{margin:0 0 6px;font-size:15px}
+.scale-panel .hint{margin:0 0 8px;opacity:.9;font-size:12px}
+.scale-panel .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scale-panel label{display:block;margin:6px 0;font-size:12px}
+.scale-panel input,.scale-panel select{width:100%;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink);font-size:13px}
+.scale-panel .st{margin-top:8px}
+.scale-panel #scale-calib-readout,.scale-panel #scale-recipe-out{margin-top:8px;padding:8px;border-radius:8px;background:rgba(0,0,0,.18);font-variant-numeric:tabular-nums;white-space:pre-wrap}
+.scale-panel .sample{opacity:.85;font-size:11px;margin-top:6px}
 .label-size-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
 .label-size-bar select{border:0;border-radius:8px;padding:6px 10px;background:#15565b;color:var(--ink);font-size:13px}
 .label-size-bar .btn.on{outline:2px solid #f0c14b}
@@ -177,7 +200,10 @@ body.gcp-aligning #gcp-align-chip{ display:flex; }
   body.editing.dock-aligning .label-size-bar,
   body.editing.gcp-aligning .photo-align,
   body.editing.gcp-aligning .photo-op,
-  body.editing.gcp-aligning .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
+  body.editing.gcp-aligning .label-size-bar,
+  body.editing.scale-measuring .photo-align,
+  body.editing.scale-measuring .photo-op,
+  body.editing.scale-measuring .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
 }
 
 /* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
@@ -447,6 +473,7 @@ body.gcp-aligning #gcp-align-chip{ display:flex; }
   <span>Align</span>
   <span style="opacity:.85;font-size:12px">optional aerial · Move photo / Reset photo align · chart stays chart-first</span>
   <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; Stretch width/height or pinch">Move photo</button>
+  <button type="button" class="btn" id="btn-scale-measure" title="Calibrate chart scale and measure real-world distances">Scale / measure</button>
   <button type="button" class="btn" id="btn-gcp-align" title="Place matching points on docks and aerial, then Apply to line them up">GCP align</button>
   <button type="button" class="btn" id="btn-dock-align" hidden title="Advanced: scale docks onto aerial (can warp layout — prefer Restore original chart)">Align docks to photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
@@ -481,6 +508,12 @@ body.gcp-aligning #gcp-align-chip{ display:flex; }
       <button type="button" id="gcp-apply-all">Apply to all docks</button>
       <button type="button" id="gcp-apply-selected">Apply to selected dock only</button>
       <button type="button" id="gcp-align-done">Done</button>
+    </div>
+    <div id="scale-measure-chip" hidden>
+      <span>Scale / measure — click two points on the chart</span>
+      <span id="scale-measure-status">Click first point</span>
+      <button type="button" class="secondary" id="scale-clear-pts">Clear points</button>
+      <button type="button" id="scale-measure-done">Done</button>
     </div>
     <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
     <div class="pan" aria-label="Pan map">
@@ -540,6 +573,59 @@ body.gcp-aligning #gcp-align-chip{ display:flex; }
       <p class="hint" id="sel-hint">Turn on Multi-select, then tick items in the list (easiest on phones). You can also tap the map.</p>
       <div id="pick-list" hidden></div>
       <div id="dock-editor"><p>No element selected.</p></div>
+
+      <div class="scale-panel" id="scale-panel">
+        <h3>Scale &amp; size calculator</h3>
+        <p class="hint">Calibrate first with one known slip length on the aerial/chart, then use the recipe calculator. Sample along-dock (side walkways only): 13×10&nbsp;ft + 2×12&nbsp;ft + 4×2&nbsp;ft = <b>162&nbsp;ft</b>.</p>
+        <div id="scale-calib-readout">Not calibrated yet</div>
+        <div class="st" id="scale-calib-actions">
+          <button type="button" class="btn" id="btn-scale-calibrate">Calibrate (click 2 points)</button>
+          <button type="button" class="btn" id="btn-scale-recalibrate">Recalibrate</button>
+          <button type="button" class="btn" id="btn-scale-clear">Clear calibration</button>
+        </div>
+        <h3 style="margin-top:12px">Dock recipe</h3>
+        <div class="row2">
+          <label>Standard slips (count)<input id="sc-std-n" type="number" min="0" step="1" value="13"/></label>
+          <label>Std size ft (along dock × into slip)<span style="display:flex;gap:4px"><input id="sc-std-along" type="number" min="0" step="0.1" value="10" title="Along dock"/><input id="sc-std-into" type="number" min="0" step="0.1" value="30" title="Into slip"/></span></label>
+        </div>
+        <div class="row2">
+          <label>Extra slips (count)<input id="sc-ex-n" type="number" min="0" step="1" value="2"/></label>
+          <label>Extra size ft (along × into)<span style="display:flex;gap:4px"><input id="sc-ex-along" type="number" min="0" step="0.1" value="12"/><input id="sc-ex-into" type="number" min="0" step="0.1" value="30"/></span></label>
+        </div>
+        <div class="row2">
+          <label><b>Side walkways</b> (count per side)<input id="sc-side-n" type="number" min="0" step="1" value="4"/></label>
+          <label>Side walkway width ft<input id="sc-side-w" type="number" min="0" step="0.1" value="2"/></label>
+        </div>
+        <div class="row2">
+          <label><b>End walkways</b> (count, 0–2)<input id="sc-end-n" type="number" min="0" max="4" step="1" value="0"/></label>
+          <label>End walkway width ft each<input id="sc-end-w" type="number" min="0" step="0.1" value="2"/></label>
+        </div>
+        <div class="row2">
+          <label><b>Center cart path</b> width ft<input id="sc-center-w" type="number" min="0" step="0.1" value="0" title="Aisle between A and B slip sides"/></label>
+          <label>Gap between slips ft (optional)<input id="sc-gap-ft" type="number" min="0" step="0.1" value="0"/></label>
+        </div>
+        <div class="row2">
+          <label>Dock type
+            <select id="sc-dock-type">
+              <option value="ns">NS (slips stack in Y)</option>
+              <option value="ew">EW (slips stack in X)</option>
+            </select>
+          </label>
+          <label>Both sides have slips?
+            <select id="sc-both-sides">
+              <option value="yes" selected>Yes (A + B)</option>
+              <option value="no">One side only</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint" style="margin-top:4px">Along dock = finger spacing; into slip = slip depth. <b>Side walkways</b> sit between slips along the length. <b>End walkways</b> cap either end. <b>Center cart path</b> is the aisle between A/B sides (NS gap / walk thickness).</p>
+        <div class="st">
+          <button type="button" class="btn" id="btn-scale-calc">Calculate</button>
+          <button type="button" class="btn" id="btn-scale-apply" title="Write standard sw/sh (and gap) onto selected dock">Apply to selected dock</button>
+        </div>
+        <div id="scale-recipe-out">Enter sizes and Calculate.</div>
+        <p class="sample">Default example along-dock (side walkways only): 13×10 + 2×12 + 4×2 = 130+24+8 = 162 ft</p>
+      </div>
       <div class="st" style="margin-top:16px">
         <button class="btn" id="btn-reset-cruiser" title="Restore Cruiser dock from baked defaults (double-row a+b + 801)">Reset Cruiser dock</button>
         <button class="btn" id="btn-restore-original" title="Reset all docks/marks/groups to baked chart (keeps slip occupancy)">Restore original chart</button>
@@ -573,7 +659,7 @@ body.gcp-aligning #gcp-align-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=80-layers"></script>
-<script src="app.js?v=80-layers"></script>
+<script src="app-data.js?v=81-layers"></script>
+<script src="app.js?v=81-layers"></script>
 </body>
 </html>
