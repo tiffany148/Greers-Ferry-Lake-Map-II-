@@ -74,6 +74,10 @@
     max-width:calc(100vw - 90px);
   }
   .opacity-box.hidden { display:none; }
+  .natgeo-opts { margin:4px 0 8px 18px; }
+  .natgeo-opts.hidden { display:none; }
+  .natgeo-opts .row { margin:4px 0; font-size:13px; }
+
   .opacity-box input[type=range] { width:120px; accent-color:#3b82f6; }
 
 </style>
@@ -100,8 +104,14 @@
   <label class="row"><input type="checkbox" id="hist-on" /> USGS historic topo (scanned)</label>
   <label class="row"><input type="checkbox" id="prelake-on" /> Pre-lake valley (1894)</label>
   <h2>Geology</h2>
-  <label class="row"><input type="checkbox" id="natgeo-on" /> National surface geology</label>
-  <label class="row"><input type="checkbox" id="geo24k-on" /> 24k geologic quads (AGS)</label>
+  <label class="row"><input type="checkbox" id="natgeo-on" /> National geology (USGS, interactive)</label>
+  <div id="natgeo-opts" class="natgeo-opts hidden">
+    <label class="row"><input type="radio" name="natgeo-horizon" value="surface" checked /> Earth surface</label>
+    <label class="row"><input type="radio" name="natgeo-horizon" value="quaternary" /> Quaternary</label>
+    <label class="row"><input type="radio" name="natgeo-horizon" value="prequaternary" /> Pre-Quaternary</label>
+    <label class="row"><input type="radio" name="natgeo-horizon" value="precambrian" /> Precambrian</label>
+    <p class="hits-meta" style="margin:6px 0 0;">Tap a unit for name, age, and material. <a href="https://ngmdb.usgs.gov/nationalgeology/" target="_blank" rel="noopener" style="color:#7bdff2;">Full USGS viewer</a></p>
+  </div>
   <h2>Pins</h2>
   <div id="cats"></div>
   <div class="unlock-row">
@@ -165,6 +175,7 @@
 <p class="note">Not a navigation chart. USACE / public map data.</p>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
+<script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 <script src="coves.js"></script>
@@ -574,195 +585,178 @@ const prelake = new PrelakeCanvas();
 prelakeImg.addEventListener("load", () => { if (typeof map !== "undefined" && map.hasLayer(prelake)) prelake._redraw(); });
 
 const natGeoOn = document.getElementById("natgeo-on");
-const geo24kOn = document.getElementById("geo24k-on");
+const natGeoOpts = document.getElementById("natgeo-opts");
 let natGeoLayer = null;
-let natGeoLoading = false;
+let natGeoMeta = { colors: {}, dmu: {}, loading: null, horizon: "surface" };
 
-function styleNatGeo(o) {
-  const opacity = (typeof o === "number") ? o : (opacitySlider.value / 100);
-  return function(f) {
-    const p = f.properties || {};
-    return {
-      color: "#1e3a4c",
-      weight: 0.6,
-      fillColor: p.fill || "#80b3ff",
-      fillOpacity: 0.5 * opacity,
-      opacity: 0.85 * opacity
-    };
+const NATGEO_HORIZONS = {
+  surface: {
+    units: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_Earth_Surface_v2/FeatureServer/6",
+    dmu: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_Earth_Surface_v2/FeatureServer/8",
+    label: "Earth surface"
+  },
+  quaternary: {
+    units: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_Quaternary_v2/FeatureServer/5",
+    dmu: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_Quaternary_v2/FeatureServer/7",
+    label: "Quaternary"
+  },
+  prequaternary: {
+    units: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_PreQuaternary_v2/FeatureServer/6",
+    dmu: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_PreQuaternary_v2/FeatureServer/8",
+    label: "Pre-Quaternary"
+  },
+  precambrian: {
+    units: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_Precambrian_v2/FeatureServer/5",
+    dmu: "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/National_Precambrian_v2/FeatureServer/7",
+    label: "Precambrian"
+  }
+};
+
+function rgbaToHex(c) {
+  if (!c || c.length < 3) return "#88aacc";
+  function h(n){ n = Math.max(0, Math.min(255, n|0)); return ("0"+n.toString(16)).slice(-2); }
+  return "#" + h(c[0]) + h(c[1]) + h(c[2]);
+}
+
+function loadNatGeoDictionaries(horizon, done) {
+  const cfg = NATGEO_HORIZONS[horizon];
+  const key = horizon;
+  if (natGeoMeta.colors[key] && natGeoMeta.dmu[key]) { done(null); return; }
+  Promise.all([
+    fetch(cfg.units + "?f=json").then(function(r){ return r.json(); }),
+    fetch(cfg.dmu + "/query?where=1%3D1&outFields=MapUnit,Name,FullName,Age,Description,GeoMaterial,Symbol&returnGeometry=false&resultRecordCount=2000&f=json").then(function(r){ return r.json(); })
+  ]).then(function(pair) {
+    const layerInfo = pair[0];
+    const dmuJson = pair[1];
+    const colors = {};
+    const renderer = (((layerInfo || {}).drawingInfo) || {}).renderer || {};
+    (renderer.uniqueValueInfos || []).forEach(function(info) {
+      const v = info.value;
+      const sym = info.symbol || {};
+      const c = sym.color || (sym.outline && sym.outline.color);
+      if (v != null && sym.color) colors[String(v)] = rgbaToHex(sym.color);
+    });
+    const dmu = {};
+    ((dmuJson && dmuJson.features) || []).forEach(function(f) {
+      const a = f.attributes || {};
+      if (a.MapUnit) dmu[String(a.MapUnit)] = a;
+    });
+    natGeoMeta.colors[key] = colors;
+    natGeoMeta.dmu[key] = dmu;
+    done(null);
+  }).catch(function(err){ done(err); });
+}
+
+function styleNatGeoFeature(feature) {
+  const o = opacitySlider.value / 100;
+  const mu = String((feature.properties && (feature.properties.MapUnit || feature.properties.mapunit)) || "");
+  const fill = (natGeoMeta.colors[natGeoMeta.horizon] || {})[mu] || "#80b3ff";
+  return {
+    color: "#1e3a4c",
+    weight: 0.4,
+    fillColor: fill,
+    fillOpacity: 0.55 * o,
+    opacity: 0.9 * o
   };
+}
+
+function natGeoPopupHtml(props) {
+  props = props || {};
+  const mu = String(props.MapUnit || "");
+  const d = (natGeoMeta.dmu[natGeoMeta.horizon] || {})[mu] || {};
+  const name = d.Name || d.FullName || props.Label || mu || "Geologic unit";
+  const age = d.Age || "";
+  const desc = d.Description || "";
+  const mat = d.GeoMaterial || "";
+  let h = "<strong>" + name + "</strong>";
+  if (mu) h += " <span class=\"crowd-meta\">(" + mu + ")</span>";
+  if (age) h += "<br>" + age;
+  if (mat) h += "<br><span class=\"crowd-meta\">" + mat + "</span>";
+  if (desc) h += "<br>" + desc;
+  h += "<br><span class=\"crowd-meta\">USGS Cooperative National Geologic Map — " + (NATGEO_HORIZONS[natGeoMeta.horizon].label) + "</span>";
+  return h;
+}
+
+function destroyNatGeoLayer() {
+  if (natGeoLayer) {
+    if (map.hasLayer(natGeoLayer)) map.removeLayer(natGeoLayer);
+    natGeoLayer = null;
+  }
+}
+
+function buildNatGeoLayer(done) {
+  const horizon = (document.querySelector('input[name="natgeo-horizon"]:checked') || {}).value || "surface";
+  natGeoMeta.horizon = horizon;
+  const cfg = NATGEO_HORIZONS[horizon];
+  loadNatGeoDictionaries(horizon, function(err) {
+    if (err) console.warn(err);
+    destroyNatGeoLayer();
+    if (typeof L.esri === "undefined" || !L.esri.featureLayer) {
+      done(new Error("esri-leaflet missing"));
+      return;
+    }
+    natGeoLayer = L.esri.featureLayer({
+      url: cfg.units,
+      precision: 5,
+      style: styleNatGeoFeature,
+      attribution: "USGS / AASG Cooperative National Geologic Map"
+    });
+    natGeoLayer.bindPopup(function(layer) {
+      return natGeoPopupHtml(layer.feature && layer.feature.properties);
+    });
+    natGeoLayer.setOpacity = function(o) {
+      this.setStyle(styleNatGeoFeature);
+    };
+    done(null);
+  });
 }
 
 function ensureNatGeo(done) {
   if (natGeoLayer) { done(null); return; }
-  if (natGeoLoading) return;
-  natGeoLoading = true;
-  fetch("geology/earth-surface-lake.geojson")
-    .then(function(r){ if (!r.ok) throw new Error("natgeo "+r.status); return r.json(); })
-    .then(function(gj){
-      natGeoLayer = L.geoJSON(gj, {
-        style: styleNatGeo(),
-        onEachFeature: function(f, layer) {
-          const p = f.properties || {};
-          const title = (p.MapUnit || p.mapunit || "") + (p.Name ? " — " + p.Name : "");
-          const age = p.Age || "";
-          layer.bindPopup("<strong>"+title+"</strong>"+(age?"<br>"+age:"")+"<br><span class=\"crowd-meta\">USGS Cooperative National Geologic Map</span>");
-        }
-      });
-      natGeoLayer.setOpacity = function(o) {
-        this.setStyle(styleNatGeo(o));
-      };
-      natGeoLoading = false;
-      done(null);
-    })
-    .catch(function(err){
-      natGeoLoading = false;
-      console.warn(err);
-      done(err);
-    });
-}
-
-function makeQuadCanvas(sheet) {
-  const B = sheet.bounds;
-  const img = new Image();
-  img.decoding = "async";
-  img.src = sheet.image;
-  const QuadCanvas = L.Layer.extend({
-    options: {
-      opacity: 0.65,
-      attribution: (sheet.dgm ? sheet.dgm + " " : "") + (sheet.displayName || "AGS 24k")
-    },
-    onAdd(map) {
-      this._map = map;
-      if (!this._canvas) {
-        this._canvas = L.DomUtil.create("canvas", "leaflet-zoom-animated leaflet-geo24k");
-        this._ctx = this._canvas.getContext("2d");
-        this._canvas.style.pointerEvents = "none";
-      }
-      map.getPanes().overlayPane.appendChild(this._canvas);
-      this._canvas.style.opacity = this.options.opacity;
-      map.on("zoom move moveend zoomend viewreset", this._redraw, this);
-      map.on("rotate rotateend bearingchange", this._redraw, this);
-      if (img.complete && img.naturalWidth) this._redraw();
-      else img.addEventListener("load", () => this._redraw(), { once: true });
-    },
-    onRemove(map) {
-      map.off("zoom move moveend zoomend viewreset", this._redraw, this);
-      map.off("rotate rotateend bearingchange", this._redraw, this);
-      if (this._canvas && this._canvas.parentNode) this._canvas.parentNode.removeChild(this._canvas);
-      this._map = null;
-    },
-    setOpacity(o) {
-      this.options.opacity = o;
-      if (this._canvas) this._canvas.style.opacity = o;
-      return this;
-    },
-    getAttribution() { return this.options.attribution; },
-    _redraw() {
-      const map = this._map;
-      if (!map || !this._canvas || !img.naturalWidth) return;
-      const tl = map.latLngToLayerPoint([B.n, B.w]);
-      const tr = map.latLngToLayerPoint([B.n, B.e]);
-      const bl = map.latLngToLayerPoint([B.s, B.w]);
-      const br = map.latLngToLayerPoint([B.s, B.e]);
-      const xs = [tl.x, tr.x, bl.x, br.x];
-      const ys = [tl.y, tr.y, bl.y, br.y];
-      const minX = Math.floor(Math.min.apply(null, xs));
-      const maxX = Math.ceil(Math.max.apply(null, xs));
-      const minY = Math.floor(Math.min.apply(null, ys));
-      const maxY = Math.ceil(Math.max.apply(null, ys));
-      const w = maxX - minX;
-      const h = maxY - minY;
-      if (w < 2 || h < 2) return;
-      const canvas = this._canvas;
-      const ctx = this._ctx;
-      if (canvas.width !== w) canvas.width = w;
-      if (canvas.height !== h) canvas.height = h;
-      L.DomUtil.setPosition(canvas, L.point(minX, minY));
-      canvas.style.opacity = this.options.opacity;
-      const ptl = tl.subtract(L.point(minX, minY));
-      const ptr = tr.subtract(L.point(minX, minY));
-      const pbl = bl.subtract(L.point(minX, minY));
-      const imgW = img.naturalWidth;
-      const imgH = img.naturalHeight;
-      const a = (ptr.x - ptl.x) / imgW;
-      const b = (ptr.y - ptl.y) / imgW;
-      const c = (pbl.x - ptl.x) / imgH;
-      const d = (pbl.y - ptl.y) / imgH;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, w, h);
-      ctx.setTransform(a, b, c, d, ptl.x, ptl.y);
-      ctx.imageSmoothingEnabled = true;
-      try { ctx.imageSmoothingQuality = "high"; } catch (e) {}
-      ctx.drawImage(img, 0, 0);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-    }
-  });
-  return new QuadCanvas();
-}
-
-let geo24kGroup = null;
-let geo24kLoading = false;
-function ensureGeo24k(done) {
-  if (geo24kGroup) { done(null); return; }
-  if (geo24kLoading) return;
-  geo24kLoading = true;
-  fetch("geology/quads-24k-manifest.json")
-    .then(function(r){ if (!r.ok) throw new Error("24k manifest "+r.status); return r.json(); })
-    .then(function(manifest){
-      geo24kGroup = L.layerGroup();
-      geo24kGroup.setOpacity = function(o) {
-        this.eachLayer(function(l){ if (l.setOpacity) l.setOpacity(o); });
-      };
-      (manifest.sheets || []).forEach(function(sheet){
-        geo24kGroup.addLayer(makeQuadCanvas(sheet));
-      });
-      geo24kLoading = false;
-      done(null);
-    })
-    .catch(function(err){
-      geo24kLoading = false;
-      console.warn(err);
-      done(err);
-    });
+  buildNatGeoLayer(done);
 }
 
 function anyOverlay(){
-  return histOn.checked || prelakeOn.checked || natGeoOn.checked || geo24kOn.checked;
+  return histOn.checked || prelakeOn.checked || natGeoOn.checked;
 }
 function setOverlays(){
   if (histOn.checked) { if (!map.hasLayer(hist)) hist.addTo(map); }
   else if (map.hasLayer(hist)) map.removeLayer(hist);
   if (prelakeOn.checked) { if (!map.hasLayer(prelake)) prelake.addTo(map); }
   else if (map.hasLayer(prelake)) map.removeLayer(prelake);
-  if (geo24kOn.checked) {
-    ensureGeo24k(function(err){
-      if (!err && geo24kGroup && !map.hasLayer(geo24kGroup)) {
-        geo24kGroup.addTo(map);
-        geo24kGroup.setOpacity(opacitySlider.value / 100);
-      }
-    });
-  } else if (geo24kGroup && map.hasLayer(geo24kGroup)) {
-    map.removeLayer(geo24kGroup);
-  }
+
+  natGeoOpts.classList.toggle("hidden", !natGeoOn.checked);
   if (natGeoOn.checked) {
     ensureNatGeo(function(err){
       if (!err && natGeoLayer && !map.hasLayer(natGeoLayer)) natGeoLayer.addTo(map);
+      if (natGeoLayer) natGeoLayer.setOpacity(opacitySlider.value / 100);
     });
-  } else if (natGeoLayer && map.hasLayer(natGeoLayer)) {
-    map.removeLayer(natGeoLayer);
+  } else {
+    destroyNatGeoLayer();
   }
+
   opacityBox.classList.toggle("hidden", !anyOverlay());
   const o = opacitySlider.value / 100;
   hist.setOpacity(o);
   prelake.setOpacity(o);
-  if (geo24kGroup) geo24kGroup.setOpacity(o);
   if (natGeoLayer) natGeoLayer.setOpacity(o);
 }
 histOn.onchange = setOverlays;
 prelakeOn.onchange = setOverlays;
 natGeoOn.onchange = setOverlays;
-geo24kOn.onchange = setOverlays;
 opacitySlider.oninput = setOverlays;
+document.querySelectorAll('input[name="natgeo-horizon"]').forEach(function(el){
+  el.onchange = function(){
+    if (!natGeoOn.checked) return;
+    destroyNatGeoLayer();
+    buildNatGeoLayer(function(err){
+      if (!err && natGeoLayer) {
+        natGeoLayer.addTo(map);
+        natGeoLayer.setOpacity(opacitySlider.value / 100);
+      }
+    });
+  };
+});
 setOverlays();
 
 
