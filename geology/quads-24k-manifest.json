@@ -1,0 +1,270 @@
+{
+  "title": "Arkansas Geological Survey 1:24,000 geologic quadrangle overlays \u2014 Greers Ferry Lake",
+  "crs": "EPSG:4326",
+  "lakeCoverageTarget": {
+    "west": -92.4,
+    "south": 35.45,
+    "east": -91.9,
+    "north": 35.7
+  },
+  "overlayUsage": "L.imageOverlay(imageUrl, [[bounds.s, bounds.w], [bounds.n, bounds.e]])",
+  "generatedAt": "2026-09-15T01:34:42Z",
+  "sheetCount": 12,
+  "sheets": [
+    {
+      "slug": "old-lexington",
+      "displayName": "Old Lexington",
+      "image": "geology/old-lexington-24k.jpg",
+      "bounds": {
+        "s": 35.625,
+        "w": -92.5,
+        "n": 35.75,
+        "e": -92.375
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Old%20Lexington.pdf",
+      "dgm": "DGM-AR-00651",
+      "usgsCellId": "35092f4",
+      "imageBytes": 956940,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "shirley",
+      "displayName": "Shirley",
+      "image": "geology/shirley-24k.jpg",
+      "bounds": {
+        "s": 35.625,
+        "w": -92.375,
+        "n": 35.75,
+        "e": -92.25
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Shirley.pdf",
+      "dgm": "DGM-AR-00779",
+      "usgsCellId": "35092f3",
+      "imageBytes": 923265,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "parma",
+      "displayName": "Parma",
+      "image": "geology/parma-24k.jpg",
+      "bounds": {
+        "s": 35.625,
+        "w": -92.25,
+        "n": 35.75,
+        "e": -92.125
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Parma.pdf",
+      "dgm": "DGM-AR-00677",
+      "usgsCellId": "35092f2",
+      "imageBytes": 986565,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "prim",
+      "displayName": "Prim",
+      "image": "geology/prim-24k.jpg",
+      "bounds": {
+        "s": 35.625,
+        "w": -92.125,
+        "n": 35.75,
+        "e": -92.0
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Prim.pdf",
+      "dgm": "DGM-AR-00720",
+      "usgsCellId": "35092f1",
+      "imageBytes": 958848,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "drasco",
+      "displayName": "Drasco",
+      "image": "geology/drasco-24k.jpg",
+      "bounds": {
+        "s": 35.625,
+        "w": -92.0,
+        "n": 35.75,
+        "e": -91.875
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Drasco.pdf",
+      "dgm": "DGM-AR-00233",
+      "usgsCellId": "35091f8",
+      "imageBytes": 769697,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "concord",
+      "displayName": "Concord",
+      "image": "geology/concord-24k.jpg",
+      "bounds": {
+        "s": 35.625,
+        "w": -91.875,
+        "n": 35.75,
+        "e": -91.75
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Concord_DGM-AR-00171.pdf",
+      "dgm": "DGM-AR-00171",
+      "usgsCellId": "35091f7",
+      "imageBytes": 1002273,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "clinton",
+      "displayName": "Clinton",
+      "image": "geology/clinton-24k.jpg",
+      "bounds": {
+        "s": 35.5,
+        "w": -92.5,
+        "n": 35.625,
+        "e": -92.375
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Clinton.pdf",
+      "dgm": "DGM-AR-00163",
+      "usgsCellId": "35092e4",
+      "imageBytes": 754858,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "fairfield-bay",
+      "displayName": "Fairfield Bay",
+      "image": "geology/fairfield-bay-24k.jpg",
+      "bounds": {
+        "s": 35.5,
+        "w": -92.375,
+        "n": 35.625,
+        "e": -92.25
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Fairfield%20Bay.pdf",
+      "dgm": "DGM-AR-00276",
+      "usgsCellId": "35092e3",
+      "imageBytes": 858124,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "greers-ferry",
+      "displayName": "Greers Ferry",
+      "image": "geology/greers-ferry-24k.jpg",
+      "bounds": {
+        "s": 35.5,
+        "w": -92.25,
+        "n": 35.625,
+        "e": -92.125
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Greers%20Ferry.pdf",
+      "dgm": "DGM-AR-00352",
+      "usgsCellId": "35092e2",
+      "imageBytes": 1042148,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "brownsville",
+      "displayName": "Brownsville",
+      "image": "geology/brownsville-24k.jpg",
+      "bounds": {
+        "s": 35.5,
+        "w": -92.125,
+        "n": 35.625,
+        "e": -92.0
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Brownsville.pdf",
+      "dgm": "DGM-AR-00106",
+      "usgsCellId": "35092e1",
+      "imageBytes": 940688,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "greers-ferry-dam",
+      "displayName": "Greers Ferry Dam",
+      "image": "geology/greers-ferry-dam-24k.jpg",
+      "bounds": {
+        "s": 35.5,
+        "w": -92.0,
+        "n": 35.625,
+        "e": -91.875
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/GreersFerryDam_DGM-AR-00353.pdf",
+      "dgm": "DGM-AR-00353",
+      "usgsCellId": "35091e8",
+      "imageBytes": 929898,
+      "confidence": "high-corners / medium-crop"
+    },
+    {
+      "slug": "floral",
+      "displayName": "Floral",
+      "image": "geology/floral-24k.jpg",
+      "bounds": {
+        "s": 35.5,
+        "w": -91.875,
+        "n": 35.625,
+        "e": -91.75
+      },
+      "sourcePdf": "https://geology.arkansas.gov/docs/pdf/maps-and-data/geologic_maps/24k/Floral_DGM-AR-00291.pdf",
+      "dgm": "DGM-AR-00291",
+      "usgsCellId": "35091e7",
+      "imageBytes": 815595,
+      "confidence": "high-corners / medium-crop"
+    }
+  ],
+  "gapsNoAgsPdf": [
+    {
+      "name": "Bee Branch",
+      "south": 35.375,
+      "west": -92.5,
+      "north": 35.5,
+      "east": -92.375,
+      "usgsCellId": "35092d4",
+      "reason": "No AGS Digital Geologic Map in catalog/footprint layer"
+    },
+    {
+      "name": "Morganton",
+      "south": 35.375,
+      "west": -92.375,
+      "north": 35.5,
+      "east": -92.25,
+      "usgsCellId": "35092d3",
+      "reason": "No AGS Digital Geologic Map in catalog/footprint layer"
+    },
+    {
+      "name": "Quitman",
+      "south": 35.375,
+      "west": -92.25,
+      "north": 35.5,
+      "east": -92.125,
+      "usgsCellId": "35092d2",
+      "reason": "No AGS Digital Geologic Map in catalog/footprint layer"
+    },
+    {
+      "name": "Heber Springs",
+      "south": 35.375,
+      "west": -92.125,
+      "north": 35.5,
+      "east": -92.0,
+      "usgsCellId": "35092d1",
+      "reason": "No AGS Digital Geologic Map in catalog/footprint layer"
+    },
+    {
+      "name": "West Pangburn",
+      "south": 35.375,
+      "west": -92.0,
+      "north": 35.5,
+      "east": -91.875,
+      "usgsCellId": "35091d8",
+      "reason": "No AGS Digital Geologic Map in catalog/footprint layer"
+    },
+    {
+      "name": "Pangburn",
+      "south": 35.375,
+      "west": -91.875,
+      "north": 35.5,
+      "east": -91.75,
+      "usgsCellId": "35091d7",
+      "reason": "Barely intersects lake bbox east edge; no AGS DGM"
+    }
+  ],
+  "notes": [
+    "All sheets are USGS 7.5\u2032 cells intersecting the lakeCoverageTarget that have published AGS DGM PDFs.",
+    "Greers Ferry was pre-existing; others newly rasterized @150 DPI, cropped to map panel, half-res JPEG ~0.7\u20131.1 MB.",
+    "Floral is in the AGS catalog (DGM-AR-00291) and intersects the east edge of the target bbox; it was not returned by the GIS footprint query for the strict bbox but is included for complete AGS coverage.",
+    "Southern row (Quitman, Heber Springs, West Pangburn, etc.) intersects south=35.45 but AGS has not published 24k DGMs for those cells.",
+    "Do not edit index.html in this task; consume quads-24k-manifest.json from the PWA."
+  ]
+}
