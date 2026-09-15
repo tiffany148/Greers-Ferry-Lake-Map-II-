@@ -99,6 +99,9 @@
   <h2>Historical overlay</h2>
   <label class="row"><input type="checkbox" id="hist-on" /> USGS historic topo (scanned)</label>
   <label class="row"><input type="checkbox" id="prelake-on" /> Pre-lake valley (1894)</label>
+  <h2>Geology</h2>
+  <label class="row"><input type="checkbox" id="natgeo-on" /> National surface geology</label>
+  <label class="row"><input type="checkbox" id="geo24k-on" /> Greers Ferry 24k geologic</label>
   <h2>Pins</h2>
   <div id="cats"></div>
   <div class="unlock-row">
@@ -570,19 +573,157 @@ const PrelakeCanvas = L.Layer.extend({
 const prelake = new PrelakeCanvas();
 prelakeImg.addEventListener("load", () => { if (typeof map !== "undefined" && map.hasLayer(prelake)) prelake._redraw(); });
 
-function anyOverlay(){ return histOn.checked || prelakeOn.checked; }
+const natGeoOn = document.getElementById("natgeo-on");
+const geo24kOn = document.getElementById("geo24k-on");
+let natGeoLayer = null;
+let natGeoLoading = false;
+
+function styleNatGeo(o) {
+  const opacity = (typeof o === "number") ? o : (opacitySlider.value / 100);
+  return function(f) {
+    const p = f.properties || {};
+    return {
+      color: "#1e3a4c",
+      weight: 0.6,
+      fillColor: p.fill || "#80b3ff",
+      fillOpacity: 0.5 * opacity,
+      opacity: 0.85 * opacity
+    };
+  };
+}
+
+function ensureNatGeo(done) {
+  if (natGeoLayer) { done(null); return; }
+  if (natGeoLoading) return;
+  natGeoLoading = true;
+  fetch("geology/earth-surface-lake.geojson")
+    .then(function(r){ if (!r.ok) throw new Error("natgeo "+r.status); return r.json(); })
+    .then(function(gj){
+      natGeoLayer = L.geoJSON(gj, {
+        style: styleNatGeo(),
+        onEachFeature: function(f, layer) {
+          const p = f.properties || {};
+          const title = (p.MapUnit || p.mapunit || "") + (p.Name ? " — " + p.Name : "");
+          const age = p.Age || "";
+          layer.bindPopup("<strong>"+title+"</strong>"+(age?"<br>"+age:"")+"<br><span class=\"crowd-meta\">USGS Cooperative National Geologic Map</span>");
+        }
+      });
+      natGeoLayer.setOpacity = function(o) {
+        this.setStyle(styleNatGeo(o));
+      };
+      natGeoLoading = false;
+      done(null);
+    })
+    .catch(function(err){
+      natGeoLoading = false;
+      console.warn(err);
+      done(err);
+    });
+}
+
+const GEO24K = { s: 35.5, w: -92.25, n: 35.625, e: -92.125 };
+const geo24kImg = new Image();
+geo24kImg.decoding = "async";
+geo24kImg.src = "geology/greers-ferry-24k.jpg";
+const Geo24kCanvas = L.Layer.extend({
+  options: { opacity: 0.65, attribution: "Arkansas Geological Survey DGM-00352 (Greers Ferry 24k)" },
+  onAdd(map) {
+    this._map = map;
+    if (!this._canvas) {
+      this._canvas = L.DomUtil.create("canvas", "leaflet-zoom-animated leaflet-geo24k");
+      this._ctx = this._canvas.getContext("2d");
+      this._canvas.style.pointerEvents = "none";
+    }
+    map.getPanes().overlayPane.appendChild(this._canvas);
+    this._canvas.style.opacity = this.options.opacity;
+    map.on("zoom move moveend zoomend viewreset", this._redraw, this);
+    map.on("rotate rotateend bearingchange", this._redraw, this);
+    if (geo24kImg.complete && geo24kImg.naturalWidth) this._redraw();
+    else geo24kImg.addEventListener("load", () => this._redraw(), { once: true });
+  },
+  onRemove(map) {
+    map.off("zoom move moveend zoomend viewreset", this._redraw, this);
+    map.off("rotate rotateend bearingchange", this._redraw, this);
+    if (this._canvas && this._canvas.parentNode) this._canvas.parentNode.removeChild(this._canvas);
+    this._map = null;
+  },
+  setOpacity(o) {
+    this.options.opacity = o;
+    if (this._canvas) this._canvas.style.opacity = o;
+    return this;
+  },
+  getAttribution() { return this.options.attribution; },
+  _redraw() {
+    const map = this._map;
+    if (!map || !this._canvas || !geo24kImg.naturalWidth) return;
+    const tl = map.latLngToLayerPoint([GEO24K.n, GEO24K.w]);
+    const tr = map.latLngToLayerPoint([GEO24K.n, GEO24K.e]);
+    const bl = map.latLngToLayerPoint([GEO24K.s, GEO24K.w]);
+    const br = map.latLngToLayerPoint([GEO24K.s, GEO24K.e]);
+    const xs = [tl.x, tr.x, bl.x, br.x];
+    const ys = [tl.y, tr.y, bl.y, br.y];
+    const minX = Math.floor(Math.min.apply(null, xs));
+    const maxX = Math.ceil(Math.max.apply(null, xs));
+    const minY = Math.floor(Math.min.apply(null, ys));
+    const maxY = Math.ceil(Math.max.apply(null, ys));
+    const w = maxX - minX;
+    const h = maxY - minY;
+    if (w < 2 || h < 2) return;
+    const canvas = this._canvas;
+    const ctx = this._ctx;
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
+    L.DomUtil.setPosition(canvas, L.point(minX, minY));
+    canvas.style.opacity = this.options.opacity;
+    const ptl = tl.subtract(L.point(minX, minY));
+    const ptr = tr.subtract(L.point(minX, minY));
+    const pbl = bl.subtract(L.point(minX, minY));
+    const imgW = geo24kImg.naturalWidth;
+    const imgH = geo24kImg.naturalHeight;
+    const a = (ptr.x - ptl.x) / imgW;
+    const b = (ptr.y - ptl.y) / imgW;
+    const c = (pbl.x - ptl.x) / imgH;
+    const d = (pbl.y - ptl.y) / imgH;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.setTransform(a, b, c, d, ptl.x, ptl.y);
+    ctx.imageSmoothingEnabled = true;
+    try { ctx.imageSmoothingQuality = "high"; } catch (e) {}
+    ctx.drawImage(geo24kImg, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+});
+const geo24k = new Geo24kCanvas();
+geo24kImg.addEventListener("load", () => { if (typeof map !== "undefined" && map.hasLayer(geo24k)) geo24k._redraw(); });
+
+function anyOverlay(){
+  return histOn.checked || prelakeOn.checked || natGeoOn.checked || geo24kOn.checked;
+}
 function setOverlays(){
   if (histOn.checked) { if (!map.hasLayer(hist)) hist.addTo(map); }
   else if (map.hasLayer(hist)) map.removeLayer(hist);
   if (prelakeOn.checked) { if (!map.hasLayer(prelake)) prelake.addTo(map); }
   else if (map.hasLayer(prelake)) map.removeLayer(prelake);
+  if (geo24kOn.checked) { if (!map.hasLayer(geo24k)) geo24k.addTo(map); }
+  else if (map.hasLayer(geo24k)) map.removeLayer(geo24k);
+  if (natGeoOn.checked) {
+    ensureNatGeo(function(err){
+      if (!err && natGeoLayer && !map.hasLayer(natGeoLayer)) natGeoLayer.addTo(map);
+    });
+  } else if (natGeoLayer && map.hasLayer(natGeoLayer)) {
+    map.removeLayer(natGeoLayer);
+  }
   opacityBox.classList.toggle("hidden", !anyOverlay());
   const o = opacitySlider.value / 100;
   hist.setOpacity(o);
   prelake.setOpacity(o);
+  geo24k.setOpacity(o);
+  if (natGeoLayer) natGeoLayer.setOpacity(o);
 }
 histOn.onchange = setOverlays;
 prelakeOn.onchange = setOverlays;
+natGeoOn.onchange = setOverlays;
+geo24kOn.onchange = setOverlays;
 opacitySlider.oninput = setOverlays;
 setOverlays();
 
