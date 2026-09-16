@@ -185,8 +185,15 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 .scale-panel label{display:block;margin:6px 0;font-size:12px}
 .scale-panel input,.scale-panel select{width:100%;border:0;border-radius:8px;padding:6px 8px;background:#15565b;color:var(--ink);font-size:13px}
 .scale-panel .st{margin-top:8px}
-.scale-panel #scale-calib-readout,.scale-panel #scale-recipe-out{margin-top:8px;padding:8px;border-radius:8px;background:rgba(0,0,0,.18);font-variant-numeric:tabular-nums;white-space:pre-wrap}
+.scale-panel #scale-calib-readout,.scale-panel #scale-recipe-out-a,.scale-panel #scale-recipe-out{margin-top:8px;padding:8px;border-radius:8px;background:rgba(0,0,0,.18);font-variant-numeric:tabular-nums;white-space:pre-wrap}
 .scale-panel .sample{opacity:.85;font-size:11px;margin-top:6px}
+.scale-panel .sc-step{margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,.12)}
+.scale-panel .sc-step h4{margin:0 0 6px;font-size:13px;font-weight:800}
+.scale-panel .sc-slip-row{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:6px;align-items:end;margin:6px 0}
+.scale-panel .sc-slip-row label{margin:0;font-size:11px}
+.scale-panel .sc-slip-row .sc-remove{padding:6px 8px;border:0;border-radius:8px;background:#8a3a3a;color:#fff;cursor:pointer;font-weight:700}
+.scale-panel .sc-out-block{margin-top:8px;padding:8px;border-radius:8px;background:rgba(0,0,0,.18);font-variant-numeric:tabular-nums;white-space:pre-wrap}
+.scale-panel .sc-out-block b{font-weight:800}
 .label-size-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:4px 16px 0;padding:8px 12px;border-radius:12px;background:#13494e;font-size:13px}
 .label-size-bar select{border:0;border-radius:8px;padding:6px 10px;background:#15565b;color:var(--ink);font-size:13px}
 .label-size-bar .btn.on{outline:2px solid #f0c14b}
@@ -576,55 +583,61 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 
       <div class="scale-panel" id="scale-panel">
         <h3>Scale &amp; size calculator</h3>
-        <p class="hint">Calibrate first with one known slip length on the aerial/chart, then use the recipe calculator. Sample along-dock (side walkways only): 13×10&nbsp;ft + 2×12&nbsp;ft + 4×2&nbsp;ft = <b>162&nbsp;ft</b>.</p>
+        <p class="hint">1) Enter each slip size and how many <b>per side</b> → get length <b>before</b> dividers/cart. 2) Add divider count/size and cart path → full dock. Calibrate first for chart-unit suggestions.</p>
         <div id="scale-calib-readout">Not calibrated yet</div>
         <div class="st" id="scale-calib-actions">
           <button type="button" class="btn" id="btn-scale-calibrate">Calibrate (click 2 points)</button>
           <button type="button" class="btn" id="btn-scale-recalibrate">Recalibrate</button>
           <button type="button" class="btn" id="btn-scale-clear">Clear calibration</button>
         </div>
-        <h3 style="margin-top:12px">Dock recipe</h3>
-        <div class="row2">
-          <label>Standard slips (count)<input id="sc-std-n" type="number" min="0" step="1" value="13"/></label>
-          <label>Std size ft (along dock × into slip)<span style="display:flex;gap:4px"><input id="sc-std-along" type="number" min="0" step="0.1" value="10" title="Along dock"/><input id="sc-std-into" type="number" min="0" step="0.1" value="30" title="Into slip"/></span></label>
+
+        <div class="sc-step" id="sc-step-1">
+          <h4>Step 1 — Slips only (per side)</h4>
+          <p class="hint">Each row: count × along-dock ft × into-slip ft. Counts are per side.</p>
+          <div id="sc-slip-rows"></div>
+          <div class="st">
+            <button type="button" class="btn" id="btn-sc-add-slip">+ Add slip size</button>
+            <button type="button" class="btn" id="btn-scale-calc-slips">Calculate slips</button>
+          </div>
+          <div id="scale-recipe-out-a">Enter slip sizes, then Calculate slips.</div>
         </div>
-        <div class="row2">
-          <label>Extra slips (count)<input id="sc-ex-n" type="number" min="0" step="1" value="2"/></label>
-          <label>Extra size ft (along × into)<span style="display:flex;gap:4px"><input id="sc-ex-along" type="number" min="0" step="0.1" value="12"/><input id="sc-ex-into" type="number" min="0" step="0.1" value="30"/></span></label>
+
+        <div class="sc-step" id="sc-step-2">
+          <h4>Step 2 — Dividers &amp; cart path</h4>
+          <p class="hint">Dividers sit between slips along the dock (often ≈ slips−1 or slips+1). End walkways cap either end. Cart path is the aisle between A/B sides.</p>
+          <div class="row2">
+            <label><b>Slip dividers</b> (count per side)<input id="sc-div-n" type="number" min="0" step="1" value="4"/></label>
+            <label>Divider width ft each<input id="sc-div-w" type="number" min="0" step="0.1" value="2"/></label>
+          </div>
+          <div class="row2">
+            <label><b>End walkways</b> (count, 0–2)<input id="sc-end-n" type="number" min="0" max="4" step="1" value="0"/></label>
+            <label>End walkway width ft each<input id="sc-end-w" type="number" min="0" step="0.1" value="2"/></label>
+          </div>
+          <div class="row2">
+            <label><b>Center cart path</b> width ft<input id="sc-center-w" type="number" min="0" step="0.1" value="0" title="Aisle between A and B slip sides"/></label>
+            <label>Dock type
+              <select id="sc-dock-type">
+                <option value="ns">NS (slips stack in Y)</option>
+                <option value="ew">EW (slips stack in X)</option>
+              </select>
+            </label>
+          </div>
+          <div class="row2">
+            <label>Both sides have slips?
+              <select id="sc-both-sides">
+                <option value="yes" selected>Yes (A + B)</option>
+                <option value="no">One side only</option>
+              </select>
+            </label>
+            <label style="opacity:.7">Apply uses largest-count slip size + divider width as gap</label>
+          </div>
+          <div class="st">
+            <button type="button" class="btn" id="btn-scale-calc">Calculate full dock</button>
+            <button type="button" class="btn" id="btn-scale-apply" title="Write primary slip sw/sh (and gap from divider) onto selected dock">Apply to selected dock</button>
+          </div>
+          <div id="scale-recipe-out">Add dividers/cart path, then Calculate full dock.</div>
+          <p class="sample">Example: slips 13×10 + 2×12 = 154 ft before dividers; + 4×2 ft dividers = 162 ft along-dock.</p>
         </div>
-        <div class="row2">
-          <label><b>Side walkways</b> (count per side)<input id="sc-side-n" type="number" min="0" step="1" value="4"/></label>
-          <label>Side walkway width ft<input id="sc-side-w" type="number" min="0" step="0.1" value="2"/></label>
-        </div>
-        <div class="row2">
-          <label><b>End walkways</b> (count, 0–2)<input id="sc-end-n" type="number" min="0" max="4" step="1" value="0"/></label>
-          <label>End walkway width ft each<input id="sc-end-w" type="number" min="0" step="0.1" value="2"/></label>
-        </div>
-        <div class="row2">
-          <label><b>Center cart path</b> width ft<input id="sc-center-w" type="number" min="0" step="0.1" value="0" title="Aisle between A and B slip sides"/></label>
-          <label>Gap between slips ft (optional)<input id="sc-gap-ft" type="number" min="0" step="0.1" value="0"/></label>
-        </div>
-        <div class="row2">
-          <label>Dock type
-            <select id="sc-dock-type">
-              <option value="ns">NS (slips stack in Y)</option>
-              <option value="ew">EW (slips stack in X)</option>
-            </select>
-          </label>
-          <label>Both sides have slips?
-            <select id="sc-both-sides">
-              <option value="yes" selected>Yes (A + B)</option>
-              <option value="no">One side only</option>
-            </select>
-          </label>
-        </div>
-        <p class="hint" style="margin-top:4px">Along dock = finger spacing; into slip = slip depth. <b>Side walkways</b> sit between slips along the length. <b>End walkways</b> cap either end. <b>Center cart path</b> is the aisle between A/B sides (NS gap / walk thickness).</p>
-        <div class="st">
-          <button type="button" class="btn" id="btn-scale-calc">Calculate</button>
-          <button type="button" class="btn" id="btn-scale-apply" title="Write standard sw/sh (and gap) onto selected dock">Apply to selected dock</button>
-        </div>
-        <div id="scale-recipe-out">Enter sizes and Calculate.</div>
-        <p class="sample">Default example along-dock (side walkways only): 13×10 + 2×12 + 4×2 = 130+24+8 = 162 ft</p>
       </div>
       <div class="st" style="margin-top:16px">
         <button class="btn" id="btn-reset-cruiser" title="Restore Cruiser dock from baked defaults (double-row a+b + 801)">Reset Cruiser dock</button>
@@ -659,7 +672,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=81"></script>
-<script src="app.js?v=81"></script>
+<script src="app-data.js?v=82"></script>
+<script src="app.js?v=82"></script>
 </body>
 </html>

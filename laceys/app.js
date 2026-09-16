@@ -2331,7 +2331,7 @@ function updateScaleReadout(){
   const apply=document.getElementById("btn-scale-apply");
   if(apply){
     apply.disabled=!canApplyScaleToDock();
-    apply.title=canApplyScaleToDock()?"Write standard sw/sh (and gap) onto selected dock":"Apply only on MAIN editable chart";
+    apply.title=canApplyScaleToDock()?"Write primary slip sw/sh (and gap from divider) onto selected dock":"Apply only on MAIN editable chart";
   }
   const actions=document.getElementById("scale-calib-actions");
   if(actions){
@@ -2488,64 +2488,136 @@ function numInput(id, fallback){
   const v=Number(el.value);
   return isFinite(v)?v:fallback;
 }
+function numFromEl(el, fallback){
+  if(!el) return fallback;
+  const v=Number(el.value);
+  return isFinite(v)?v:fallback;
+}
+const SC_DEFAULT_SLIP_ROWS=[
+  {n:13, along:10, into:30},
+  {n:2, along:12, into:30}
+];
+function readSlipSizeRows(){
+  const wrap=document.getElementById("sc-slip-rows");
+  if(!wrap) return SC_DEFAULT_SLIP_ROWS.map(r=>({...r}));
+  const rows=[];
+  wrap.querySelectorAll(".sc-slip-row").forEach(row=>{
+    const n=Math.max(0, numFromEl(row.querySelector(".sc-n"), 0));
+    const along=Math.max(0, numFromEl(row.querySelector(".sc-along"), 0));
+    const into=Math.max(0, numFromEl(row.querySelector(".sc-into"), 0));
+    rows.push({n, along, into});
+  });
+  return rows.length?rows:SC_DEFAULT_SLIP_ROWS.map(r=>({...r}));
+}
+function bindSlipRowInputs(rowEl){
+  rowEl.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("input", ()=>renderScaleRecipe());
+    inp.addEventListener("change", ()=>renderScaleRecipe());
+  });
+  const rm=rowEl.querySelector(".sc-remove");
+  if(rm) rm.addEventListener("click", ()=>{
+    const wrap=document.getElementById("sc-slip-rows");
+    if(!wrap) return;
+    if(wrap.querySelectorAll(".sc-slip-row").length<=1) return; // keep at least one
+    rowEl.remove();
+    renderScaleRecipe();
+  });
+}
+function makeSlipRowEl(data, idx){
+  const d=data||{n:0,along:10,into:30};
+  const div=document.createElement("div");
+  div.className="sc-slip-row";
+  div.dataset.idx=String(idx);
+  div.innerHTML=
+    '<label>Count (per side)<input class="sc-n" type="number" min="0" step="1" value="'+d.n+'"/></label>'+
+    '<label>Along dock ft<input class="sc-along" type="number" min="0" step="0.1" value="'+d.along+'"/></label>'+
+    '<label>Into slip ft<input class="sc-into" type="number" min="0" step="0.1" value="'+d.into+'"/></label>'+
+    '<button type="button" class="sc-remove" title="Remove this slip size">×</button>';
+  bindSlipRowInputs(div);
+  return div;
+}
+function renderSlipSizeRows(rows){
+  const wrap=document.getElementById("sc-slip-rows");
+  if(!wrap) return;
+  const data=(rows && rows.length)?rows:SC_DEFAULT_SLIP_ROWS;
+  wrap.innerHTML="";
+  data.forEach((r,i)=> wrap.appendChild(makeSlipRowEl(r,i)));
+}
+function addSlipSizeRow(){
+  const wrap=document.getElementById("sc-slip-rows");
+  if(!wrap) return;
+  const n=wrap.querySelectorAll(".sc-slip-row").length;
+  wrap.appendChild(makeSlipRowEl({n:1, along:10, into:30}, n));
+  renderScaleRecipe();
+}
+function pickPrimarySlipRow(rows){
+  // largest count; if tie, first row
+  let best=rows[0]||{n:0,along:10,into:30};
+  let bestIdx=0;
+  rows.forEach((r,i)=>{
+    if((r.n||0)>(best.n||0)){ best=r; bestIdx=i; }
+  });
+  return {row:best, index:bestIdx};
+}
 function computeDockRecipe(){
-  const stdN=Math.max(0, numInput("sc-std-n",13));
-  const stdAlong=Math.max(0, numInput("sc-std-along",10));
-  const stdInto=Math.max(0, numInput("sc-std-into",30));
-  const exN=Math.max(0, numInput("sc-ex-n",2));
-  const exAlong=Math.max(0, numInput("sc-ex-along",12));
-  const exInto=Math.max(0, numInput("sc-ex-into",30));
-  const sideN=Math.max(0, numInput("sc-side-n",4));
-  const sideW=Math.max(0, numInput("sc-side-w",2));
+  const slipRows=readSlipSizeRows();
+  const divN=Math.max(0, numInput("sc-div-n",4));
+  const divW=Math.max(0, numInput("sc-div-w",2));
   const endN=Math.max(0, numInput("sc-end-n",0));
   const endW=Math.max(0, numInput("sc-end-w",2));
   const centerW=Math.max(0, numInput("sc-center-w",0));
-  const gapFt=Math.max(0, numInput("sc-gap-ft",0));
   const typeEl=document.getElementById("sc-dock-type");
   const type=(typeEl && typeEl.value==="ew")?"ew":"ns";
   const bothEl=document.getElementById("sc-both-sides");
   const bothSides=!(bothEl && bothEl.value==="no");
 
-  // Along-dock: slips + side walkways + end walkways + gaps between slip slots
-  const slipSlots=stdN+exN;
-  const gapCount=Math.max(0, slipSlots-1); // gaps between adjacent slips along one side
-  const alongSlips=(stdN*stdAlong)+(exN*exAlong);
-  const alongSide=sideN*sideW;
+  const slipSlots=slipRows.reduce((s,r)=>s+(r.n||0),0);
+  const alongSlips=slipRows.reduce((s,r)=>s+(r.n||0)*(r.along||0),0);
+  const maxInto=slipRows.reduce((m,r)=>Math.max(m, r.into||0), 0);
+  const alongDiv=divN*divW;
   const alongEnd=endN*endW;
-  const alongGaps=gapCount*gapFt;
-  const alongFt=alongSlips+alongSide+alongEnd+alongGaps;
-
-  // Across-dock: into-slip (+ opposite side) + center cart path
-  // Use standard into-slip for across width (extras noted separately)
-  const acrossFt = bothSides ? (stdInto + centerW + stdInto) : (stdInto + (centerW>0?centerW:0));
+  // Full along = slips + dividers + end walkways (gap covered by dividers)
+  const alongFt=alongSlips+alongDiv+alongEnd;
+  const acrossFt = bothSides ? (maxInto + centerW + maxInto) : (maxInto + (centerW>0?centerW:0));
 
   const cupf=chartScaleCal.chartUnitsPerFoot;
   const toCu=ft => (cupf>0 ? ft*cupf : null);
 
-  // Suggested sw/sh in chart units for STANDARD slips
-  // NS: stack in Y → sh=along, sw=into; EW: stack in X → sw=along, sh=into
-  let stdSwFt, stdShFt, exSwFt, exShFt;
-  if(type==="ns"){
-    stdSwFt=stdInto; stdShFt=stdAlong;
-    exSwFt=exInto; exShFt=exAlong;
-  }else{
-    stdSwFt=stdAlong; stdShFt=stdInto;
-    exSwFt=exAlong; exShFt=exInto;
-  }
+  const slipSizes=slipRows.map((r,i)=>{
+    let swFt, shFt;
+    if(type==="ns"){ swFt=r.into; shFt=r.along; }
+    else { swFt=r.along; shFt=r.into; }
+    return {
+      index:i, n:r.n, along:r.along, into:r.into,
+      swFt, shFt,
+      swCu:toCu(swFt), shCu:toCu(shFt)
+    };
+  });
+  const primary=pickPrimarySlipRow(slipRows);
+  const primSize=slipSizes[primary.index]||slipSizes[0];
 
   const result={
     type, bothSides,
-    alongFt, acrossFt,
-    alongSlips, alongSide, alongEnd, alongGaps,
-    centerW, sideW, endW, endN, sideN,
-    stdN, exN, stdAlong, stdInto, exAlong, exInto, gapFt,
-    stdSwFt, stdShFt, exSwFt, exShFt,
-    stdSwCu:toCu(stdSwFt), stdShCu:toCu(stdShFt),
-    exSwCu:toCu(exSwFt), exShCu:toCu(exShFt),
-    sideWalkCu:toCu(sideW),
+    slipRows, slipSizes, slipSlots,
+    alongSlips, alongDiv, alongEnd, alongFt, acrossFt,
+    maxInto, centerW, divN, divW, endN, endW,
+    // gap for apply comes from divider width
+    gapFt:divW,
+    primaryIndex:primary.index,
+    stdN:primSize?primSize.n:0,
+    stdAlong:primSize?primSize.along:0,
+    stdInto:primSize?primSize.into:0,
+    stdSwFt:primSize?primSize.swFt:0,
+    stdShFt:primSize?primSize.shFt:0,
+    stdSwCu:primSize?primSize.swCu:null,
+    stdShCu:primSize?primSize.shCu:null,
+    // legacy-ish extras note: non-primary rows
+    extraSizes:slipSizes.filter((_,i)=>i!==primary.index),
+    divCu:toCu(divW),
     endWalkCu:toCu(endW),
     centerCu:toCu(centerW),
-    gapCu:toCu(gapFt),
+    gapCu:toCu(divW),
+    alongSlipsCu:toCu(alongSlips),
     alongCu:toCu(alongFt),
     acrossCu:toCu(acrossFt),
     calibrated:cupf>0
@@ -2553,49 +2625,81 @@ function computeDockRecipe(){
   scaleLastRecipe=result;
   return result;
 }
-function formatRecipeOut(r){
-  if(!r) return "Enter sizes and Calculate.";
+function formatSlipsOnlyOut(r){
+  if(!r) return "Enter slip sizes, then Calculate slips.";
   const lines=[];
-  lines.push("Along-dock length: "+fmtNum(r.alongFt,2)+" ft"
+  lines.push("A — Slips only");
+  lines.push("Dock length BEFORE dividers and cart path");
+  lines.push("");
+  lines.push("Along-dock (slips only): "+fmtNum(r.alongSlips,2)+" ft"
+    +(r.calibrated?"  →  "+fmtNum(r.alongSlipsCu,1)+" chart units":"  (calibrate for chart units)"));
+  const parts=r.slipSizes.map(s=> s.n+"×"+fmtNum(s.along,1)+" ft").join(" + ");
+  if(parts) lines.push("  = "+parts);
+  lines.push("Into-slip depth (max): "+fmtNum(r.maxInto,2)+" ft");
+  r.slipSizes.forEach(s=>{
+    if(s.n>0) lines.push("  · "+s.n+" slips @ "+fmtNum(s.along,1)+"×"+fmtNum(s.into,1)+" ft → into "+fmtNum(s.into,1)+" ft");
+  });
+  lines.push("");
+  if(r.calibrated){
+    lines.push("Chart-unit slip suggestions ("+r.type.toUpperCase()+"):");
+    r.slipSizes.forEach(s=>{
+      if(s.n<=0) return;
+      lines.push("  · "+s.n+"×"+fmtNum(s.along,1)+"×"+fmtNum(s.into,1)+" ft → sw≈"+fmtNum(s.swCu,1)+", sh≈"+fmtNum(s.shCu,1)+" cu");
+    });
+  }else{
+    lines.push("Calibrate to see sw/sh chart-unit suggestions for each slip size.");
+  }
+  lines.push("");
+  lines.push("Primary for Apply: row "+(r.primaryIndex+1)+" ("+r.stdN+"×"+fmtNum(r.stdAlong,1)+"×"+fmtNum(r.stdInto,1)+" ft — largest count).");
+  return lines.join("\n");
+}
+function formatFullDockOut(r){
+  if(!r) return "Add dividers/cart path, then Calculate full dock.";
+  const lines=[];
+  lines.push("B — Full dock");
+  lines.push("");
+  lines.push("Along-dock (full): "+fmtNum(r.alongFt,2)+" ft"
     +(r.calibrated?"  →  "+fmtNum(r.alongCu,1)+" chart units":"  (calibrate for chart units)"));
-  lines.push("  = slips "+fmtNum(r.alongSlips,1)+" + side walkways "+fmtNum(r.alongSide,1)
-    +" + end walkways "+fmtNum(r.alongEnd,1)+" + gaps "+fmtNum(r.alongGaps,1));
+  lines.push("  = slips-only "+fmtNum(r.alongSlips,1)
+    +" + dividers "+fmtNum(r.alongDiv,1)
+    +" + end walkways "+fmtNum(r.alongEnd,1));
+  lines.push("  (slips-only was "+fmtNum(r.alongSlips,1)+" ft before dividers/cart)");
   lines.push("Across-dock width: "+fmtNum(r.acrossFt,2)+" ft"
     +(r.calibrated?"  →  "+fmtNum(r.acrossCu,1)+" chart units":""));
   if(r.bothSides){
-    lines.push("  = into-slip "+fmtNum(r.stdInto,1)+" + center cart path "+fmtNum(r.centerW,1)+" + into-slip "+fmtNum(r.stdInto,1));
+    lines.push("  = intoA "+fmtNum(r.maxInto,1)+" + cart path "+fmtNum(r.centerW,1)+" + intoB "+fmtNum(r.maxInto,1));
   }else{
-    lines.push("  = into-slip "+fmtNum(r.stdInto,1)+(r.centerW>0?" + center cart path "+fmtNum(r.centerW,1):""));
+    lines.push("  = into-slip "+fmtNum(r.maxInto,1)+(r.centerW>0?" + cart path "+fmtNum(r.centerW,1):""));
   }
   lines.push("");
-  lines.push("Suggested STANDARD slip ("+r.type.toUpperCase()+"): sw="+fmtNum(r.stdSwFt,2)+" ft, sh="+fmtNum(r.stdShFt,2)+" ft"
-    +(r.calibrated?"  →  sw≈"+fmtNum(r.stdSwCu,1)+", sh≈"+fmtNum(r.stdShCu,1)+" cu":""));
-  if(r.exN>0){
-    lines.push("Suggested EXTRA slips (note): sw="+fmtNum(r.exSwFt,2)+" ft, sh="+fmtNum(r.exShFt,2)+" ft"
-      +(r.calibrated?"  →  sw≈"+fmtNum(r.exSwCu,1)+", sh≈"+fmtNum(r.exShCu,1)+" cu":""));
-  }
-  if(r.sideN>0){
-    lines.push("Side walkway mark thickness: "+fmtNum(r.sideW,2)+" ft"
-      +(r.calibrated?"  →  ≈"+fmtNum(r.sideWalkCu,1)+" cu":""));
+  if(r.divN>0){
+    lines.push("Divider thickness: "+fmtNum(r.divW,2)+" ft × "+r.divN
+      +(r.calibrated?"  →  ≈"+fmtNum(r.divCu,1)+" cu":""));
   }
   if(r.endN>0){
     lines.push("End walkway thickness: "+fmtNum(r.endW,2)+" ft each × "+r.endN
       +(r.calibrated?"  →  ≈"+fmtNum(r.endWalkCu,1)+" cu":""));
   }
   if(r.centerW>0){
-    lines.push("Center cart path (A↔B aisle): "+fmtNum(r.centerW,2)+" ft"
-      +(r.calibrated?"  →  ≈"+fmtNum(r.centerCu,1)+" cu (use as walk/gap between sides)":""));
+    lines.push("Center cart path: "+fmtNum(r.centerW,2)+" ft"
+      +(r.calibrated?"  →  ≈"+fmtNum(r.centerCu,1)+" cu (walk/gap between sides)":""));
   }
-  if(r.gapFt>0 && r.calibrated){
-    lines.push("Gap between slips: "+fmtNum(r.gapFt,2)+" ft → gap≈"+fmtNum(r.gapCu,1)+" cu");
+  if(r.calibrated && r.divW>0){
+    lines.push("Apply gap from divider width: gap≈"+fmtNum(r.gapCu,1)+" cu");
   }
   return lines.join("\n");
 }
+function formatRecipeOut(r){
+  // kept for any callers expecting a single blob
+  if(!r) return "Enter sizes and Calculate.";
+  return formatSlipsOnlyOut(r)+"\n\n"+formatFullDockOut(r);
+}
 function renderScaleRecipe(){
-  const out=document.getElementById("scale-recipe-out");
-  if(!out) return;
   const r=computeDockRecipe();
-  out.textContent=formatRecipeOut(r);
+  const outA=document.getElementById("scale-recipe-out-a");
+  if(outA) outA.textContent=formatSlipsOnlyOut(r);
+  const outB=document.getElementById("scale-recipe-out");
+  if(outB) outB.textContent=formatFullDockOut(r);
 }
 function applyScaleRecipeToSelected(){
   if(!canApplyScaleToDock()){
@@ -2616,24 +2720,27 @@ function applyScaleRecipeToSelected(){
   if(!d){ alert("Selected dock not found."); return; }
   const sw=Math.round(r.stdSwCu);
   const sh=Math.round(r.stdShCu);
-  const gap=r.gapFt>0?Math.round(r.gapCu): (d.gap!=null?d.gap:3);
+  const gap=r.divW>0?Math.round(r.gapCu):(d.gap!=null?d.gap:3);
+  const extrasNote=(r.extraSizes||[]).filter(s=>s.n>0)
+    .map(s=>s.n+"×"+fmtNum(s.along,1)+"×"+fmtNum(s.into,1)).join(", ");
   let msg="Apply to dock \""+(d.name||d.id)+"\"?\n\n"
     +"type → "+r.type+"\n"
-    +"sw → "+sw+"  sh → "+sh
-    +(r.gapFt>0?"\ngap → "+gap:"")
-    +"\n\nExtras ("+r.exN+" × "+fmtNum(r.exAlong,1)+"×"+fmtNum(r.exInto,1)+" ft) are left as a note only."
+    +"primary slip (largest count) → sw "+sw+"  sh "+sh
+    +"\n  ("+r.stdN+" × "+fmtNum(r.stdAlong,1)+"×"+fmtNum(r.stdInto,1)+" ft)"
+    +(r.divW>0?"\ngap from divider → "+gap:"")
+    +(extrasNote?"\n\nOther slip sizes (note only): "+extrasNote:"")
     +(r.centerW>0?"\nCenter cart path ≈ "+fmtNum(r.centerCu,1)+" cu (set walk/mark separately).":"");
   if(!confirm(msg)) return;
   d.type=r.type;
   if(d.type==="col"){ d.w=sw; d.h=sh; }
   else { d.sw=sw; d.sh=sh; }
-  if(r.gapFt>0) d.gap=gap;
+  if(r.divW>0) d.gap=gap;
   d.placed={};
-  // stash note on size field
   try{
-    const note="recipe: std "+r.stdN+"×"+fmtNum(r.stdAlong,1)+"×"+fmtNum(r.stdInto,1)
-      +(r.exN?(" + extra "+r.exN+"×"+fmtNum(r.exAlong,1)+"×"+fmtNum(r.exInto,1)):"" )
-      +" · center "+fmtNum(r.centerW,1)+"ft · ends "+r.endN+"×"+fmtNum(r.endW,1)+"ft";
+    const sizesNote=r.slipSizes.filter(s=>s.n>0)
+      .map(s=>s.n+"×"+fmtNum(s.along,1)+"×"+fmtNum(s.into,1)).join(" + ");
+    const note="recipe: slips "+sizesNote
+      +" · div "+r.divN+"×"+fmtNum(r.divW,1)+"ft · center "+fmtNum(r.centerW,1)+"ft · ends "+r.endN+"×"+fmtNum(r.endW,1)+"ft";
     d.size=note;
   }catch(_){}
   saveLayout();
@@ -2675,13 +2782,17 @@ function wireScaleUI(){
     if(!confirm("Clear saved chart scale calibration?")) return;
     clearChartScale();
   };
+  renderSlipSizeRows(SC_DEFAULT_SLIP_ROWS);
+  const addSlip=document.getElementById("btn-sc-add-slip");
+  if(addSlip) addSlip.onclick=()=> addSlipSizeRow();
+  const calcSlips=document.getElementById("btn-scale-calc-slips");
+  if(calcSlips) calcSlips.onclick=()=> renderScaleRecipe();
   const calc=document.getElementById("btn-scale-calc");
   if(calc) calc.onclick=()=> renderScaleRecipe();
   const apply=document.getElementById("btn-scale-apply");
   if(apply) apply.onclick=()=> applyScaleRecipeToSelected();
-  // live recalc on input
-  ["sc-std-n","sc-std-along","sc-std-into","sc-ex-n","sc-ex-along","sc-ex-into",
-   "sc-side-n","sc-side-w","sc-end-n","sc-end-w","sc-center-w","sc-gap-ft","sc-dock-type","sc-both-sides"
+  // live recalc on step-2 inputs
+  ["sc-div-n","sc-div-w","sc-end-n","sc-end-w","sc-center-w","sc-dock-type","sc-both-sides"
   ].forEach(id=>{
     const el=document.getElementById(id);
     if(el){ el.addEventListener("input", ()=>renderScaleRecipe()); el.addEventListener("change", ()=>renderScaleRecipe()); }
