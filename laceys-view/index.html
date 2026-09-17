@@ -487,8 +487,8 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
   <button type="button" class="btn" id="photo-nudge-u" title="Nudge up">↑</button>
   <button type="button" class="btn" id="photo-nudge-d" title="Nudge down">↓</button>
-  <label>Stretch width <input id="photo-scale-x" type="range" min="50" max="200" value="100"/><span id="photo-scale-x-val">100%</span></label>
-  <label>Stretch height <input id="photo-scale-y" type="range" min="50" max="200" value="100"/><span id="photo-scale-y-val">100%</span></label>
+  <label>Stretch width <input id="photo-scale-x" type="range" min="20" max="500" value="100"/><input id="photo-scale-x-num" type="number" min="20" max="500" value="100" style="width:4.2em;margin-left:6px"/><span id="photo-scale-x-val">100%</span></label>
+  <label>Stretch height <input id="photo-scale-y" type="range" min="20" max="500" value="100"/><input id="photo-scale-y-num" type="number" min="20" max="500" value="100" style="width:4.2em;margin-left:6px"/><span id="photo-scale-y-val">100%</span></label>
   <label>Rotate <input id="photo-rot" type="range" min="-30" max="30" value="0" step="0.5"/><span id="photo-rot-val">0°</span></label>
   <label>Step <input id="photo-step" type="number" min="1" max="200" value="20"/></label>
   <button type="button" class="btn" id="photo-reset-align" title="Reset photo position/scale/rotation to default">Reset photo align</button>
@@ -522,7 +522,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
       <button type="button" class="secondary" id="scale-clear-pts">Clear points</button>
       <button type="button" id="scale-measure-done">Done</button>
     </div>
-    <svg id="svg" viewBox="0 0 2400 1700" width="2400" height="1700" overflow="hidden"></svg>
+    <svg id="svg" viewBox="0 0 3200 2400" width="3200" height="2400" overflow="hidden"></svg>
     <div class="pan" aria-label="Pan map">
       <button type="button" id="pan-up" title="Move view up">↑</button>
       <button type="button" id="pan-left" title="Move view left">←</button>
@@ -672,7 +672,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=82-view"></script>
-<script src="app.js?v=82-view"></script>
+<script src="app-data.js?v=83-view"></script>
+<script src="app.js?v=83-view"></script>
 </body>
 </html>
