@@ -1,0 +1,18 @@
+const STORE="laceys-sandbox-slips-v1";
+const LAYOUT_STORE="laceys-sandbox-layout-v1";
+const load=()=>{try{return JSON.parse(localStorage.getItem(STORE)||"{}")}catch{return{}}};
+const save=d=>localStorage.setItem(STORE,JSON.stringify(d));
+let data=load();
+const svg=document.getElementById("svg");
+const NS="http://www.w3.org/2000/svg";
+const el=(n,a,t)=>{const e=document.createElementNS(NS,n);Object.entries(a||{}).forEach(([k,v])=>e.setAttribute(k,v));if(t!=null)e.textContent=t;return e;};
+const COLORS={pref:"#d2b48c",std:"#c9896a",wide:"#5aa0c4",sales:"#e39a7a",cruiser:"#e8c4b4",hb:"#6dad6a",fuel:"#e3c35c",courtesy:"#f3efe6"};
+const clone=o=>JSON.parse(JSON.stringify(o));
+const parseNums=str=>String(str||"").split(/[\s,]+/).map(s=>s.trim()).filter(Boolean).map(s=>/^\d+$/.test(s)?Number(s):s);
+const uid=p=>p+"-"+Math.random().toString(36).slice(2,8);
+const isLocked=d=>d.locked!==false;
+const DEFAULT_DOCKS=[];
+const DEFAULT_MARKS=[];
+const DEFAULT_LAYERS=[];
+const DEFAULT_STACK_ORDER=[];
+const DEFAULT_GROUPS=[];
