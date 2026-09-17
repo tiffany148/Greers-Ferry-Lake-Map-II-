@@ -73,7 +73,7 @@ function moveSlipById(slipId,dx,dy){
   });
 }
 
-const MAP_W=2400, MAP_H=1700; // SVG viewBox -- hard edit working area
+const MAP_W=3200, MAP_H=2400; // SVG viewBox -- hard edit working area (v83: expanded, docks stay top-left)
 const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function unionBox(a,b){
   if(!a) return b; if(!b) return a;
@@ -193,7 +193,7 @@ let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0}; // overlay registration vs chart
 const PHOTO_ALIGN_STORE="laceys-photo-align-v1";
 
-function clampPhotoScale(v){ return Math.max(0.2, Math.min(3, Number(v)||1)); }
+function clampPhotoScale(v){ return Math.max(0.2, Math.min(5, Number(v)||1)); }
 /** Normalize saved align: old `scale` → both axes; prefer scaleX/scaleY when present. */
 function normalizePhotoAlign(raw){
   if(!raw || typeof raw!=="object") return {x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
@@ -306,8 +306,8 @@ function applyPhotoAlign(){
   const sx=clampPhotoScale(photoAlign.scaleX!=null?photoAlign.scaleX:photoAlign.scale);
   const sy=clampPhotoScale(photoAlign.scaleY!=null?photoAlign.scaleY:photoAlign.scale);
   photoAlign.scaleX=sx; photoAlign.scaleY=sy; syncPhotoAlignScaleAvg();
-  const cx=1200, cy=850; // chart working-area center (viewBox 2400×1700)
-  const W=2400, H=1700;
+  const cx=MAP_W/2, cy=MAP_H/2; // chart working-area center
+  const W=MAP_W, H=MAP_H;
   const rot=Number(photoAlign.rot)||0;
   // Base image rect stays chart-sized with meet (full aerial, no slice crop — v64+).
   // Non-uniform scaleX/scaleY applied via transform so Stretch width pulls docks L/R
@@ -336,9 +336,13 @@ function applyPhotoAlign(){
   const syv=document.getElementById("photo-scale-y-val");
   const rv=document.getElementById("photo-rot-val");
   const rr=document.getElementById("photo-rot");
-  // UI range 50–200%; still allow internal values outside via pinch/legacy
-  if(sxEl) sxEl.value=String(Math.round(Math.max(50, Math.min(200, sx*100))));
-  if(syEl) syEl.value=String(Math.round(Math.max(50, Math.min(200, sy*100))));
+  // UI range 20–500%; still allow internal values outside via pinch/legacy (min clamp 0.2)
+  if(sxEl) sxEl.value=String(Math.round(Math.max(20, Math.min(500, sx*100))));
+  if(syEl) syEl.value=String(Math.round(Math.max(20, Math.min(500, sy*100))));
+  const sxNum=document.getElementById("photo-scale-x-num");
+  const syNum=document.getElementById("photo-scale-y-num");
+  if(sxNum) sxNum.value=String(Math.round(sx*100));
+  if(syNum) syNum.value=String(Math.round(sy*100));
   if(sxv) sxv.textContent=Math.round(sx*100)+"%";
   if(syv) syv.textContent=Math.round(sy*100)+"%";
   if(rr) rr.value=String(rot);
@@ -705,7 +709,7 @@ function nudgeLayers(dx,dy,scaleF,cx,cy){
   // Never nudge layerBg — photo stays put while docks/marks move (Move photo owns the aerial)
   let t=`translate(${dx} ${dy})`;
   if(scaleF!=null && Math.abs(scaleF-1)>1e-6){
-    const s=scaleF, ox=cx||1200, oy=cy||850;
+    const s=scaleF, ox=cx||(MAP_W/2), oy=cy||(MAP_H/2);
     t=`translate(${ox} ${oy}) scale(${s}) translate(${-ox} ${-oy}) translate(${dx} ${dy})`;
   }
   [layerStack, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.setAttribute("transform", t); });
@@ -801,8 +805,8 @@ function buildSlips(){
   });
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
-svg.appendChild(el("rect",{width:2400,height:1700,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:2400,height:1700,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
+svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox -- edit canvas = map, not letterbox
 loadPhotoAlign();
@@ -2872,6 +2876,21 @@ function syncLabelSizeUI(){
   };
   bindStretch("photo-scale-x", "x");
   bindStretch("photo-scale-y", "y");
+  const bindStretchNum=(id, axis)=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    const apply=()=>{
+      const v=clampPhotoScale((+el.value)/100);
+      el.value=String(Math.round(v*100));
+      if(axis==="x") photoAlign.scaleX=v; else photoAlign.scaleY=v;
+      syncPhotoAlignScaleAvg();
+      savePhotoAlign(); applyPhotoAlign();
+    };
+    el.onchange=()=>{ apply(); saveLayout(false); };
+    el.onkeydown=(e)=>{ if(e.key==="Enter"){ e.preventDefault(); apply(); saveLayout(false); } };
+  };
+  bindStretchNum("photo-scale-x-num", "x");
+  bindStretchNum("photo-scale-y-num", "y");
   const rr=document.getElementById("photo-rot");
   if(rr){ rr.oninput=()=>{ photoAlign.rot=+rr.value||0; savePhotoAlign(); applyPhotoAlign(); }; rr.onchange=()=>saveLayout(false); }
   bind("photo-reset-align", ()=>{
@@ -3063,9 +3082,9 @@ function printChart(){
   // Snapshot current SVG (includes layer colors / hidden slips as drawn)
   const clone=svg.cloneNode(true);
   clone.removeAttribute("style");
-  clone.setAttribute("width","2400");
-  clone.setAttribute("height","1700");
-  clone.setAttribute("viewBox","0 0 2400 1700");
+  clone.setAttribute("width",String(MAP_W));
+  clone.setAttribute("height",String(MAP_H));
+  clone.setAttribute("viewBox","0 0 "+MAP_W+" "+MAP_H);
   // Light paper-friendly water background (first big rect)
   const bgRect=clone.querySelector("rect");
   if(bgRect) bgRect.setAttribute("fill","#e8f2f1");
@@ -3780,7 +3799,7 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
     el.addEventListener("click", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
     if(VIEW_ONLY || LAYERS_EDIT_ONLY || SHARE_FOLLOW_MAIN){ el.disabled=true; el.style.opacity=".45"; }
   });
-  ["photo-scale-x","photo-scale-y","photo-rot"].forEach(id=>{
+  ["photo-scale-x","photo-scale-y","photo-scale-x-num","photo-scale-y-num","photo-rot"].forEach(id=>{
     const el=document.getElementById(id);
     if(!el) return;
     el.addEventListener("input", function(ev){ if(blockEdit()){ ev.stopImmediatePropagation(); ev.preventDefault(); } }, true);
