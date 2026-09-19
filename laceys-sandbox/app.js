@@ -73,7 +73,7 @@ function moveSlipById(slipId,dx,dy){
   });
 }
 
-const MAP_W=3200, MAP_H=2400; // SVG viewBox -- hard edit working area (v83: expanded, docks stay top-left)
+const MAP_W=3200, MAP_H=2400; // SVG viewBox -- hard edit working area (v84: aerial slice fills workspace)
 const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function unionBox(a,b){
   if(!a) return b; if(!b) return a;
@@ -310,7 +310,7 @@ function applyPhotoAlign(){
   const cx=MAP_W/2, cy=MAP_H/2; // chart working-area center
   const W=MAP_W, H=MAP_H;
   const rot=Number(photoAlign.rot)||0;
-  // Base image rect stays chart-sized with meet (full aerial, no slice crop — v64+).
+  // Base image rect stays chart-sized with slice (cover/fill entire MAP_W×MAP_H — v84).
   // Non-uniform scaleX/scaleY applied via transform so Stretch width pulls docks L/R
   // without the same height change; uniform sx=sy matches prior scale behavior.
   const dx=Number(photoAlign.x)||0;
@@ -319,7 +319,7 @@ function applyPhotoAlign(){
   bgImg.setAttribute("y", "0");
   bgImg.setAttribute("width", String(W));
   bgImg.setAttribute("height", String(H));
-  bgImg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+  bgImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
   // Center of photo working area after pan is (cx+dx, cy+dy); scale/rotate about that.
   const px=cx+dx, py=cy+dy;
   if(dx||dy||rot||Math.abs(sx-1)>1e-6||Math.abs(sy-1)>1e-6){
@@ -807,7 +807,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"xMidYMid meet"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"xMidYMid slice"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox -- edit canvas = map, not letterbox
 loadPhotoAlign();
@@ -2898,6 +2898,13 @@ function syncLabelSizeUI(){
     photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
     savePhotoAlign(); saveLayout(false); applyPhotoAlign();
   });
+  bind("photo-fit-workspace", ()=>{
+    // Default fill: slice + identity pan/scale/rot covers MAP_W×MAP_H
+    photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
+    savePhotoAlign(); saveLayout(false); applyPhotoAlign();
+    const h=document.getElementById("hint");
+    if(h) h.textContent="Aerial covers the full work area · use Stretch/Move to fine-tune";
+  });
   const moveBtn=document.getElementById("btn-photo-move");
   if(moveBtn) moveBtn.onclick=()=> setPhotoMoveMode(!photoMoveMode);
   const doneChip=document.getElementById("photo-move-done");
@@ -3790,7 +3797,7 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
   const et=document.getElementById("edit-toggle"); if(et){ et.hidden=true; et.onclick=()=>{ blockEdit(); }; }
   const etm=document.getElementById("edit-toggle-mobile"); if(etm){ etm.hidden=true; etm.onclick=()=>{ blockEdit(); }; }
   ["btn-photo-move","btn-dock-align","btn-gcp-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
-   "photo-reset-align","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
+   "photo-reset-align","photo-fit-workspace","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
    "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all",
    "btn-group-all","btn-group","btn-ungroup","strip-cover","btn-save-layout","btn-reset-blank",
    "export-layout","download-layout"].forEach(id=>{
