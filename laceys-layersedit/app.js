@@ -73,7 +73,7 @@ function moveSlipById(slipId,dx,dy){
   });
 }
 
-const MAP_W=3200, MAP_H=2400; // SVG viewBox -- hard edit working area (v84: aerial slice fills workspace)
+const MAP_W=3200, MAP_H=2400; // SVG viewBox -- hard edit working area (v85: aerial none stretches full photo to fill)
 const WORLD_W=MAP_W, WORLD_H=MAP_H;
 function unionBox(a,b){
   if(!a) return b; if(!b) return a;
@@ -309,16 +309,16 @@ function applyPhotoAlign(){
   const cx=MAP_W/2, cy=MAP_H/2; // chart working-area center
   const W=MAP_W, H=MAP_H;
   const rot=Number(photoAlign.rot)||0;
-  // Base image rect stays chart-sized with slice (cover/fill entire MAP_W×MAP_H — v84).
-  // Non-uniform scaleX/scaleY applied via transform so Stretch width pulls docks L/R
-  // without the same height change; uniform sx=sy matches prior scale behavior.
+  // Base image rect fills MAP_W×MAP_H with preserveAspectRatio none (whole aerial, no crop — v85).
+  // Portrait aerial stretches to landscape workspace; Move/Stretch fine-tune alignment.
+  // Non-uniform scaleX/scaleY applied via transform so Stretch width pulls independently of height.
   const dx=Number(photoAlign.x)||0;
   const dy=Number(photoAlign.y)||0;
   bgImg.setAttribute("x", "0");
   bgImg.setAttribute("y", "0");
   bgImg.setAttribute("width", String(W));
   bgImg.setAttribute("height", String(H));
-  bgImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+  bgImg.setAttribute("preserveAspectRatio", "none");
   // Center of photo working area after pan is (cx+dx, cy+dy); scale/rotate about that.
   const px=cx+dx, py=cy+dy;
   if(dx||dy||rot||Math.abs(sx-1)>1e-6||Math.abs(sy-1)>1e-6){
@@ -806,9 +806,9 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"xMidYMid slice"});
+const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
 layerBg.appendChild(bgImg);
-svg.setAttribute("overflow","hidden"); // clip to chart viewBox -- edit canvas = map, not letterbox
+svg.setAttribute("overflow","hidden"); // clip to chart viewBox — aerial fills workspace via none
 loadPhotoAlign();
 applyPhotoAlign();
 // layerStack paints docks+marks in stackOrder (cross-type z-order). Empty LOD groups kept for nudge/compat.
@@ -2898,11 +2898,11 @@ function syncLabelSizeUI(){
     savePhotoAlign(); saveLayout(false); applyPhotoAlign();
   });
   bind("photo-fit-workspace", ()=>{
-    // Default fill: slice + identity pan/scale/rot covers MAP_W×MAP_H
+    // Fill work area with whole aerial: none + identity pan/scale/rot
     photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0};
     savePhotoAlign(); saveLayout(false); applyPhotoAlign();
     const h=document.getElementById("hint");
-    if(h) h.textContent="Aerial covers the full work area · use Stretch/Move to fine-tune";
+    if(h) h.textContent="Full aerial stretched to fill the work area · Move and Stretch to align docks";
   });
   const moveBtn=document.getElementById("btn-photo-move");
   if(moveBtn) moveBtn.onclick=()=> setPhotoMoveMode(!photoMoveMode);
