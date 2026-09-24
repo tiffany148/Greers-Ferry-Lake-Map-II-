@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's sandbox (blank)</title>
+<title>Lacey's Narrows (view only)</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -420,9 +420,9 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 <div id="edit-sel-chip-desk" hidden></div>
 <div id="error-banner"></div>
 <div id="layout-tip-banner" style="display:none;margin:8px 16px;padding:8px 12px;border-radius:10px;background:#1a4a5c;color:#eef6f8;font-size:13px">Layout looks off? Use <b>Restore original chart</b> or <b>Reset Cruiser dock</b> in Dock tools. <button type="button" class="btn" id="layout-tip-dismiss" style="margin-left:8px">Got it</button></div>
-  <div class="kicker">SANDBOX · SEPARATE FROM MAIN LACEY'S CHART · NORTH UP</div>
+  <div class="kicker">GREERS FERRY LAKE · HIGDEN, AR · NORTH UP</div>
   <div class="top">
-    <h1>Lacey's sandbox (blank)</h1>
+    <h1>Lacey's Narrows</h1>
     <div class="meta">
       <div id="count"></div>
       <div id="hint">Click a numbered slip · drag to pan</div>
@@ -430,15 +430,15 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <button id="btn-undo" type="button" title="Undo">Undo</button>
         <button id="btn-redo" type="button" title="Redo">Redo</button>
         <button id="btn-save" type="button" title="Save current layout on this device (local only — does not push to GitHub)">Save</button>
-        <button id="btn-publish-layout" type="button" class="btn" title="Publish SANDBOX layout to laceys-sandbox/ on GitHub (never overwrites main laceys/)">Publish sandbox</button>
+        <button id="btn-publish-layout" type="button" class="btn" title="Push layout to live copies via GitHub Contents API (or download if no token)">Publish to copies</button>
         <button id="btn-download-published-layout" type="button" class="btn" title="Download published-layout.json as a backup">Download published-layout.json</button>
-        <button id="btn-reset-blank" type="button" title="Reset sandbox layout to blank defaults">Reset blank</button>
+        <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
         <button id="edit-toggle">Edit docks</button>
       </div>
       <div id="gh-publish-token-wrap" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.18);font-size:12px;max-width:640px">
         <div style="font-weight:700;margin-bottom:4px">GitHub publish token</div>
-        <div style="opacity:.9;margin-bottom:6px">SANDBOX publish only — writes to laceys-sandbox/published-layout.json (never laceys/). PAT needs Contents: Read and write on tiffany148/Greers-Ferry-Lake-Map-II-. Saved only on this device.</div>
+        <div style="opacity:.9;margin-bottom:6px">Create a fine-grained PAT at github.com/settings/tokens with Contents: Read and write on repo tiffany148/Greers-Ferry-Lake-Map-II- only. Saved only on this device — never written into published-layout.json.</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
           <input id="gh-publish-token" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:180px;padding:6px 8px;border-radius:8px;border:0;background:#0c3c41;color:#eef6f8"/>
           <button type="button" class="btn" id="btn-gh-token-save">Save token</button>
@@ -449,7 +449,6 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
     </div>
   </div>
 </header>
-<div id="sandbox-banner" style="margin:8px 16px;padding:8px 12px;border-radius:10px;background:#5c4a1a;color:#fff8e8;font-size:13px;border:1px solid #c9a227">Sandbox — separate from your main Lacey's chart. Add docks/labels freely. Storage keys and GitHub path are isolated (laceys-sandbox/).</div>
 <div class="multi-bar" id="multi-bar">
   <b id="multi-count">0 selected</b>
   <button type="button" class="btn" id="btn-multi-clear">Clear</button>
@@ -645,7 +644,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <button class="btn" id="btn-reset-cruiser" title="Restore Cruiser dock from baked defaults (double-row a+b + 801)">Reset Cruiser dock</button>
         <button class="btn" id="btn-restore-original" title="Reset all docks/marks/groups to baked chart (keeps slip occupancy)">Restore original chart</button>
         <button class="btn" id="btn-save-layout">Save layout</button>
-        <button class="btn" id="btn-publish-layout-dock" title="Publish SANDBOX layout to laceys-sandbox/ only (never main laceys/)">Publish sandbox layout</button>
+        <button class="btn" id="btn-publish-layout-dock" title="Push layout to live copies via GitHub (or download if no token)">Publish layout to live copies</button>
         <button class="btn" id="btn-download-published-layout-dock" title="Download published-layout.json as a backup">Download published-layout.json</button>
         <button class="btn" id="export-layout">Copy layout JSON</button>
         <button class="btn" id="download-layout">Download</button>
@@ -655,7 +654,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
       </div>
       <div id="gh-publish-token-wrap-dock" style="margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.12);font-size:12px">
         <div style="font-weight:700;margin-bottom:4px">GitHub publish token</div>
-        <p class="hint" style="margin:0 0 6px">SANDBOX only → laceys-sandbox/published-layout.json (never laceys/). Fine-grained PAT · Contents Read and write on tiffany148/Greers-Ferry-Lake-Map-II-.</p>
+        <p class="hint" style="margin:0 0 6px">Fine-grained PAT · Contents Read and write on tiffany148/Greers-Ferry-Lake-Map-II- only. Main device only.</p>
         <div class="st" style="margin-top:0">
           <input id="gh-publish-token-dock" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:160px;padding:6px 8px;border-radius:8px;border:0;background:#0c3c41;color:#eef6f8"/>
           <button type="button" class="btn" id="btn-gh-token-save-dock">Save token</button>
@@ -674,7 +673,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=85-sandbox"></script>
-<script src="app.js?v=85-sandbox"></script>
+<script src="app-data.js?v=86-view"></script>
+<script src="app.js?v=86-view"></script>
 </body>
 </html>

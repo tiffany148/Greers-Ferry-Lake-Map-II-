@@ -4,9 +4,9 @@ window.addEventListener("error",function(ev){
   if(b){ b.style.display="block"; b.textContent="JavaScript error: "+(ev && ev.message ? ev.message : "unknown"); }
 });
 
-const VIEW_ONLY=false;
+const VIEW_ONLY=true;
 const LAYERS_EDIT_ONLY=false;
-const IS_LAYOUT_SOURCE=true;
+const IS_LAYOUT_SOURCE=false;
 const SHARE_FOLLOW_MAIN=false;
 function blockEdit(){
   if(typeof SHARE_FOLLOW_MAIN!=="undefined" && SHARE_FOLLOW_MAIN){
@@ -191,8 +191,7 @@ function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|
 let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0}; // overlay registration vs chart
-const LAYERS_STORE="laceys-sandbox-layers-v1";
-const PHOTO_ALIGN_STORE="laceys-sandbox-photo-align-v1";
+const PHOTO_ALIGN_STORE="laceys-photo-align-v86";
 
 function clampPhotoScale(v){ return Math.max(0.2, Math.min(5, Number(v)||1)); }
 /** Normalize saved align: old `scale` → both axes; prefer scaleX/scaleY when present. */
@@ -213,7 +212,7 @@ function normalizePhotoAlign(raw){
 function syncPhotoAlignScaleAvg(){
   photoAlign.scale = clampPhotoScale(((Number(photoAlign.scaleX)||1)+(Number(photoAlign.scaleY)||1))/2);
 }
-const LABEL_SIZE_STORE="laceys-sandbox-label-size-v1";
+const LABEL_SIZE_STORE="laceys-label-size-v1";
 const LABEL_PX={small:8,classic:9,normal:11,large:14,xl:20};
 let labelSizeKey="normal";
 let photoMoveMode=false;
@@ -222,8 +221,8 @@ let gcpMode=false;
 let gcpPairs=[]; // {ax,ay,bx,by}
 let gcpPending=null; // {ax,ay} waiting for photo point
 let gcpDrag=null; // tap vs pan while in GCP mode
-const GCP_STORE="laceys-sandbox-gcp-pairs-v1";
-const SCALE_STORE="laceys-sandbox-scale-v1";
+const GCP_STORE="laceys-gcp-pairs-v1";
+const SCALE_STORE="laceys-scale-v1";
 let chartScaleCal={chartUnitsPerFoot:null,feetPerChartUnit:null}; // null = uncalibrated
 let scaleMeasureMode=false;
 let scaleForceCalibrate=false; // next 2-click pair is a calibration
@@ -352,7 +351,7 @@ function applyPhotoAlign(){
 
 function loadLayersStandalone(){
   try{
-    const raw=JSON.parse(localStorage.getItem(LAYERS_STORE)||"null");
+    const raw=JSON.parse(localStorage.getItem("laceys-layers-v1")||"null");
     if(Array.isArray(raw)&&raw.length) return raw;
   }catch(e){}
   if(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS)) return clone(DEFAULT_LAYERS);
@@ -372,10 +371,9 @@ function loadLayout(){
     const layers=Array.isArray(raw.layers)?clone(raw.layers):defaultLayers;
     let stackOrder=Array.isArray(raw.stackOrder)?clone(raw.stackOrder):[];
     if(!stackOrder.length) stackOrder=defaultStack;
-    if(raw.photoAlign){
-      photoAlign=normalizePhotoAlign(raw.photoAlign);
-      savePhotoAlign();
-    }
+    // v86 aerial: ignore stale photoAlign embedded in layout JSON (tuned to prior photo).
+    // Alignment lives in PHOTO_ALIGN_STORE (bumped key); empty key → default fill 100%/0/0.
+    // Do not wipe docks/marks — only skip image registration from layout.
     if(raw.photoMax!=null){ photoMax=Math.max(0, Math.min(1, Number(raw.photoMax))); }
     return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers,stackOrder};
   }catch{
@@ -399,7 +397,7 @@ function restoreSnap(s){
   if(raw.photoMax!=null) photoMax=Math.max(0, Math.min(1, Number(raw.photoMax)));
   lastSnap=s;
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem(LAYERS_STORE, JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
   selected=null; selectedDock=null; selectedMark=null; multi.clear(); moveWholeChart=false;
   redraw(); applyPhotoAlign(); applyDeepZoomLod(); renderDockEditor(); renderLayersEditor(); updateUndoBtns(); updateSelHint(); ensureMapVisible(); renderLayersEditor(); renderChips();
 }
@@ -807,7 +805,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
+const bgImg=el("image",{href:"dock-map.jpg?v=86",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox — aerial fills workspace via none
 loadPhotoAlign();
@@ -2266,7 +2264,7 @@ function dockAlignPinchDist(){
   return Math.hypot(dx,dy)||null;
 }
 
-/* ===== Scale / measurements calculator (laceys-sandbox-scale-v1) ===== */
+/* ===== Scale / measurements calculator (laceys-scale-v1) ===== */
 function canEditScaleCalibrate(){
   // MAIN + share (edit tools) can calibrate; view/layersedit read-only
   if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) return false;
@@ -2957,7 +2955,7 @@ function syncLabelSizeUI(){
   syncLabelFonts();
 })();
 document.getElementById("export-layout").onclick=async()=>{ensureStackOrder();const json=JSON.stringify({docks,marks,groups,layers,stackOrder},null,2);try{await navigator.clipboard.writeText(json);alert("Layout JSON copied.");}catch{prompt("Copy this layout JSON:",json);}};
-document.getElementById("download-layout").onclick=()=>{ensureStackOrder();const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers,stackOrder},null,2)],{type:"application/json"}));a.download="laceys-sandbox-layout.json";a.click();};
+document.getElementById("download-layout").onclick=()=>{ensureStackOrder();const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify({docks,marks,groups,layers,stackOrder},null,2)],{type:"application/json"}));a.download="laceys-layout.json";a.click();};
 document.getElementById("import-layout").onclick=()=>document.getElementById("import-file").click();
 document.getElementById("import-file").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const raw=JSON.parse(r.result);if(!raw.docks)throw 0;if(Array.isArray(raw.layers)) layers=raw.layers; localStorage.setItem(LAYOUT_STORE,JSON.stringify({docks:raw.docks,marks:raw.marks||[],groups:raw.groups||[],layers,stackOrder:Array.isArray(raw.stackOrder)?raw.stackOrder:[]})); saveLayersStore(); ({docks,marks,groups,layers,stackOrder}=loadLayout()); if(!Array.isArray(layers)) layers=[]; if(!Array.isArray(stackOrder)) stackOrder=[]; ensureStackOrder(); saveLayout(false);redraw();renderDockEditor();renderLayersEditor();renderChips();}catch{alert("Could not read that JSON file.");}};r.readAsText(f);};
 
@@ -2975,7 +2973,7 @@ function resetCruiserDock(){
   if(h) h.textContent='Cruiser dock restored from original chart';
 }
 function restoreOriginalChart(){
-  if(!confirm('Restore sandbox blank defaults? This clears docks/marks/groups. Slip occupancy is kept. Photo align resets too.')) return;
+  if(!confirm('Restore original chart layout? This resets all docks, marks, and groups to the baked defaults. Slip occupancy is kept. Photo align resets too.')) return;
   docks=clone(DEFAULT_DOCKS);
   marks=clone(DEFAULT_MARKS);
   groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[];
@@ -2996,7 +2994,7 @@ function restoreOriginalChart(){
 }
 function showLayoutTipBannerOnce(){
   try{
-    if(localStorage.getItem('laceys-sandbox-v67-layout-tip')) return;
+    if(localStorage.getItem('laceys-v67-layout-tip')) return;
   }catch(e){}
   const ban=document.getElementById('layout-tip-banner');
   if(!ban) return;
@@ -3004,11 +3002,11 @@ function showLayoutTipBannerOnce(){
   const d=document.getElementById('layout-tip-dismiss');
   if(d) d.onclick=()=>{
     ban.style.display='none';
-    try{ localStorage.setItem('laceys-sandbox-v67-layout-tip','1'); }catch(e){}
+    try{ localStorage.setItem('laceys-v67-layout-tip','1'); }catch(e){}
   };
 }
 
-document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset sandbox to blank defaults? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[];stackOrder=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER))?clone(DEFAULT_STACK_ORDER):[];ensureStackOrder();layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):layers;multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
+document.getElementById("reset-layout").onclick=()=>{if(!confirm("Reset to the saved main Lacey's layout? This clears hand edits on this device."))return;localStorage.removeItem(LAYOUT_STORE);docks=clone(DEFAULT_DOCKS);marks=clone(DEFAULT_MARKS);groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[];stackOrder=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER))?clone(DEFAULT_STACK_ORDER):[];ensureStackOrder();layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):layers;multi.clear();moveWholeChart=false;hist.length=0;future.length=0;lastSnap=snap();saveLayout(false);redraw();renderDockEditor();updateUndoBtns();updateSelHint();};
 
 (function wireRestoreButtons(){
   const rc=document.getElementById('btn-reset-cruiser');
@@ -3066,16 +3064,14 @@ function ensureMapVisible(){
     buildSlips();
     const slipCount=(typeof slips!=="undefined" && Array.isArray(slips)) ? slips.length : 0;
     const dockCount=Array.isArray(docks) ? docks.length : 0;
-    // Sandbox may be intentionally blank / few docks — only auto-restore when baked defaults exist
-    const baked=(typeof DEFAULT_DOCKS!=="undefined" && Array.isArray(DEFAULT_DOCKS)) ? DEFAULT_DOCKS.length : 0;
-    if(baked >= 3 && (dockCount < 3 || slipCount < 20)){
+    if(dockCount < 3 || slipCount < 20){
       docks=clone(DEFAULT_DOCKS);
       marks=clone(DEFAULT_MARKS);
       groups=[];
       try{
         localStorage.removeItem(LAYOUT_STORE);
-        localStorage.removeItem("laceys-sandbox-layout-legacy-v2");
-        localStorage.removeItem("laceys-sandbox-layout-legacy-v1");
+        localStorage.removeItem("laceys-layout-v2");
+        localStorage.removeItem("laceys-layout-v1");
       }catch(e){}
       saveLayout(false);
       buildSlips();
@@ -3128,16 +3124,17 @@ function printChart(){
 }
 
 
-const PUBLISHED_LAYOUT_KEY="laceys-sandbox-published-layout-v1";
+const PUBLISHED_LAYOUT_KEY="laceys-published-layout-v1";
 const PUBLISHED_LAYOUT_URLS=[
+  "../laceys/published-layout.json",
   "./published-layout.json",
-  "https://tiffany148.github.io/Greers-Ferry-Lake-Map-II-/laceys-sandbox/published-layout.json"
+  "https://tiffany148.github.io/Greers-Ferry-Lake-Map-II-/laceys/published-layout.json"
 ];
 const GH_PUBLISH_OWNER="tiffany148";
 const GH_PUBLISH_REPO="Greers-Ferry-Lake-Map-II-";
-const GH_PUBLISH_PATH="laceys-sandbox/published-layout.json";
+const GH_PUBLISH_PATH="laceys/published-layout.json";
 const GH_PUBLISH_BRANCH="main";
-const GH_PUBLISH_TOKEN_KEY="laceys-sandbox-gh-publish-token";
+const GH_PUBLISH_TOKEN_KEY="laceys-gh-publish-token";
 function buildPublishedPayload(){
   ensureStackOrder();
   return {
@@ -3197,7 +3194,9 @@ function applyPublishedLayout(payload, opts){
 function writePublishedLocal(payload){
   const json=JSON.stringify(payload);
   try{ localStorage.setItem(PUBLISHED_LAYOUT_KEY, json); }catch(e){}
-  // Sandbox: never write Electron userData published-layout.json (shared with main share/view)
+  if(window.laceysDesktop && typeof window.laceysDesktop.writePublishedLayout==="function"){
+    try{ return Promise.resolve(window.laceysDesktop.writePublishedLayout(json)); }catch(e){ return Promise.resolve(false); }
+  }
   return Promise.resolve(true);
 }
 function downloadPublishedLayoutFile(payload){
@@ -3350,7 +3349,7 @@ async function publishLayoutToGitHub(payload){
     }
   }
   const putBody={
-    message:"Publish Lacey's SANDBOX layout "+(payload.publishedAt||new Date().toISOString()),
+    message:"Publish Lacey's layout "+(payload.publishedAt||new Date().toISOString()),
     content:contentB64,
     branch:GH_PUBLISH_BRANCH
   };
@@ -3402,9 +3401,9 @@ async function publishLayoutToCopies(){
     return;
   }
   downloadPublishedLayoutFile(payload);
-  flashSave("Published sandbox · Web: upload into laceys-sandbox/ on GitHub (never laceys/)");
+  flashSave("Published · Desktop copies update on open. Web: upload published-layout.json into laceys/ on GitHub");
   try{
-    alert("Published SANDBOX layout only.\\n\\nDoes NOT update main Lacey's chart.\\nWeb: uploads to laceys-sandbox/published-layout.json only (or download backup). Desktop shared publish channel is disabled for sandbox.");
+    alert("Published layout for live copies.\\n\\nDesktop: other modes update on open/focus.\\nWeb: set a GitHub publish token (Contents write on tiffany148/Greers-Ferry-Lake-Map-II-) for auto-upload, or upload the downloaded published-layout.json into the laceys/ folder on GitHub, then refresh share/view/layers.");
   }catch(e){}
 }
 async function fetchPublishedLayoutJson(){
@@ -3486,7 +3485,7 @@ function saveNow(){
   // Persist exact current docks/marks/groups/layers (deletes included)
   const s=snap();
   localStorage.setItem(LAYOUT_STORE, s);
-  try{ localStorage.setItem("laceys-sandbox-layout-legacy-v2", s); }catch(e){}
+  try{ localStorage.setItem("laceys-layout-v2", s); }catch(e){}
   saveLayersStore();
   lastSnap=s;
   if(IS_LAYOUT_SOURCE){
@@ -3497,7 +3496,7 @@ function saveNow(){
 }
 
 function saveLayersStore(){
-  try{ localStorage.setItem(LAYERS_STORE, JSON.stringify(layers)); }catch(e){}
+  try{ localStorage.setItem("laceys-layers-v1", JSON.stringify(layers)); }catch(e){}
 }
 function renderLayersEditor(){
   const box=document.getElementById("layers-editor");
@@ -3710,7 +3709,7 @@ document.getElementById("btn-print").onclick=()=>printChart();
 const _fixBlank=document.getElementById("btn-reset-blank");
 if(_fixBlank) _fixBlank.onclick=()=>{
   if(!confirm("Restore the built-in Lacey\'s dock layout? (clears blank/corrupt offline save on this file)")) return;
-  try{ localStorage.removeItem(LAYOUT_STORE); localStorage.removeItem("laceys-sandbox-layout-legacy-v2"); localStorage.removeItem("laceys-sandbox-layout-legacy-v1"); }catch(e){}
+  try{ localStorage.removeItem(LAYOUT_STORE); localStorage.removeItem("laceys-layout-v2"); localStorage.removeItem("laceys-layout-v1"); }catch(e){}
   docks=clone(DEFAULT_DOCKS); marks=clone(DEFAULT_MARKS); groups=(typeof DEFAULT_GROUPS!=="undefined"&&Array.isArray(DEFAULT_GROUPS))?clone(DEFAULT_GROUPS):[]; stackOrder=(typeof DEFAULT_STACK_ORDER!=="undefined"&&Array.isArray(DEFAULT_STACK_ORDER))?clone(DEFAULT_STACK_ORDER):[]; ensureStackOrder(); layers=(typeof DEFAULT_LAYERS!=="undefined"&&Array.isArray(DEFAULT_LAYERS))?clone(DEFAULT_LAYERS):[];
   multi.clear(); moveWholeChart=false; hist.length=0; future.length=0; lastSnap=snap(); saveLayout(false); ensureMapVisible(); renderDockEditor(); renderChips(); updateUndoBtns(); alert("Layout restored.");
 };
