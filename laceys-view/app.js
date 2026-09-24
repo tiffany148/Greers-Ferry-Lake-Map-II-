@@ -191,7 +191,7 @@ function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|
 let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0}; // overlay registration vs chart
-const PHOTO_ALIGN_STORE="laceys-photo-align-v1";
+const PHOTO_ALIGN_STORE="laceys-photo-align-v86";
 
 function clampPhotoScale(v){ return Math.max(0.2, Math.min(5, Number(v)||1)); }
 /** Normalize saved align: old `scale` → both axes; prefer scaleX/scaleY when present. */
@@ -371,10 +371,9 @@ function loadLayout(){
     const layers=Array.isArray(raw.layers)?clone(raw.layers):defaultLayers;
     let stackOrder=Array.isArray(raw.stackOrder)?clone(raw.stackOrder):[];
     if(!stackOrder.length) stackOrder=defaultStack;
-    if(raw.photoAlign){
-      photoAlign=normalizePhotoAlign(raw.photoAlign);
-      savePhotoAlign();
-    }
+    // v86 aerial: ignore stale photoAlign embedded in layout JSON (tuned to prior photo).
+    // Alignment lives in PHOTO_ALIGN_STORE (bumped key); empty key → default fill 100%/0/0.
+    // Do not wipe docks/marks — only skip image registration from layout.
     if(raw.photoMax!=null){ photoMax=Math.max(0, Math.min(1, Number(raw.photoMax))); }
     return {docks,marks,groups:Array.isArray(raw.groups)?clone(raw.groups):[],layers,stackOrder};
   }catch{
@@ -806,7 +805,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
+const bgImg=el("image",{href:"dock-map.jpg?v=86",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox — aerial fills workspace via none
 loadPhotoAlign();
