@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's Narrows (view only)</title>
+<title>Lacey's Narrows (layers edit)</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -199,6 +199,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 .label-size-bar .btn.on{outline:2px solid #f0c14b}
 /* Keep align controls reachable while moving photo / aligning docks (incl. mobile edit) */
 @media (max-width:860px){
+  /* Align bars already shown during edit; keep them fixed (do not drop to relative) */
   body.editing.photo-moving .photo-align,
   body.editing.photo-moving .photo-op,
   body.editing.photo-moving .label-size-bar,
@@ -210,7 +211,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   body.editing.gcp-aligning .label-size-bar,
   body.editing.scale-measuring .photo-align,
   body.editing.scale-measuring .photo-op,
-  body.editing.scale-measuring .label-size-bar{ display:flex !important; flex-wrap:wrap; position:relative; z-index:45; }
+  body.editing.scale-measuring .label-size-bar{ display:flex !important; flex-wrap:wrap; z-index:56; }
 }
 
 /* Desktop/tablet: keep selection label visible while editing even if aside scrolled */
@@ -227,10 +228,12 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 /* Mobile full-screen edit: sticky chrome always on top; map below; Tools sheet on demand */
 #edit-chrome{ display:none; }
 @media (max-width:860px){
+  html.editing, body.editing{
+    overflow:hidden !important; overscroll-behavior:none; touch-action:manipulation;
+    height:100% !important; position:fixed; width:100%;
+  }
   body.editing .search,
   body.editing .chips,
-  body.editing .photo-op,
-  body.editing .photo-align,
   body.editing .kicker,
   body.editing .multi-bar,
   body.editing .edit-banner,
@@ -238,6 +241,32 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   body.editing .meta #count,
   body.editing header .top h1,
   body.editing header .hdr-actions{ display:none !important; }
+  /* Keep Align tools reachable on mobile edit (was fully hidden → Scale/GCP/Move unreachable) */
+  body.editing .photo-op,
+  body.editing .photo-align,
+  body.editing .label-size-bar{
+    display:flex !important; flex-wrap:wrap; gap:6px; align-items:center;
+    margin:0; padding:6px 8px; border-radius:0; background:#0c3c41;
+    position:fixed; left:0; right:0; z-index:55;
+    max-height:none; overflow:visible;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);
+  }
+  /* stacked under edit-chrome; exact tops set via --edit-chrome-h / --edit-align-h in JS */
+  body.editing .photo-op{ top: var(--edit-chrome-h, 56px); }
+  body.editing .label-size-bar{ top: calc(var(--edit-chrome-h, 56px) + var(--edit-photo-op-h, 0px)); }
+  body.editing .photo-align{ top: calc(var(--edit-chrome-h, 56px) + var(--edit-photo-op-h, 0px) + var(--edit-label-h, 0px)); }
+  body.editing .layout{
+    top: var(--edit-top, var(--edit-chrome-h, 56px)) !important;
+  }
+  body.editing .photo-align .btn,
+  body.editing .photo-op .btn{
+    min-height:44px; min-width:44px; padding:8px 10px; font-size:13px; font-weight:700;
+  }
+  body.editing .photo-align label{ font-size:12px; }
+  body.editing .photo-align input[type=range]{ width:88px; min-height:28px; }
+  body.editing .photo-align input[type=number]{ width:52px; min-height:40px; }
+  body.editing .photo-align > span:first-child,
+  body.editing .photo-align > span[style]{ font-size:11px; max-width:100%; }
   body.editing header{
     position:fixed; left:0; right:0; top:0; z-index:80;
     padding:0; margin:0; background:#0a3338;
@@ -402,6 +431,16 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 }
 
 
+
+@media (max-width:860px){
+  #gcp-align-chip, #scale-measure-chip, #photo-move-chip, #dock-align-chip{
+    top: auto; bottom: 96px; left: 6px; right: 6px; max-width: none;
+    padding: 10px; gap: 8px;
+  }
+  #gcp-align-chip button, #scale-measure-chip button, #photo-move-chip button, #dock-align-chip button{
+    min-height:44px; padding:10px 12px; font-size:14px;
+  }
+}
 </style>
 </head>
 <body>
@@ -435,6 +474,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <button id="btn-reset-blank" type="button" title="If the map is blank, click to restore docks">Fix blank map</button>
         <button id="btn-print" type="button" title="Printable chart">Print</button>
         <button id="edit-toggle">Edit docks</button>
+        <a id="link-sandbox" class="btn" href="../laceys-sandbox/" title="Blank playground — separate saves, never overwrites main" style="text-decoration:none;display:inline-flex;align-items:center">Sandbox (blank)</a>
       </div>
       <div id="gh-publish-token-wrap" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.18);font-size:12px;max-width:640px">
         <div style="font-weight:700;margin-bottom:4px">GitHub publish token</div>
@@ -477,11 +517,11 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   <span style="opacity:.85;font-size:12px">changes slip number size on the chart</span>
 </div>
 <div class="photo-align" id="photo-align-bar">
-  <span>Align</span>
-  <span style="opacity:.85;font-size:12px">Full aerial stretched to fill the work area (nothing cropped). Move and Stretch to align docks.</span>
-  <button type="button" class="btn" id="btn-photo-move" title="Drag the aerial to pan; Stretch width/height or pinch">Move photo</button>
-  <button type="button" class="btn" id="btn-scale-measure" title="Calibrate chart scale and measure real-world distances">Scale / measure</button>
-  <button type="button" class="btn" id="btn-gcp-align" title="Place matching points on docks and aerial, then Apply to line them up">GCP align</button>
+  <span>Align docks ↔ aerial</span>
+  <span style="opacity:.85;font-size:12px">1) Fill work area · 2) Move/Stretch/Rotate photo until close · <b>or</b> GCP: dock corner → photo spot → Apply. Prefer one path at a time.</span>
+  <button type="button" class="btn" id="btn-photo-move" title="Path A: drag the aerial to pan; use Stretch width/height or pinch. Docks stay put.">Move photo</button>
+  <button type="button" class="btn" id="btn-scale-measure" title="Calibrate chart scale (feet) and measure distances on the chart">Scale / measure</button>
+  <button type="button" class="btn" id="btn-gcp-align" title="Path B: tap a dock corner, then the matching spot on the aerial. 2+ pairs → Apply moves docks onto the photo.">GCP align</button>
   <button type="button" class="btn" id="btn-dock-align" hidden title="Advanced: scale docks onto aerial (can warp layout — prefer Restore original chart)">Align docks to photo</button>
   <button type="button" class="btn" id="photo-nudge-l" title="Nudge left">←</button>
   <button type="button" class="btn" id="photo-nudge-r" title="Nudge right">→</button>
@@ -509,7 +549,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
       <button type="button" id="dock-align-done">Done aligning</button>
     </div>
     <div id="gcp-align-chip" hidden>
-      <span>GCP align — tap a dock corner, then the matching spot on the aerial. Need 2+ pairs.</span>
+      <span>GCP — tap dock corner (A), then same corner on aerial (B). 2+ pairs, then Apply. Drag=pan · tap=place.</span>
       <span id="gcp-pair-count">0 pairs</span>
       <button type="button" class="secondary" id="gcp-undo-pair">Undo last pair</button>
       <button type="button" class="secondary" id="gcp-clear-pairs">Clear pairs</button>
@@ -518,7 +558,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
       <button type="button" id="gcp-align-done">Done</button>
     </div>
     <div id="scale-measure-chip" hidden>
-      <span>Scale / measure — click two points on the chart</span>
+      <span>Scale / measure — tap two points (drag=pan · tap=place). Calibrate asks for feet.</span>
       <span id="scale-measure-status">Click first point</span>
       <button type="button" class="secondary" id="scale-clear-pts">Clear points</button>
       <button type="button" id="scale-measure-done">Done</button>
@@ -673,7 +713,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=86-view"></script>
-<script src="app.js?v=86-view"></script>
+<script src="app-data.js?v=87-layers"></script>
+<script src="app.js?v=87-layers"></script>
 </body>
 </html>
