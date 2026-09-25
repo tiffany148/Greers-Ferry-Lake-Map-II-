@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Lacey's Narrows (layers edit)</title>
+<title>Lacey's Narrows (editable)</title>
 <meta name="theme-color" content="#0c3c41"/>
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
@@ -102,6 +102,10 @@ body.editing .edit-banner{display:block}
 .slip.multi text{fill:#1a1a1a !important; paint-order:stroke; stroke:#ffe08a; stroke-width:3px}
 .multi-bar{display:none;margin:8px 16px 0;padding:10px 12px;border-radius:12px;background:#1a5c62;align-items:center;gap:8px;flex-wrap:wrap}
 body.editing.multipick .multi-bar{display:flex}
+body.editing.sel-active .multi-bar{display:flex}
+body.editing.sel-active:not(.multipick) #btn-multi-clear,
+body.editing.sel-active:not(.multipick) #btn-multi-done{display:none}
+
 .multi-bar b{flex:1 1 auto;font-size:14px}
 .multi-bar .btn{padding:10px 14px;font-size:14px;min-height:44px}
 .pick-list{max-height:42vh;overflow:auto;margin:10px 0;border-radius:12px;background:#0a3539}
@@ -642,6 +646,9 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   <b id="multi-count">0 selected</b>
   <button type="button" class="btn" id="btn-multi-clear">Clear</button>
   <button type="button" class="btn" id="btn-multi-move">Move selected</button>
+  <button type="button" class="btn" id="btn-multi-scale-down" title="Resize selection smaller">Scale −</button>
+  <button type="button" class="btn" id="btn-multi-scale-up" title="Resize selection larger">Scale +</button>
+  <button type="button" class="btn" id="btn-multi-lock">Lock as dock</button>
   <button type="button" class="btn" id="btn-multi-done">Done</button>
 </div>
 <div class="edit-banner">Edit: drag docks on the map · use the right panel (Dock / Layers) for tools · Undo/Redo/Save in the header. Empty water pans; pinch/zoom stays on the map.</div>
@@ -765,7 +772,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
     </div>
     <div id="pane-layout" hidden>
       <h2>Move & edit</h2>
-      <p class="hint">Chart-first layout. <b>Reset Cruiser dock</b> restores the baked double-row cruiser. <b>Restore original chart</b> resets all docks/marks (keeps slip occupancy). Use Lock / Unlock on any dock.</p>
+      <p class="hint">Workflow: <b>Unlock slips</b> on a dock → <b>Multi-select</b> the slips you want → drag to move / Scale± to resize together → <b>Lock as dock</b> when done. Tools stay closed until you tap Tools.</p>
       <div class="st">
         <button class="btn" id="add-dock">+ Dock</button>
         <button class="btn" id="add-slip-free">+ Slip</button>
@@ -773,13 +780,15 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <button class="btn" id="add-box">+ Building</button>
         <button class="btn" id="add-label">+ Label</button>
         <button class="btn" id="btn-dup">Duplicate</button>
-        <button class="btn" id="btn-multi" type="button" title="Tap docks/labels to add or remove them">Multi-select</button>
+        <button class="btn" id="btn-multi" type="button" title="Tick docks, dock sides, or individual slips">Multi-select</button>
         <button class="btn" id="btn-select-all">Select all</button>
         <button class="btn" id="btn-group-all">Select / group all</button>
-        <button class="btn" id="btn-group">Group selected</button>
+        <button class="btn" id="btn-group" title="Keep selection moving as one unit">Group / Join</button>
+        <button class="btn" id="btn-lock-as-dock" type="button" title="Relock selected slips/docks as one dock unit">Lock as dock</button>
+        <button class="btn" id="btn-unlock-slips" type="button" title="Unlock slips on the selected dock so you can move them alone">Unlock slips</button>
         <button class="btn" id="btn-ungroup">Ungroup</button>
       </div>
-      <p class="hint" id="sel-hint">Turn on Multi-select, then tick items in the list (easiest on phones). You can also tap the map.</p>
+      <p class="hint" id="sel-hint">Turn on Multi-select, then tick docks, dock sides, or slips (easiest on phones). You can also tap the map.</p>
       <div id="pick-list" hidden></div>
       <div id="dock-editor"><p>No element selected.</p></div>
 
@@ -874,7 +883,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=89-layers"></script>
-<script src="app.js?v=89-layers"></script>
+<script src="app-data.js?v=90-layers"></script>
+<script src="app.js?v=90-layers"></script>
 </body>
 </html>

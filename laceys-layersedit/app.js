@@ -478,6 +478,7 @@ function updateSelHint(){
   const el=document.getElementById("sel-hint"); if(!el) return;
   document.querySelectorAll("#btn-multi, #btn-multi-hdr").forEach(btn=>{ if(btn) btn.classList.toggle("on", multiPick); });
   document.body.classList.toggle("multipick", !!(editing && multiPick));
+  document.body.classList.toggle("sel-active", !!(editing && multi.size>1));
   const countEl=document.getElementById("multi-count");
   if(countEl) countEl.textContent = multi.size ? (multi.size+" selected") : "Tap list or map to pick";
   const moveBtn=document.getElementById("btn-multi-move");
@@ -557,7 +558,18 @@ function renderPickList(){
   docks.forEach(d=>{
     const k="dock:"+d.id;
     const on=multi.has(k);
-    rows.push(`<label class="pick-row${on?" on":""}" data-k="${k}"><input type="checkbox" ${on?"checked":""}/><span>${pieceLabel("dock",d.id)}</span></label>`);
+    rows.push(`<label class="pick-row${on?" on":""}" data-k="${k}"><input type="checkbox" ${on?"checked":""}/><span>${pieceLabel("dock",d.id)}${isLocked(d)?"":" · unlocked"}</span></label>`);
+  });
+  rows.push('<div class="pick-section">Dock sides</div>');
+  docks.forEach(d=>{
+    [["a","Side A (left/top)"],["b","Side B (right/bottom)"]].forEach(([side,label])=>{
+      const nums=(d[side]||[]).map(String);
+      if(!nums.length) return;
+      const slipKeys=nums.map(n=>"slip:"+n);
+      const on=slipKeys.every(k=>multi.has(k));
+      const sk="side:"+d.id+":"+side;
+      rows.push(`<label class="pick-row${on?" on":""}" data-side-keys="${slipKeys.join(",")}" data-k="${sk}"><input type="checkbox" ${on?"checked":""}/><span>${d.name||d.id} · ${label} (${nums.length})</span></label>`);
+    });
   });
   rows.push('<div class="pick-section">Slips</div>');
   const slipRows=[];
@@ -566,7 +578,7 @@ function renderPickList(){
       const id=String(s.id);
       const k="slip:"+id;
       const on=multi.has(k);
-      const label=pieceLabel("slip", id);
+      const label=pieceLabel("slip", id)+(isLocked(d)?"":" · free");
       slipRows.push({k,on,label,sort:String(s.num!=null?s.num:id)});
     });
   });
@@ -584,6 +596,15 @@ function renderPickList(){
   box.querySelectorAll(".pick-row").forEach(row=>{
     const inp=row.querySelector("input");
     const apply=()=>{
+      const sideKeys=row.getAttribute("data-side-keys");
+      if(sideKeys){
+        sideKeys.split(",").filter(Boolean).forEach(k=>{
+          if(inp.checked) multi.add(k); else multi.delete(k);
+        });
+        if(multi.size<=1) moveWholeChart=false;
+        updateSelHint(); redraw(); renderDockEditor();
+        return;
+      }
       const k=row.getAttribute("data-k");
       if(inp.checked) multi.add(k); else multi.delete(k);
       if(multi.size<=1) moveWholeChart=false;
@@ -770,6 +791,198 @@ function scaleMembersByKeys(keys,f,cx,cy){
       });
     }
   });
+}
+function selectionKeys(){
+  if(multi.size) return [...multi];
+  const keys=[];
+  if(selectedDock) keys.push("dock:"+selectedDock);
+  if(selectedMark) keys.push("mark:"+selectedMark);
+  if(selected) keys.push("slip:"+selected);
+  return keys;
+}
+function parentDocksFromKeys(keys){
+  const ids=new Set();
+  (keys||[]).forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="dock") ids.add(id);
+    else if(kind==="slip"){ const d=findDockForSlipId(id); if(d) ids.add(d.id); }
+  });
+  return [...ids].map(id=>docks.find(d=>d.id===id)).filter(Boolean);
+}
+function unlockSelectionSlips(){
+  const docksToUnlock=parentDocksFromKeys(selectionKeys());
+  if(!docksToUnlock.length){
+    alert("Select a dock (or slips on a dock) first, then Unlock slips.");
+    return false;
+  }
+  docksToUnlock.forEach(d=>{ d.locked=false; });
+  // Ensure each selected slip has placed coords so it can move independently
+  selectionKeys().forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind!=="slip") return;
+    const info=slipWorldPos(id); if(!info) return;
+    const s=info.slip, d=info.dock;
+    if(!(d.placed&&d.placed[String(id)])){
+      setPlaced(d, String(id), {x:s.x,y:s.y,w:s.w,h:s.h,rot:s.rot||0,fill:s.fill});
+    }
+  });
+  // Also bake placed for all slips on unlocked docks so geometry stays put when walking/generated layout changes aren't needed
+  docksToUnlock.forEach(d=>{
+    generatedSlips(d).forEach(raw=>{
+      const s=applyPlaced(d, raw);
+      if(!(d.placed&&d.placed[String(s.id)])){
+        setPlaced(d, String(s.id), {x:s.x,y:s.y,w:s.w,h:s.h,rot:s.rot||0,fill:s.fill});
+      }
+    });
+  });
+  multiPick=false;
+  moveWholeChart=false;
+  const h=document.getElementById("hint");
+  if(h) h.textContent="Unlocked · Multi-select slips to move/resize together, or drag one slip";
+  saveLayout(); redraw(); renderDockEditor(); updateSelHint(); updateSelChip();
+  return true;
+}
+function removeSlipFromDock(d, slipId){
+  const sid=String(slipId);
+  d.a=(d.a||[]).filter(n=>String(n)!==sid);
+  d.b=(d.b||[]).filter(n=>String(n)!==sid);
+  d.extras=(d.extras||[]).filter(ex=>String(ex.num)!==sid);
+  if(d.placed) delete d.placed[sid];
+}
+function lockSelectionAsDock(){
+  const keys=selectionKeys();
+  const slipKeys=keys.filter(k=>k.startsWith("slip:"));
+  const dockKeys=keys.filter(k=>k.startsWith("dock:"));
+  const parents=parentDocksFromKeys(keys);
+  if(!parents.length && !dockKeys.length){
+    alert("Select a dock, or Multi-select slips that belong to a dock, then Lock as dock.");
+    return false;
+  }
+  // If slips come from more than one parent dock, re-parent them into one new locked dock
+  const uniqueParents=new Set(parents.map(d=>d.id));
+  if(slipKeys.length>=2 && uniqueParents.size>1){
+    return joinSelectionAsNewDock(true);
+  }
+  // Same parent (or dock selected): relock parent dock(s), keep placed positions
+  parents.forEach(d=>{ d.locked=true; });
+  if(keys.length>=2){
+    // Keep a named group so the selection still moves as one if mixed with marks
+    groups=groups.filter(g=>g.name!=="Locked selection");
+    groups.push({id:uid("grp"),name:"Locked selection",members:[...keys]});
+  }
+  multiPick=false;
+  moveWholeChart=true;
+  // Prefer selecting the primary dock so Unlock/Lock stays obvious next time
+  if(parents.length===1){
+    selectedDock=parents[0].id; selected=null; selectedMark=null;
+    if(!multi.size) multi.add("dock:"+parents[0].id);
+  }
+  const h=document.getElementById("hint");
+  if(h) h.textContent="Locked as dock · drag moves the whole unit · Unlock slips to adjust again";
+  saveLayout(); redraw(); renderDockEditor(); updateSelHint(); updateSelChip();
+  return true;
+}
+function joinSelectionAsNewDock(quiet){
+  const keys=selectionKeys();
+  const slipIds=keys.filter(k=>k.startsWith("slip:")).map(k=>k.slice(5));
+  if(slipIds.length<1 && keys.some(k=>k.startsWith("dock:"))){
+    // Lock docks only
+    parentDocksFromKeys(keys).forEach(d=>{ d.locked=true; });
+    multiPick=false; moveWholeChart=true;
+    saveLayout(); redraw(); renderDockEditor(); updateSelHint();
+    return true;
+  }
+  if(slipIds.length<2){
+    if(!quiet) alert("Multi-select at least two slips first, then Lock as dock / Join.");
+    return false;
+  }
+  const pieces=[];
+  slipIds.forEach(id=>{
+    const info=slipWorldPos(id);
+    if(info) pieces.push({id:String(id), dock:info.dock, slip:info.slip});
+  });
+  if(pieces.length<2){ alert("Could not resolve those slips on the chart."); return false; }
+  const minX=Math.min(...pieces.map(p=>Number(p.slip.x)||0));
+  const minY=Math.min(...pieces.map(p=>Number(p.slip.y)||0));
+  const avgW=pieces.reduce((a,p)=>a+(Number(p.slip.w)||40),0)/pieces.length;
+  const avgH=pieces.reduce((a,p)=>a+(Number(p.slip.h)||16),0)/pieces.length;
+  const name=quiet?("Joined "+pieces.length+" slips"): (prompt("Name for the new dock?","Joined slips")||"Joined slips");
+  if(name==null) return false;
+  const newDock={
+    id:uid("dock"), name:String(name).trim()||"Joined slips", type:"col",
+    x:minX, y:minY, kind:(pieces[0].slip.kind||pieces[0].dock.kind||"std"),
+    size:"Custom", locked:true, gap:Math.max(2, Math.round(avgH+2)),
+    w:Math.round(avgW), h:Math.round(avgH), sw:Math.round(avgW), sh:Math.round(avgH),
+    a:[], b:[], extras:[], placed:{}, fill:pieces[0].dock.fill
+  };
+  pieces.forEach(p=>{
+    removeSlipFromDock(p.dock, p.id);
+    const num=/^\d+$/.test(p.id)?Number(p.id):p.id;
+    newDock.extras.push({
+      num, dx:(Number(p.slip.x)||0)-minX, dy:(Number(p.slip.y)||0)-minY,
+      w:Number(p.slip.w)||avgW, h:Number(p.slip.h)||avgH,
+      kind:p.slip.kind, size:p.slip.size, filter:p.slip.filter
+    });
+    if(p.slip.fill){
+      newDock.placed[String(num)]={x:Number(p.slip.x)||minX, y:Number(p.slip.y)||minY, w:Number(p.slip.w)||avgW, h:Number(p.slip.h)||avgH, rot:p.slip.rot||0, fill:p.slip.fill};
+    }
+  });
+  // Drop empty docks left behind (no slips)
+  docks=docks.filter(d=>{
+    if(d.id===newDock.id) return true;
+    const left=generatedSlips(d);
+    return left.length>0 || (d.a&&d.a.length) || (d.b&&d.b.length) || (d.extras&&d.extras.length);
+  });
+  docks.push(newDock);
+  ensureStackOrder();
+  stackMove(["dock:"+newDock.id],"front");
+  groups=groups.filter(g=>!(g.members||[]).some(k=>slipIds.some(id=>k==="slip:"+id)));
+  groups.push({id:uid("grp"),name:newDock.name,members:["dock:"+newDock.id]});
+  multi.clear(); multi.add("dock:"+newDock.id);
+  selectedDock=newDock.id; selected=null; selectedMark=null;
+  multiPick=false; moveWholeChart=true;
+  const h=document.getElementById("hint");
+  if(h) h.textContent="Joined as dock “"+newDock.name+"” · locked · drag moves the whole unit";
+  saveLayout(); redraw(); renderDockEditor(); updateSelHint(); updateSelChip();
+  return true;
+}
+function scaleSelectionByFactor(f){
+  f=Number(f)||1; if(Math.abs(f-1)<1e-9) return false;
+  const keys=selectionKeys();
+  if(!keys.length){ alert("Select or Multi-select pieces first."); return false; }
+  const box=keysBBox(keys)||{x:0,y:0,w:MAP_W,h:MAP_H};
+  const cx=box.x+box.w/2, cy=box.y+box.h/2;
+  scaleMembersByKeys(keys, f, cx, cy);
+  sanitizeLayout(); saveLayout(); redraw(); renderDockEditor(); updateSelHint();
+  return true;
+}
+function resizeSelectionSlips(dw, dh){
+  dw=Number(dw)||0; dh=Number(dh)||0;
+  if(!dw && !dh) return false;
+  const keys=selectionKeys();
+  let n=0;
+  keys.forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="slip"){
+      const info=slipWorldPos(id); if(!info) return;
+      const s=info.slip;
+      setPlaced(info.dock, String(id), {
+        x:s.x, y:s.y,
+        w:Math.max(6, (Number(s.w)||10)+dw),
+        h:Math.max(6, (Number(s.h)||10)+dh),
+        rot:s.rot||0, fill:s.fill
+      });
+      n++;
+    }else if(kind==="dock"){
+      const d=docks.find(x=>x.id===id); if(!d) return;
+      if(d.type==="col"){ d.w=Math.max(6,(Number(d.w)||40)+dw); d.h=Math.max(6,(Number(d.h)||16)+dh); }
+      else { d.sw=Math.max(6,(Number(d.sw)||d.w||40)+dw); d.sh=Math.max(6,(Number(d.sh)||d.h||16)+dh); }
+      n++;
+    }
+  });
+  if(!n){ alert("Selection has no slips/docks to resize."); return false; }
+  sanitizeLayout(); saveLayout(); redraw(); renderDockEditor();
+  return true;
 }
 function keysForDrag(kind,id){
   const key=kind+":"+id;
@@ -1028,7 +1241,9 @@ function renderDockEditor(){
   const s=slips.find(x=>x.id===selected);
   if(s && editing && selectedDock && d && !isLocked(d)){
     const placed=(d.placed&&d.placed[s.id])||{};
-    box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip on the chart</p><label>Number / label<input id="ed-num" value="${s.num}"/></label>`+
+    box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip · Multi-select several, then Lock as dock when done</p>
+      <div class="st"><button type="button" class="btn" id="ed-lock-as-dock">Lock as dock</button><button type="button" class="btn" id="ed-unlock-slips" disabled>Unlock slips</button></div>
+      <label>Number / label<input id="ed-num" value="${s.num}"/></label>`+
       placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(s.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(s.y)}"/></label></div><div class="row2"><label>Width<input id="ed-w" type="number" value="${Math.round(s.w)}"/></label><label>Height<input id="ed-h" type="number" value="${Math.round(s.h)}"/></label></div>${rotCtrl(Number(s.rot)||0)}${nudgeCtrlHtml()}`)+
       `<label>Color<input id="ed-fill" type="color" value="${placed.fill||d.fill||COLORS[s.kind]||"#e4dcc8"}"/></label><div class="st"><button type="button" id="ed-dup-slip">Duplicate slip</button><button type="button" id="ed-del-slip">Delete this slip</button></div>`;
     const apply=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value,nw=+document.getElementById("ed-w").value,nh=+document.getElementById("ed-h").value;const box0={x:nx,y:ny,w:Math.max(1,nw),h:Math.max(1,nh)};const c=clampDeltaForBox(box0,0,0);setPlaced(d,s.id,{x:nx+c.dx,y:ny+c.dy,w:nw,h:nh,fill:document.getElementById("ed-fill").value});saveLayout();redraw();};
@@ -1060,12 +1275,17 @@ function renderDockEditor(){
       if(d.placed) delete d.placed[s.id];
       selected=null;saveLayout();redraw();renderDockEditor();
     };
+    const lockBtn=document.getElementById("ed-lock-as-dock");
+    if(lockBtn) lockBtn.onclick=()=>{ selectedDock=d.id; if(!multi.size) multi.add("dock:"+d.id); lockSelectionAsDock(); };
     return;
   }
   if(d){
     const locked=isLocked(d);
     const moreOpen=!isMobileEdit()||dockEditorMore;
-    box.innerHTML=`<h2>Dock ${d.name}</h2>`+
+    box.innerHTML=`<h2>Dock ${d.name}</h2>
+      <div class="st"><button type="button" class="btn" id="ed-lock">${locked?"Unlock slips":"Lock as dock"}</button>
+      <button type="button" class="btn" id="ed-multi-here" title="Multi-select slips on this dock">Multi-select slips</button></div>
+      <p class="hint">${locked?"Locked as one dock unit. Unlock slips → Multi-select the ones you want → move/resize → Lock as dock when done.":"Unlocked: drag slips one at a time, or Multi-select several to move/resize together, then Lock as dock."}</p>`+
       placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
       <div class="row2"><label>Slip width<input id="ed-sw" type="number" value="${Math.round(d.sw||d.w||40)}"/></label><label>Slip height<input id="ed-sh" type="number" value="${Math.round(d.sh||d.h||15)}"/></label></div>
       <label>Gap<input id="ed-gap" type="number" value="${Math.round(d.gap||3)}"/></label>
@@ -1075,8 +1295,6 @@ function renderDockEditor(){
       `<div id="ed-more-block"${moreOpen?"":" hidden"}>
       <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>
       <label>Layout<select id="ed-type"><option value="ns"${d.type==="ns"?" selected":""}>North–south finger</option><option value="ew"${d.type==="ew"?" selected":""}>East–west finger</option><option value="col"${d.type==="col"?" selected":""}>Single column</option></select></label>
-      <div class="st"><button type="button" id="ed-lock">${locked?"Unlock slips":"Lock slips together"}</button></div>
-      <p class="hint">${locked?"Locked: the whole dock moves as one. Unlock to drag slips one at a time.":"Unlocked: drag slips individually. Lock when the layout looks right."}</p>
       <div class="row2"><label>Side A count<input id="ed-acount" type="number" min="0" max="80" value="${(d.a||[]).length}"/></label><label>Side B count<input id="ed-bcount" type="number" min="0" max="80" value="${(d.b||[]).length}"/></label></div>
       <label>Left / top numbers<textarea id="ed-a" rows="3">${(d.a||[]).join(", ")}</textarea></label>
       <label>Right / bottom numbers<textarea id="ed-b" rows="3">${(d.b||[]).join(", ")}</textarea></label>
@@ -1085,7 +1303,23 @@ function renderDockEditor(){
       </div>`;
     const moreBtn=document.getElementById("ed-more-toggle");
     if(moreBtn) moreBtn.onclick=()=>{ dockEditorMore=!dockEditorMore; renderDockEditor(); };
-    document.getElementById("ed-lock").onclick=()=>{d.locked=!locked;saveLayout();redraw();renderDockEditor();};
+    document.getElementById("ed-lock").onclick=()=>{
+      if(locked){
+        selectedDock=d.id; unlockSelectionSlips();
+      }else{
+        selectedDock=d.id; if(!multi.size) multi.add("dock:"+d.id); lockSelectionAsDock();
+      }
+    };
+    const multiHere=document.getElementById("ed-multi-here");
+    if(multiHere) multiHere.onclick=()=>{
+      if(isLocked(d)) unlockSelectionSlips();
+      multi.clear();
+      generatedSlips(d).forEach(s=>multi.add("slip:"+String(s.id)));
+      setMultiPick(true);
+      const h=document.getElementById("hint");
+      if(h) h.textContent="Multi-select · untick slips you don’t want, then Done / Group / Lock as dock";
+      updateSelHint(); redraw(); renderDockEditor();
+    };
     document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value;saveLayout();redraw();};
     document.getElementById("ed-type").onchange=()=>{d.type=document.getElementById("ed-type").value;d.placed={};saveLayout();redraw();renderDockEditor();};
     const applyPos=()=>{const nx=+document.getElementById("ed-x").value,ny=+document.getElementById("ed-y").value;const rawDx=nx-d.x, rawDy=ny-d.y;const c=clampDeltaForBox(dockBBox(d),rawDx,rawDy);if(isLocked(d)) moveDockSlips(d,c.dx,c.dy);d.x+=c.dx;d.y+=c.dy;saveLayout();redraw();};
@@ -1163,9 +1397,69 @@ function renderDockEditor(){
     document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));ensureStackOrder();selectedMark=null;saveLayout();redraw();renderDockEditor();};
     bindStackButtons();
   }else if(multi.size>1){
-    box.innerHTML=`<h2>${multi.size} selected</h2><p class="hint">Group actions for the whole selection — stack order stays here.</p>${stackCtrlHtml()}`;
+    const parents=parentDocksFromKeys([...multi]);
+    const anyLocked=parents.some(d=>isLocked(d));
+    const anyUnlocked=parents.some(d=>!isLocked(d));
+    box.innerHTML=`<h2>${multi.size} selected</h2>
+      <p class="hint">Move on the map by dragging any selected piece. Resize together below. Lock as dock when finished so they act as one unit again.</p>
+      <div class="st">
+        <button type="button" class="btn" id="ed-sel-unlock">Unlock slips</button>
+        <button type="button" class="btn" id="ed-sel-lock">Lock as dock</button>
+      </div>
+      <div class="st">
+        <button type="button" class="btn" id="ed-sel-group">Group / Join</button>
+        <button type="button" class="btn" id="ed-sel-join-new">Join as new dock</button>
+      </div>
+      ${placementSec(`
+        <p class="hint" style="margin-top:0">Resize selection together</p>
+        <div class="st">
+          <button type="button" class="btn" id="ed-sel-scale-down" title="Scale 90%">Scale −</button>
+          <button type="button" class="btn" id="ed-sel-scale-up" title="Scale 110%">Scale +</button>
+        </div>
+        <div class="st">
+          <button type="button" class="btn" data-sel-resize="-4,0">W −</button>
+          <button type="button" class="btn" data-sel-resize="4,0">W +</button>
+          <button type="button" class="btn" data-sel-resize="0,-4">H −</button>
+          <button type="button" class="btn" data-sel-resize="0,4">H +</button>
+        </div>
+        ${nudgeCtrlHtml()}
+      `)}
+      ${stackCtrlHtml()}`;
     bindStackButtons();
-  }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label.</p>";
+    const u=document.getElementById("ed-sel-unlock");
+    if(u){ u.disabled=!parents.length; u.onclick=()=>unlockSelectionSlips(); }
+    const l=document.getElementById("ed-sel-lock");
+    if(l){ l.onclick=()=>lockSelectionAsDock(); }
+    const g=document.getElementById("ed-sel-group");
+    if(g) g.onclick=()=>{
+      if(multi.size<2) return;
+      const name=prompt("Group name?","Group "+(groups.length+1));
+      if(name==null) return;
+      groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
+      multiPick=false; moveWholeChart=true;
+      const h=document.getElementById("hint");
+      if(h) h.textContent="Grouped · drag to move all "+multi.size+" · Scale +/− to resize · Lock as dock when done";
+      saveLayout(); redraw(); updateSelHint(); updateSelChip(); renderDockEditor();
+    };
+    const j=document.getElementById("ed-sel-join-new");
+    if(j) j.onclick=()=>joinSelectionAsNewDock(false);
+    const sd=document.getElementById("ed-sel-scale-down");
+    if(sd) sd.onclick=()=>scaleSelectionByFactor(0.9);
+    const su=document.getElementById("ed-sel-scale-up");
+    if(su) su.onclick=()=>scaleSelectionByFactor(1.1);
+    box.querySelectorAll("[data-sel-resize]").forEach(btn=>{
+      btn.onclick=()=>{ const [dw,dh]=btn.getAttribute("data-sel-resize").split(",").map(Number); resizeSelectionSlips(dw,dh); };
+    });
+    box.querySelectorAll("[data-nudge]").forEach(btn=>{
+      btn.onclick=()=>{
+        const [dx,dy]=btn.dataset.nudge.split(",").map(Number);
+        const keys=[...multi];
+        const c=clampDeltaForBox(keysBBox(keys), dx, dy);
+        moveMembersByKeys(keys, c.dx, c.dy);
+        saveLayout(); redraw(); renderDockEditor();
+      };
+    });
+  }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label. Workflow: Unlock slips → Multi-select → move/resize → Lock as dock.</p>";
  } finally {
   if(typeof isMobileEdit==="function" && isMobileEdit() && document.body.classList.contains("editing")){
     requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); }catch(e){} });
@@ -1205,12 +1499,12 @@ function renderSlipLayerAssigns(slipId){
   });
 }
 function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
-function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("dock",id)+" · drag to move · Tools for properties"; } renderDockEditor();redraw();updateSelChip();}
-function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("mark",id)+" · drag to move · Tools for properties"; } renderDockEditor();redraw();updateSelChip();}
+function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("dock",id)+" · drag to move · Tools for properties";  } renderDockEditor();redraw();updateSelChip();}
+function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("mark",id)+" · drag to move · Tools for properties";  } renderDockEditor();redraw();updateSelChip();}
 function selectEditSlip(id){
   const s=slips.find(x=>x.id===id); if(!s) return;
   selected=id; selectedDock=s.dockId; selectedMark=null;
-  showTab("layout"); if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h){ const num=String(s.num); h.textContent=((/^\d+$/.test(num)?"Slip ":"")+num)+" · drag to move · Tools for properties"; } } renderDockEditor(); redraw(); updateSelChip();
+  showTab("layout"); if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h){ const num=String(s.num); h.textContent=((/^\d+$/.test(num)?"Slip ":"")+num)+" · drag to move · Tools for properties"; }  } renderDockEditor(); redraw(); updateSelChip();
 }
 let dockDrag=null,pan=null; // scale/tx/ty declared earlier for screen-aware labels
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
@@ -3894,9 +4188,25 @@ function wireMultiButtons(){
     setMultiPick(false);
     moveWholeChart = multi.size>0;
     document.getElementById("hint").textContent = multi.size>1
-      ? ("Drag on the map to move all "+multi.size+" selected pieces")
+      ? ("Drag on the map to move all "+multi.size+" selected pieces · Lock as dock when finished")
       : "Drag on the map to move the selected piece";
     updateSelHint();
+  };
+  const mlock=document.getElementById("btn-multi-lock");
+  if(mlock) mlock.onclick=()=>{
+    if(multi.size<1){ alert("Pick slips or a dock first."); return; }
+    setMultiPick(false);
+    lockSelectionAsDock();
+  };
+  const msDown=document.getElementById("btn-multi-scale-down");
+  if(msDown) msDown.onclick=()=>{
+    if(multi.size<1){ alert("Pick slips or docks first."); return; }
+    scaleSelectionByFactor(0.9);
+  };
+  const msUp=document.getElementById("btn-multi-scale-up");
+  if(msUp) msUp.onclick=()=>{
+    if(multi.size<1){ alert("Pick slips or docks first."); return; }
+    scaleSelectionByFactor(1.1);
   };
 }
 wireMultiButtons();
@@ -3912,9 +4222,13 @@ document.getElementById("btn-group").onclick=()=>{
   moveWholeChart=true;
   updateSelHint();
   const h=document.getElementById("hint");
-  if(h) h.textContent="Grouped · drag on the map to move all "+multi.size+" pieces";
-  saveLayout(); redraw(); updateSelChip();
+  if(h) h.textContent="Grouped / joined · drag to move · Scale ± in Tools to resize · Lock as dock when done";
+  saveLayout(); redraw(); updateSelChip(); renderDockEditor();
 };
+const _lockAs=document.getElementById("btn-lock-as-dock");
+if(_lockAs) _lockAs.onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } lockSelectionAsDock(); };
+const _unlockSl=document.getElementById("btn-unlock-slips");
+if(_unlockSl) _unlockSl.onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } unlockSelectionSlips(); };
 document.getElementById("btn-ungroup").onclick=()=>{
   const keys=[...multi];
   if(selectedDock) keys.push("dock:"+selectedDock);
@@ -3957,7 +4271,7 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
   const etm=document.getElementById("edit-toggle-mobile"); if(etm){ etm.hidden=true; etm.onclick=()=>{ blockEdit(); }; }
   ["btn-photo-move","btn-dock-align","btn-gcp-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
    "photo-reset-align","photo-fit-workspace","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
-   "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all",
+   "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all","btn-lock-as-dock","btn-unlock-slips","btn-multi-lock",
    "btn-group-all","btn-group","btn-ungroup","strip-cover","btn-save-layout","btn-reset-blank",
    "export-layout","download-layout"].forEach(id=>{
     const el=document.getElementById(id);
