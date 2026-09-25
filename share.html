@@ -925,23 +925,33 @@ function buildShareUrl(lat, lng, name, z){
   return u.toString();
 }
 
-function shareSpotUrl(lat, lng, name, z){
-  var url = buildShareUrl(lat, lng, name, z);
-  var title = "Greers Ferry Lake — " + (name || "My spot");
-  var text = "Meet me here: " + (name || "My spot");
-  if (navigator.share) {
-    navigator.share({ title: title, text: text, url: url }).catch(function(){});
-    return;
-  }
+function copyShareLink(url){
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(url).then(function(){
+    return navigator.clipboard.writeText(url).then(function(){
       showToast("Link copied — send it to them");
     }).catch(function(){
       prompt("Copy this link:", url);
     });
-    return;
   }
   prompt("Copy this link:", url);
+  return Promise.resolve();
+}
+
+function shareSpotUrl(lat, lng, name, z){
+  var url = buildShareUrl(lat, lng, name, z);
+  var title = "Greers Ferry Lake — " + (name || "My spot");
+  var text = "Meet me here: " + (name || "My spot");
+  // After async GPS, Web Share often fails (user gesture expired). Always fall back to copy.
+  if (navigator.share) {
+    navigator.share({ title: title, text: text, url: url }).then(function(){
+      showToast("Shared");
+    }).catch(function(err){
+      if (err && err.name === "AbortError") return;
+      copyShareLink(url);
+    });
+    return;
+  }
+  copyShareLink(url);
 }
 
 function spotPopupHtml(name, lat, lng){
@@ -1023,11 +1033,23 @@ document.getElementById("btn-locate").onclick = function(){
 
 document.getElementById("btn-share-spot").onclick = function(){
   if (!navigator.geolocation) { locateError(); return; }
+  showToast("Finding your location…");
   navigator.geolocation.getCurrentPosition(function(pos){
     var lat = pos.coords.latitude;
     var lng = pos.coords.longitude;
     placeOrUpdateMySpot(lat, lng, "My spot");
-    shareSpotUrl(lat, lng, "My spot", 15);
+    // Prefer copy after GPS (share sheet usually blocked without a fresh tap).
+    var url = buildShareUrl(lat, lng, "My spot", 15);
+    copyShareLink(url).then(function(){
+      // Also offer the system share sheet when it still works (phones).
+      if (navigator.share) {
+        navigator.share({
+          title: "Greers Ferry Lake — My spot",
+          text: "Meet me here: My spot",
+          url: url
+        }).catch(function(){});
+      }
+    });
   }, locateError, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
 };
 
