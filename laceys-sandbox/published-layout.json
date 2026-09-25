@@ -4,7 +4,6 @@
   "groups": [],
   "layers": [],
   "stackOrder": [],
-  "publishedAt": "2026-09-17T00:00:00.000Z",
-  "sandbox": true,
-  "note": "Lacey's sandbox blank layout \u2014 independent of main laceys/"
+  "publishedAt": "2026-09-25T12:00:00.000Z",
+  "note": "Sandbox blank defaults \u2014 never overwrite main laceys/published-layout.json"
 }
