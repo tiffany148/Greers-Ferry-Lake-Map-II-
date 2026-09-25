@@ -80,6 +80,15 @@
 
   .opacity-box input[type=range] { width:120px; accent-color:#3b82f6; }
 
+  #toast {
+    position:fixed; left:50%; bottom:88px; transform:translateX(-50%);
+    z-index:10000; max-width:90vw; padding:10px 14px; border-radius:12px;
+    background:#0f2a38; color:#e8f2f7; border:1px solid #1e4a5f;
+    font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.35);
+    opacity:0; pointer-events:none; transition:opacity .2s ease;
+  }
+  #toast.show { opacity:1; }
+
 </style>
 </head>
 <body>
@@ -91,8 +100,10 @@
   </div>
   <button id="btn-layers" type="button">Layers</button>
   <button id="btn-locate" type="button">Me</button>
+  <button id="btn-share-spot" type="button" title="Share my spot">Share</button>
 </header>
 <div id="map"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 <div id="sheet" class="sheet" role="dialog" aria-label="Map layers">
   <h2>Base map</h2>
   <label class="row"><input type="radio" name="base" value="auto" checked /> Auto (topo to satellite to streets)</label>
@@ -774,6 +785,15 @@ function marinaHtml(name){
   if (m.services && m.services.length) h += '<div class="marina-svc">'+esc(m.services.join(" · "))+'</div>';
   return h+'</div>';
 }
+function popupActionsHtml(p){
+  let actions = '<div class="popup-actions">';
+  actions += '<button type="button" class="pin-directions">Directions</button>';
+  actions += '<button type="button" class="pin-share">Share</button>';
+  if (!(PUBLIC_VIEW && p.kind!=="user")) {
+    actions += '<button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button>';
+  }
+  return actions+'</div>';
+}
 function popupHtml(p){
   let body = "<b>"+esc(p.name)+"</b><br>"+esc(p.cat||"");
   if (p.kind==="hazard" && p.hazardType) body += "<br>"+esc(p.hazardType);
@@ -787,8 +807,7 @@ function popupHtml(p){
   if (p.tip) body += "<br><i>"+esc(p.tip)+"</i>";
   if (p.cat==="Marina" || (p.kind==="stock" && MARINA_INFO[p.name])) body += marinaHtml(p.name);
   if ((p.kind==="hazard"||p.kind==="water") && p.updatedAt) body += '<div class="crowd-meta">Updated '+esc(formatWhen(p.updatedAt))+'</div>';
-  if (PUBLIC_VIEW && p.kind!=="user") return body;
-  return body+'<div class="popup-actions"><button type="button" class="pin-edit">Edit</button><button type="button" class="pin-move">Move</button><button type="button" class="pin-del">Delete</button></div>';
+  return body + popupActionsHtml(p);
 }
 function bindPopupActions(marker, p){
   marker.on("popupopen", function(){
@@ -797,9 +816,13 @@ function bindPopupActions(marker, p){
     const edit = root.querySelector(".pin-edit");
     const mv = root.querySelector(".pin-move");
     const del = root.querySelector(".pin-del");
+    const dir = root.querySelector(".pin-directions");
+    const share = root.querySelector(".pin-share");
     if (edit) edit.onclick = function(){ marker.closePopup(); openPinForm(p); };
     if (mv) mv.onclick = function(){ marker.closePopup(); beginMove(p); };
     if (del) del.onclick = function(){ marker.closePopup(); if (confirm("Remove "+p.name+"?")) removePin(p); };
+    if (dir) dir.onclick = function(){ openDirections(p.lat, p.lng); };
+    if (share) share.onclick = function(){ shareSpotUrl(p.lat, p.lng, p.name || "Spot"); };
   });
 }
 function renderPins(){
@@ -862,13 +885,153 @@ map.on("rotate", function(){
   var b = map.getBearing ? map.getBearing() : 0;
   document.getElementById("btn-north").style.transform = "rotate(" + (-b) + "deg)";
 });
+let mySpotMarker = null;
+let sharedSpotMarker = null;
+let locateMarker = null;
+let toastTimer = null;
+
+function showToast(msg){
+  var el = document.getElementById("toast");
+  if (!el) { alert(msg); return; }
+  el.textContent = msg;
+  el.classList.add("show");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove("show"); }, 2200);
+}
+
+function prefersAppleMaps(){
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var isMacSafari = /Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|CriOS|Edg|Firefox|FxiOS/.test(ua);
+  return isIOS || isMacSafari;
+}
+
+function directionsUrl(lat, lng){
+  var dest = Number(lat).toFixed(6) + "," + Number(lng).toFixed(6);
+  if (prefersAppleMaps()) return "https://maps.apple.com/?daddr=" + dest + "&dirflg=d";
+  return "https://www.google.com/maps/dir/?api=1&destination=" + dest;
+}
+
+function openDirections(lat, lng){
+  window.open(directionsUrl(lat, lng), "_blank", "noopener,noreferrer");
+}
+
+function buildShareUrl(lat, lng, name, z){
+  var u = new URL("share.html", window.location.href);
+  u.searchParams.set("lat", Number(lat).toFixed(6));
+  u.searchParams.set("lng", Number(lng).toFixed(6));
+  u.searchParams.set("z", String(z != null ? z : 15));
+  u.searchParams.set("name", name || "My spot");
+  return u.toString();
+}
+
+function shareSpotUrl(lat, lng, name, z){
+  var url = buildShareUrl(lat, lng, name, z);
+  var title = "Greers Ferry Lake — " + (name || "My spot");
+  var text = "Meet me here: " + (name || "My spot");
+  if (navigator.share) {
+    navigator.share({ title: title, text: text, url: url }).catch(function(){});
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(function(){
+      showToast("Link copied — send it to them");
+    }).catch(function(){
+      prompt("Copy this link:", url);
+    });
+    return;
+  }
+  prompt("Copy this link:", url);
+}
+
+function spotPopupHtml(name, lat, lng){
+  return "<b>"+esc(name||"My spot")+"</b><br>"+esc(Number(lat).toFixed(5)+", "+Number(lng).toFixed(5))
+    + '<div class="popup-actions">'
+    + '<button type="button" class="pin-directions">Directions</button>'
+    + '<button type="button" class="pin-share">Share</button>'
+    + '</div>';
+}
+
+function bindSpotPopupActions(marker, lat, lng, name){
+  marker.on("popupopen", function(){
+    const root = marker.getPopup().getElement();
+    if (!root) return;
+    const dir = root.querySelector(".pin-directions");
+    const share = root.querySelector(".pin-share");
+    if (dir) dir.onclick = function(){ openDirections(lat, lng); };
+    if (share) share.onclick = function(){ shareSpotUrl(lat, lng, name || "My spot"); };
+  });
+}
+
+function placeOrUpdateMySpot(lat, lng, name){
+  name = name || "My spot";
+  var ll = [lat, lng];
+  if (mySpotMarker) map.removeLayer(mySpotMarker);
+  mySpotMarker = L.circleMarker(ll, { radius:9, color:"#fff", weight:2, fillColor:"#f59e0b", fillOpacity:0.95 });
+  mySpotMarker.bindPopup(spotPopupHtml(name, lat, lng));
+  bindSpotPopupActions(mySpotMarker, lat, lng, name);
+  mySpotMarker.addTo(map);
+  map.setView(ll, 15);
+  mySpotMarker.openPopup();
+  return mySpotMarker;
+}
+
+function placeSharedSpot(lat, lng, name, z){
+  name = name || "Shared spot";
+  var zoom = (z != null && isFinite(z)) ? z : 15;
+  var ll = [lat, lng];
+  if (sharedSpotMarker) map.removeLayer(sharedSpotMarker);
+  sharedSpotMarker = L.circleMarker(ll, { radius:10, color:"#fff", weight:2, fillColor:"#a855f7", fillOpacity:0.95 });
+  sharedSpotMarker.bindPopup(spotPopupHtml(name, lat, lng));
+  bindSpotPopupActions(sharedSpotMarker, lat, lng, name);
+  sharedSpotMarker.addTo(map);
+  map.setView(ll, zoom);
+  sharedSpotMarker.openPopup();
+  return sharedSpotMarker;
+}
+
+function openSharedSpotFromUrl(){
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var lat = parseFloat(params.get("lat"));
+    var lng = parseFloat(params.get("lng"));
+    if (!isFinite(lat) || !isFinite(lng)) return;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
+    var name = params.get("name") || "Shared spot";
+    var zRaw = params.get("z");
+    var z = zRaw != null && zRaw !== "" ? parseFloat(zRaw) : 15;
+    if (!isFinite(z)) z = 15;
+    placeSharedSpot(lat, lng, name, z);
+  } catch (err) {
+    console.warn(err);
+  }
+}
+
+function locateError(){
+  alert("Could not get your location. Check location permission and try again.");
+}
+
 document.getElementById("btn-locate").onclick = function(){
+  if (!navigator.geolocation) { locateError(); return; }
   navigator.geolocation.getCurrentPosition(function(pos){
     var ll = [pos.coords.latitude, pos.coords.longitude];
-    L.circleMarker(ll, { radius:7, color:"#fff", fillColor:"#4ecdc4", fillOpacity:1 }).addTo(map);
+    if (locateMarker) map.removeLayer(locateMarker);
+    locateMarker = L.circleMarker(ll, { radius:7, color:"#fff", fillColor:"#4ecdc4", fillOpacity:1 }).addTo(map);
     map.setView(ll, 14);
-  });
+  }, locateError, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
 };
+
+document.getElementById("btn-share-spot").onclick = function(){
+  if (!navigator.geolocation) { locateError(); return; }
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat = pos.coords.latitude;
+    var lng = pos.coords.longitude;
+    placeOrUpdateMySpot(lat, lng, "My spot");
+    shareSpotUrl(lat, lng, "My spot", 15);
+  }, locateError, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+};
+
+openSharedSpotFromUrl();
 
 const q = document.getElementById("q");
 const hits = document.getElementById("hits");
