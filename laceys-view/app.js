@@ -191,7 +191,7 @@ function isDockPieceMark(id){ return /^(walk|dlabel)-(7|8|9|10|11|12|13|4|3|2|1|
 let deepZoom=true;
 let photoMax=0.9;
 let photoAlign={x:0,y:0,scale:1,scaleX:1,scaleY:1,rot:0}; // overlay registration vs chart
-const PHOTO_ALIGN_STORE="laceys-photo-align-v86";
+const PHOTO_ALIGN_STORE="laceys-photo-align-v87";
 
 function clampPhotoScale(v){ return Math.max(0.2, Math.min(5, Number(v)||1)); }
 /** Normalize saved align: old `scale` → both axes; prefer scaleX/scaleY when present. */
@@ -309,9 +309,12 @@ function applyPhotoAlign(){
   const cx=MAP_W/2, cy=MAP_H/2; // chart working-area center
   const W=MAP_W, H=MAP_H;
   const rot=Number(photoAlign.rot)||0;
-  // Base image rect fills MAP_W×MAP_H with preserveAspectRatio none (whole aerial, no crop — v85).
-  // Portrait aerial stretches to landscape workspace; Move/Stretch fine-tune alignment.
-  // Non-uniform scaleX/scaleY applied via transform so Stretch width pulls independently of height.
+  // Base image rect fills MAP_W×MAP_H with preserveAspectRatio none (whole aerial, no crop — v85/v87).
+  // WORKFLOW to line docks ↔ aerial:
+  //   A) Fill work area → Move photo + Stretch width/height + Rotate until aerial roughly matches docks, OR
+  //   B) GCP align: tap dock corner (A) then matching aerial spot (B), 2+ pairs → Apply (moves/scales docks onto photo).
+  // Photo transform and dock GCP are independent spaces: move the photo OR transform the docks — do not fight both at once.
+  // Non-uniform scaleX/scaleY via transform so Stretch width pulls independently of height.
   const dx=Number(photoAlign.x)||0;
   const dy=Number(photoAlign.y)||0;
   bgImg.setAttribute("x", "0");
@@ -417,6 +420,7 @@ function saveLayout(record){
     lastSnap=snap();
   }
   localStorage.setItem(LAYOUT_STORE, snap());
+  try{ savePhotoAlign(); }catch(e){}
   updateUndoBtns();
 }
 let {docks,marks,groups,layers,stackOrder}=loadLayout();
@@ -805,7 +809,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg?v=86",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
+const bgImg=el("image",{href:"dock-map.jpg?v=87",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox — aerial fills workspace via none
 loadPhotoAlign();
@@ -978,7 +982,22 @@ function renderChips(){
 }
 renderChips();
 redraw();
-function svgPoint(e){const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const ctm=svg.getScreenCTM();return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};}
+function svgPoint(e){
+  // Prefer manual convert via known CSS zoom (tx/ty/scale). getScreenCTM() is unreliable
+  // on some mobile browsers when the SVG root uses CSS transform.
+  try{
+    const r = chart.getBoundingClientRect();
+    const cx = (e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:0));
+    const cy = (e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:0));
+    const sc = Math.max(1e-6, Number(scale)||1);
+    return { x:(cx - r.left - tx)/sc, y:(cy - r.top - ty)/sc };
+  }catch(_){}
+  try{
+    const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY;
+    const ctm=svg.getScreenCTM();
+    return ctm?pt.matrixTransform(ctm.inverse()):{x:0,y:0};
+  }catch(_){ return {x:0,y:0}; }
+}
 function showTab(name){document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));document.getElementById("pane-slip").hidden=name!=="slip";document.getElementById("pane-dir").hidden=name!=="dir";const pl=document.getElementById("pane-layers"); if(pl) pl.hidden=name!=="layers";document.getElementById("pane-layout").hidden=name!=="layout"; if(name==="layers") renderLayersEditor();}
 function nudgeCtrlHtml(){return `<div class="st ed-nudge"><button type="button" data-nudge="-10,0">←</button><button type="button" data-nudge="10,0">→</button><button type="button" data-nudge="0,-10">↑</button><button type="button" data-nudge="0,10">↓</button></div>`;}
 function rotCtrl(val){return `<label>Rotation (degrees)<input id="ed-rot" type="range" min="-180" max="180" step="1" value="${val}"/></label><div class="row2"><label>Angle<input id="ed-rot-num" type="number" step="1" value="${val}"/></label><div class="st"><button type="button" data-rot="-90">-90</button><button type="button" data-rot="-15">-15</button><button type="button" data-rot="15">+15</button><button type="button" data-rot="90">+90</button><button type="button" data-rot="0">0</button></div></div>`;}
@@ -1189,7 +1208,8 @@ function applyDeepZoomLod(){
   document.body.classList.toggle("deepzoom", deepZoom);
   const val=document.getElementById("photo-op-val");
   if(val) val.textContent=Math.round(photoMax*100)+"%";
-  if(!deepZoom || editing || multiPick){
+  if(!deepZoom || editing || multiPick || photoMoveMode || dockAlignMode || gcpMode || scaleMeasureMode){
+    // Keep aerial visible while aligning / measuring (deep-zoom fade hides the photo when zoomed in)
     bgImg.setAttribute("opacity", String(photoMax));
     if(layerStack) layerStack.setAttribute("opacity","1");
     [layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels].forEach(L=>{ if(L) L.setAttribute("opacity","1"); });
@@ -1536,7 +1556,8 @@ chart.addEventListener("pointerdown",e=>{
 chart.addEventListener("pointermove",e=>{
   if(scaleMeasureMode && scaleDrag){
     const p=svgPoint(e);
-    if(!scaleDrag.moved && (Math.hypot(e.clientX-scaleDrag.cx, e.clientY-scaleDrag.cy)>8)){
+    const scaleSlop=(e.pointerType==="touch"||e.pointerType==="pen")?18:10;
+    if(!scaleDrag.moved && (Math.hypot(e.clientX-scaleDrag.cx, e.clientY-scaleDrag.cy)>scaleSlop)){
       scaleDrag.moved=true;
       scaleDrag.pan={x:e.clientX-tx,y:e.clientY-ty};
     }
@@ -1553,7 +1574,8 @@ chart.addEventListener("pointermove",e=>{
   if(gcpMode && gcpDrag){
     const p=svgPoint(e);
     const dx=p.x-gcpDrag.px, dy=p.y-gcpDrag.py;
-    if(!gcpDrag.moved && (Math.hypot(e.clientX-gcpDrag.cx, e.clientY-gcpDrag.cy)>8)){
+    const gcpSlop=(e.pointerType==="touch"||e.pointerType==="pen")?18:10;
+    if(!gcpDrag.moved && (Math.hypot(e.clientX-gcpDrag.cx, e.clientY-gcpDrag.cy)>gcpSlop)){
       gcpDrag.moved=true;
       gcpDrag.pan={x:e.clientX-tx,y:e.clientY-ty};
     }
@@ -1838,12 +1860,13 @@ function closeEditPanel(){ setEditPanelOpen(false); }
 document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   editing=!editing;
   document.body.classList.toggle("editing",editing);
+  document.documentElement.classList.toggle("editing",editing);
   chart.classList.toggle("editing",editing);
   document.getElementById("edit-toggle").classList.toggle("on",editing);
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
   const em=document.getElementById("edit-toggle-mobile");
   if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
-  if(!editing){ multiPick=false; closeEditPanel(); document.documentElement.style.removeProperty("--edit-chrome-h"); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); if(scaleMeasureMode) setScaleMeasureMode(false); }
+  if(!editing){ multiPick=false; closeEditPanel(); ["--edit-chrome-h","--edit-photo-op-h","--edit-label-h","--edit-align-h","--edit-top"].forEach(k=>document.documentElement.style.removeProperty(k)); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); if(scaleMeasureMode) setScaleMeasureMode(false); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
         ? "Tools = panel · drag docks · empty water pans · Done exits"
@@ -1862,8 +1885,27 @@ document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
 function syncEditChromeHeight(){
   const chrome=document.getElementById("edit-chrome");
   if(!chrome || !document.body.classList.contains("editing")) return;
-  const h=Math.ceil(chrome.getBoundingClientRect().height);
-  if(h>0) document.documentElement.style.setProperty("--edit-chrome-h", h+"px");
+  const root=document.documentElement;
+  const chromeH=Math.ceil(chrome.getBoundingClientRect().height)||56;
+  root.style.setProperty("--edit-chrome-h", chromeH+"px");
+  // Mobile: Align / Photo / Label bars stay fixed under chrome — reserve space so map is not covered
+  let opH=0, labH=0, alignH=0;
+  if(isMobileEdit()){
+    const op=document.getElementById("photo-op-bar");
+    const lab=document.getElementById("label-size-bar");
+    const al=document.getElementById("photo-align-bar");
+    const vis=el=>{
+      if(!el) return 0;
+      const st=window.getComputedStyle(el);
+      if(st.display==="none" || st.visibility==="hidden") return 0;
+      return Math.ceil(el.getBoundingClientRect().height)||0;
+    };
+    opH=vis(op); labH=vis(lab); alignH=vis(al);
+  }
+  root.style.setProperty("--edit-photo-op-h", opH+"px");
+  root.style.setProperty("--edit-label-h", labH+"px");
+  root.style.setProperty("--edit-align-h", alignH+"px");
+  root.style.setProperty("--edit-top", (chromeH+opH+labH+alignH)+"px");
 }
 function wireMobileEditChrome(){
   const map={
@@ -1984,11 +2026,18 @@ function fitAffine(pairs){
 }
 function fitGcpTransform(pairs){
   if(!pairs || pairs.length<2) return null;
+  const sim=fitSimilarity(pairs);
   if(pairs.length>=3){
     const aff=fitAffine(pairs);
-    if(aff) return aff;
+    // Prefer similarity so dock sw/sh/gap actually scale onto the aerial.
+    // Only keep affine when shear is meaningful (otherwise similarity is stabler & scales sizes).
+    if(aff && aff.kind==="affine"){
+      const sx=Math.hypot(aff.a,aff.d), sy=Math.hypot(aff.b,aff.e);
+      const shear=Math.abs(aff.a*aff.b+aff.d*aff.e)/(sx*sy+1e-12);
+      if(shear>0.12) return aff;
+    }
   }
-  return fitSimilarity(pairs);
+  return sim;
 }
 function transformPoint(x,y,T){
   x=Number(x)||0; y=Number(y)||0;
@@ -2006,8 +2055,9 @@ function applyGcpTransformToDock(d, T, opts){
   const updateRot=!(opts && opts.updateRot===false);
   const p=transformPoint(d.x, d.y, T);
   d.x=p.x; d.y=p.y;
-  if(T.kind==="similarity" && T.s && Math.abs(T.s-1)>1e-6){
-    const s=T.s;
+  // Scale dock geometry for BOTH similarity and low-shear affine (T.s = average scale).
+  const s = (T.s!=null && isFinite(T.s) && T.s>0) ? T.s : 1;
+  if(Math.abs(s-1)>1e-6){
     ["sw","sh","w","h","gap"].forEach(prop=>{ if(d[prop]!=null) d[prop]=Number(d[prop])*s; });
     (d.extras||[]).forEach(ex=>{
       if(ex.dx!=null) ex.dx=Number(ex.dx)*s;
@@ -2023,9 +2073,9 @@ function applyGcpTransformToDock(d, T, opts){
         const q=transformPoint(pl.x, pl.y, T);
         pl.x=q.x; pl.y=q.y;
       }
-      if(T.kind==="similarity" && T.s && Math.abs(T.s-1)>1e-6){
-        if(pl.w!=null) pl.w=Number(pl.w)*T.s;
-        if(pl.h!=null) pl.h=Number(pl.h)*T.s;
+      if(Math.abs(s-1)>1e-6){
+        if(pl.w!=null) pl.w=Number(pl.w)*s;
+        if(pl.h!=null) pl.h=Number(pl.h)*s;
       }
       if(updateRot && T.rotDeg!=null && isFinite(T.rotDeg) && Math.abs(T.rotDeg)>0.05){
         pl.rot=normalizeRotDeg((Number(pl.rot)||0)+T.rotDeg);
@@ -2041,8 +2091,8 @@ function applyGcpTransformToMark(m, T, opts){
   const updateRot=!(opts && opts.updateRot===false);
   const p=transformPoint(m.x, m.y, T);
   m.x=p.x; m.y=p.y;
-  if(T.kind==="similarity" && T.s && Math.abs(T.s-1)>1e-6){
-    const s=T.s;
+  const s = (T.s!=null && isFinite(T.s) && T.s>0) ? T.s : 1;
+  if(Math.abs(s-1)>1e-6){
     if(m.w!=null) m.w=Number(m.w)*s;
     if(m.h!=null) m.h=Number(m.h)*s;
     if(m.size!=null) m.size=Number(m.size)*s;
@@ -2144,6 +2194,7 @@ function setGcpMode(on){
   }
   chart.style.cursor=gcpMode?"crosshair":(photoMoveMode?"move":(dockAlignMode?"grab":""));
   redrawGcpMarkers();
+  try{ applyDeepZoomLod(); }catch(e){}
 }
 function placeGcpClick(p){
   if(!gcpMode || !p) return;
@@ -2166,7 +2217,8 @@ function undoLastGcpPair(){
   redrawGcpMarkers();
 }
 function applyGcpToTargets(scope){
-  if(!IS_LAYOUT_SOURCE || !gcpMode) return;
+  if(!IS_LAYOUT_SOURCE) return;
+  if(!gcpMode && !(gcpPairs&&gcpPairs.length>=2)) return;
   if(gcpPairs.length<2){ alert("Need at least 2 GCP pairs before Apply."); return; }
   const T=fitGcpTransform(gcpPairs);
   if(!T){ alert("Could not fit a stable transform from these pairs."); return; }
@@ -2213,6 +2265,7 @@ function setPhotoMoveMode(on){
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
   chart.style.cursor=photoMoveMode?"move":(gcpMode?"crosshair":(dockAlignMode?"grab":""));
+  try{ applyDeepZoomLod(); }catch(e){}
 }
 function setDockAlignMode(on){
   dockAlignMode=!!on;
@@ -2443,6 +2496,7 @@ function setScaleMeasureMode(on, opts){
   if(h && scaleMeasureMode){
     h.textContent=scaleForceCalibrate?"Scale calibrate — click two points spanning a known distance":"Scale measure — click two points (calibrate first for feet)";
   }
+  try{ applyDeepZoomLod(); }catch(e){}
 }
 function finishScalePair(){
   if(scalePts.length<2) return;
