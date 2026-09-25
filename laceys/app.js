@@ -229,6 +229,8 @@ let scaleForceCalibrate=false; // next 2-click pair is a calibration
 let scalePts=[]; // [{x,y}, ...] up to 2
 let scaleDrag=null;
 let scaleLive={x2:null,y2:null}; // rubber-band second point while waiting
+var dockEditorMore=false;
+var stretchToolsOpen=false;
 let scaleLastRecipe=null; // last calculate() result
 let scale=1,tx=0,ty=0; // view transform — must exist before first redraw/label sizing
 const chart=document.getElementById("chart"); // must exist before first redraw → applyDeepZoomLod → chartSize
@@ -809,7 +811,7 @@ function buildSlips(){
 }
 const layerBg=el("g",{id:"bg"}), layerStack=el("g",{id:"stack"}), layerSite=el("g",{id:"lod-site"}), layerWalkMarks=el("g",{id:"lod-walkmarks"}), layerMarks=el("g",{id:"marks"}), layerDocks=el("g",{id:"docks"}), layerSlips=el("g",{id:"slips"}), layerLabels=el("g",{id:"lod-labels"});
 svg.appendChild(el("rect",{width:MAP_W,height:MAP_H,fill:"#0c3c41"}));
-const bgImg=el("image",{href:"dock-map.jpg?v=87",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
+const bgImg=el("image",{href:"dock-map.jpg?v=88",x:0,y:0,width:MAP_W,height:MAP_H,opacity:0.9,preserveAspectRatio:"none"});
 layerBg.appendChild(bgImg);
 svg.setAttribute("overflow","hidden"); // clip to chart viewBox — aerial fills workspace via none
 loadPhotoAlign();
@@ -1019,6 +1021,7 @@ function resizeSide(arr,count,startHint){
   return arr;
 }
 function renderDockEditor(){
+ try{
   const box=document.getElementById("dock-editor");
   const d=docks.find(x=>x.id===selectedDock);
   const m=marks.find(x=>x.id===selectedMark);
@@ -1061,21 +1064,27 @@ function renderDockEditor(){
   }
   if(d){
     const locked=isLocked(d);
-    box.innerHTML=`<h2>Dock ${d.name}</h2>
-      <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>
-      <label>Layout<select id="ed-type"><option value="ns"${d.type==="ns"?" selected":""}>North–south finger</option><option value="ew"${d.type==="ew"?" selected":""}>East–west finger</option><option value="col"${d.type==="col"?" selected":""}>Single column</option></select></label>`+
+    const moreOpen=!isMobileEdit()||dockEditorMore;
+    box.innerHTML=`<h2>Dock ${d.name}</h2>`+
       placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
       <div class="row2"><label>Slip width<input id="ed-sw" type="number" value="${Math.round(d.sw||d.w||40)}"/></label><label>Slip height<input id="ed-sh" type="number" value="${Math.round(d.sh||d.h||15)}"/></label></div>
       <label>Gap<input id="ed-gap" type="number" value="${Math.round(d.gap||3)}"/></label>
       ${rotCtrl(Number(d.rot)||0)}
       ${nudgeCtrlHtml()}`)+
-      `<div class="st"><button type="button" id="ed-lock">${locked?"Unlock slips":"Lock slips together"}</button></div>
+      (isMobileEdit()?`<button type="button" class="btn ed-more-btn" id="ed-more-toggle">${moreOpen?"Less":"More"}</button>`:"")+
+      `<div id="ed-more-block"${moreOpen?"":" hidden"}>
+      <label>Dock name<input id="ed-name" value="${d.name||""}"/></label>
+      <label>Layout<select id="ed-type"><option value="ns"${d.type==="ns"?" selected":""}>North–south finger</option><option value="ew"${d.type==="ew"?" selected":""}>East–west finger</option><option value="col"${d.type==="col"?" selected":""}>Single column</option></select></label>
+      <div class="st"><button type="button" id="ed-lock">${locked?"Unlock slips":"Lock slips together"}</button></div>
       <p class="hint">${locked?"Locked: the whole dock moves as one. Unlock to drag slips one at a time.":"Unlocked: drag slips individually. Lock when the layout looks right."}</p>
       <div class="row2"><label>Side A count<input id="ed-acount" type="number" min="0" max="80" value="${(d.a||[]).length}"/></label><label>Side B count<input id="ed-bcount" type="number" min="0" max="80" value="${(d.b||[]).length}"/></label></div>
       <label>Left / top numbers<textarea id="ed-a" rows="3">${(d.a||[]).join(", ")}</textarea></label>
       <label>Right / bottom numbers<textarea id="ed-b" rows="3">${(d.b||[]).join(", ")}</textarea></label>
       <div class="st"><button type="button" id="ed-add-slip">+ Slip on this dock</button><button type="button" id="ed-reset-slips">Reset slip layout</button></div>
-      ${stackCtrlHtml()}`;
+      ${stackCtrlHtml()}
+      </div>`;
+    const moreBtn=document.getElementById("ed-more-toggle");
+    if(moreBtn) moreBtn.onclick=()=>{ dockEditorMore=!dockEditorMore; renderDockEditor(); };
     document.getElementById("ed-lock").onclick=()=>{d.locked=!locked;saveLayout();redraw();renderDockEditor();};
     document.getElementById("ed-name").oninput=()=>{d.name=document.getElementById("ed-name").value;saveLayout();redraw();};
     document.getElementById("ed-type").onchange=()=>{d.type=document.getElementById("ed-type").value;d.placed={};saveLayout();redraw();renderDockEditor();};
@@ -1104,7 +1113,7 @@ function renderDockEditor(){
     if(!document.getElementById("ed-fill-dock")){
       const colorRow=document.createElement("div");
       colorRow.innerHTML=`<label>Dock / slip color<input id="ed-fill-dock" type="color" value="${d.fill||COLORS[d.kind]||"#e4dcc8"}"/></label><div class="st"><button type="button" id="ed-dup-dock">Duplicate dock</button><button type="button" id="ed-del-dock">Delete dock</button></div>`;
-      box.appendChild(colorRow);
+      (document.getElementById("ed-more-block")||box).appendChild(colorRow);
       document.getElementById("ed-fill-dock").oninput=()=>{d.fill=document.getElementById("ed-fill-dock").value;saveLayout(false);redraw();};
       document.getElementById("ed-fill-dock").onchange=()=>saveLayout();
       document.getElementById("ed-dup-dock").onclick=()=>{
@@ -1157,6 +1166,11 @@ function renderDockEditor(){
     box.innerHTML=`<h2>${multi.size} selected</h2><p class="hint">Group actions for the whole selection — stack order stays here.</p>${stackCtrlHtml()}`;
     bindStackButtons();
   }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label.</p>";
+ } finally {
+  if(typeof isMobileEdit==="function" && isMobileEdit() && document.body.classList.contains("editing")){
+    requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); }catch(e){} });
+  }
+ }
 }
 
 function renderSlipLayerAssigns(slipId){
@@ -1191,12 +1205,12 @@ function renderSlipLayerAssigns(slipId){
   });
 }
 function select(id){selected=id;selectedDock=null;selectedMark=null;const s=slips.find(x=>x.id===id);if(!s)return;const rec=data[id]||{status:"vacant",boat:"",notes:""};document.getElementById("slip-detail").hidden=false;document.getElementById("slip-title").textContent=(/^\d+$/.test(String(s.num))?"Slip ":"")+s.num;document.getElementById("slip-meta").textContent="Dock "+s.dock+" · "+s.size;document.getElementById("boat").value=rec.boat||"";document.getElementById("notes").value=rec.notes||"";document.querySelectorAll("#pane-slip .st button").forEach(b=>b.classList.toggle("on",b.dataset.st===(rec.status||"vacant")));renderSlipLayerAssigns(id);if(!editing)showTab("slip");redraw();}
-function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("dock",id)+" · drag to move · Tools for properties"; } renderDockEditor();redraw();updateSelChip();}
-function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("mark",id)+" · drag to move · Tools for properties"; } renderDockEditor();redraw();updateSelChip();}
+function selectDock(id){selectedDock=id;selectedMark=null;if(!editing) selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("dock",id)+" · drag to move · Tools for properties"; mobileShowAdjustSheet(); } renderDockEditor();redraw();updateSelChip();}
+function selectMark(id){selectedMark=id;selectedDock=null;selected=null;showTab("layout");if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h) h.textContent=pieceLabel("mark",id)+" · drag to move · Tools for properties"; mobileShowAdjustSheet(); } renderDockEditor();redraw();updateSelChip();}
 function selectEditSlip(id){
   const s=slips.find(x=>x.id===id); if(!s) return;
   selected=id; selectedDock=s.dockId; selectedMark=null;
-  showTab("layout"); if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h){ const num=String(s.num); h.textContent=((/^\d+$/.test(num)?"Slip ":"")+num)+" · drag to move · Tools for properties"; } } renderDockEditor(); redraw(); updateSelChip();
+  showTab("layout"); if(!isMobileEdit()) openEditPanel(); else { const h=document.getElementById("hint"); if(h){ const num=String(s.num); h.textContent=((/^\d+$/.test(num)?"Slip ":"")+num)+" · drag to move · Tools for properties"; } mobileShowAdjustSheet(); } renderDockEditor(); redraw(); updateSelChip();
 }
 let dockDrag=null,pan=null; // scale/tx/ty declared earlier for screen-aware labels
 function lodFade(t,a,b){ if(t<=a) return 0; if(t>=b) return 1; return (t-a)/(b-a); }
@@ -1846,13 +1860,59 @@ document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>showTab(b.dat
 function renderDir(){const list=document.getElementById("dir-list");const rows=Object.keys(data).map(id=>({id,...data[id]})).filter(r=>r.boat||r.notes||(r.status&&r.status!=="vacant"));if(!rows.length){list.innerHTML="<p>No marked slips yet.</p>";return;}list.innerHTML=rows.map(r=>`<div class="dir-item" data-jump="${r.id}"><b>${/^\d+$/.test(r.id)?"Slip "+r.id:r.id}</b> · ${r.status||""}<br>${r.boat||""} ${r.notes||""}</div>`).join("");list.querySelectorAll("[data-jump]").forEach(n=>n.onclick=()=>select(n.dataset.jump));}
 renderDir();
 
+
+function mobileAligning(){
+  return document.body.classList.contains("gcp-aligning")||document.body.classList.contains("photo-moving")||document.body.classList.contains("dock-aligning")||document.body.classList.contains("scale-measuring");
+}
+function mobileShowAdjustSheet(){
+  if(!isMobileEdit()||mobileAligning()) return;
+  openEditPanel();
+}
+function ensureSelectionInView(){
+  if(!isMobileEdit()||!document.body.classList.contains("editing")) return;
+  let x=null,y=null;
+  try{
+    if(selectedDock){ const d=docks.find(z=>z.id===selectedDock); if(d){ x=d.x; y=d.y; } }
+    else if(selectedMark){ const m=marks.find(z=>z.id===selectedMark); if(m){ x=m.x; y=m.y; } }
+    else if(selected){ const s=slips.find(z=>z.id===selected); if(s){ x=s.x; y=s.y; } }
+  }catch(e){ return; }
+  if(x==null||y==null) return;
+  const {w,h}=chartSize();
+  const sx=tx+x*scale, sy=ty+y*scale;
+  const m=28;
+  let dx=0,dy=0;
+  if(sx<m) dx=m-sx; else if(sx>w-m) dx=(w-m)-sx;
+  if(sy<m) dy=m-sy; else if(sy>h-m) dy=(h*0.42)-sy;
+  if(dx||dy){ tx+=dx; ty+=dy; applyZoom(); }
+}
+function refreshMobileEditLayout(){
+  requestAnimationFrame(()=>{
+    try{ syncEditChromeHeight(); }catch(e){}
+    requestAnimationFrame(()=>{ try{ ensureSelectionInView(); }catch(e){} });
+  });
+}
+function noteAlignModeForMobile(){
+  if(!isMobileEdit()) return;
+  if(mobileAligning()) closeEditPanel();
+  refreshMobileEditLayout();
+}
+
 function setEditPanelOpen(on){
   document.body.classList.toggle("panel-open", !!on);
+  if(on){
+    const aside=document.querySelector("aside"); if(aside && isMobileEdit()) aside.scrollTop=0;
+    if(isMobileEdit()){
+      stretchToolsOpen=false;
+      document.body.classList.remove("stretch-open","photo-tools-open");
+      const sb=document.getElementById("btn-stretch-toggle"); if(sb) sb.classList.remove("on");
+      const pb=document.getElementById("btn-photo-tools"); if(pb) pb.classList.remove("on");
+    }
+  }
   const b=document.getElementById("btn-panel-toggle");
   if(b){ b.classList.toggle("on", !!on); b.textContent = on ? "Map" : "Tools"; }
   const fab=document.getElementById("edit-fab-tools");
   if(fab){ fab.classList.toggle("on", !!on); fab.textContent = on ? "Map" : "Tools"; }
-  requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); }catch(e){} });
+  requestAnimationFrame(()=>{ try{ syncEditChromeHeight(); ensureSelectionInView(); }catch(e){} });
 }
 function openEditPanel(){ if(window.matchMedia && window.matchMedia("(max-width:860px)").matches) setEditPanelOpen(true); }
 function isMobileEdit(){ return !!(window.matchMedia && window.matchMedia("(max-width:860px)").matches); }
@@ -1866,7 +1926,7 @@ document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
   const em=document.getElementById("edit-toggle-mobile");
   if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
-  if(!editing){ multiPick=false; closeEditPanel(); ["--edit-chrome-h","--edit-photo-op-h","--edit-label-h","--edit-align-h","--edit-top"].forEach(k=>document.documentElement.style.removeProperty(k)); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); if(scaleMeasureMode) setScaleMeasureMode(false); }
+  if(!editing){ multiPick=false; closeEditPanel(); stretchToolsOpen=false; document.body.classList.remove("stretch-open","photo-tools-open"); ["--edit-chrome-h","--edit-photo-op-h","--edit-label-h","--edit-align-h","--edit-top","--edit-sheet-h"].forEach(k=>document.documentElement.style.removeProperty(k)); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); if(scaleMeasureMode) setScaleMeasureMode(false); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
         ? "Tools = panel · drag docks · empty water pans · Done exits"
@@ -1906,6 +1966,16 @@ function syncEditChromeHeight(){
   root.style.setProperty("--edit-label-h", labH+"px");
   root.style.setProperty("--edit-align-h", alignH+"px");
   root.style.setProperty("--edit-top", (chromeH+opH+labH+alignH)+"px");
+  let sheetH=0;
+  if(isMobileEdit() && document.body.classList.contains("panel-open")){
+    const aside=document.querySelector("aside");
+    if(aside){
+      const cap=Math.round((window.visualViewport&&window.visualViewport.height||window.innerHeight)*0.40);
+      const h=Math.ceil(aside.getBoundingClientRect().height)||0;
+      sheetH=Math.max(0, Math.min(h||cap, cap));
+    }
+  }
+  root.style.setProperty("--edit-sheet-h", sheetH+"px");
 }
 function wireMobileEditChrome(){
   const map={
@@ -1919,7 +1989,39 @@ function wireMobileEditChrome(){
     const dst=document.getElementById(map[id]);
     if(src && dst) src.onclick=()=> dst.click();
   });
-  window.addEventListener("resize", ()=>{ if(document.body.classList.contains("editing")) syncEditChromeHeight(); });
+  let wasMobile=isMobileEdit();
+  window.addEventListener("resize", ()=>{
+    const now=isMobileEdit();
+    if(document.body.classList.contains("editing")){
+      if(now!==wasMobile){ wasMobile=now; try{ renderDockEditor(); }catch(e){} }
+      syncEditChromeHeight();
+    }else wasMobile=now;
+  });
+  const stretchBtn=document.getElementById("btn-stretch-toggle");
+  if(stretchBtn) stretchBtn.onclick=()=>{
+    stretchToolsOpen=!stretchToolsOpen;
+    document.body.classList.toggle("stretch-open", stretchToolsOpen);
+    stretchBtn.classList.toggle("on", stretchToolsOpen);
+    if(stretchToolsOpen && isMobileEdit()){
+      document.body.classList.remove("photo-tools-open");
+      const pb=document.getElementById("btn-photo-tools"); if(pb) pb.classList.remove("on");
+      closeEditPanel();
+    }
+    refreshMobileEditLayout();
+  };
+  const photoBtn=document.getElementById("btn-photo-tools");
+  if(photoBtn) photoBtn.onclick=()=>{
+    const on=!document.body.classList.contains("photo-tools-open");
+    document.body.classList.toggle("photo-tools-open", on);
+    photoBtn.classList.toggle("on", on);
+    if(on && isMobileEdit()){
+      stretchToolsOpen=false;
+      document.body.classList.remove("stretch-open");
+      if(stretchBtn) stretchBtn.classList.remove("on");
+      closeEditPanel();
+    }
+    refreshMobileEditLayout();
+  };
 }
 wireMobileEditChrome();
 
@@ -2195,6 +2297,7 @@ function setGcpMode(on){
   chart.style.cursor=gcpMode?"crosshair":(photoMoveMode?"move":(dockAlignMode?"grab":""));
   redrawGcpMarkers();
   try{ applyDeepZoomLod(); }catch(e){}
+  try{ noteAlignModeForMobile(); }catch(e){}
 }
 function placeGcpClick(p){
   if(!gcpMode || !p) return;
@@ -2266,6 +2369,7 @@ function setPhotoMoveMode(on){
   }
   chart.style.cursor=photoMoveMode?"move":(gcpMode?"crosshair":(dockAlignMode?"grab":""));
   try{ applyDeepZoomLod(); }catch(e){}
+  try{ noteAlignModeForMobile(); }catch(e){}
 }
 function setDockAlignMode(on){
   dockAlignMode=!!on;
@@ -2303,6 +2407,7 @@ function setDockAlignMode(on){
     else if(editing) hint.textContent="Edit docks · drag pieces · empty water pans";
   }
   chart.style.cursor=dockAlignMode?"grab":(gcpMode?"crosshair":(photoMoveMode?"move":""));
+  try{ noteAlignModeForMobile(); }catch(e){}
 }
 function photoPinchDist(){
   const pts=[...photoPointers.values()];
@@ -2497,6 +2602,7 @@ function setScaleMeasureMode(on, opts){
     h.textContent=scaleForceCalibrate?"Scale calibrate — click two points spanning a known distance":"Scale measure — click two points (calibrate first for feet)";
   }
   try{ applyDeepZoomLod(); }catch(e){}
+  try{ noteAlignModeForMobile(); }catch(e){}
 }
 function finishScalePair(){
   if(scalePts.length<2) return;
