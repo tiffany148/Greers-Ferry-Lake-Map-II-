@@ -1,0 +1,29 @@
+Lacey's Scale / measure calculator — how to use (v82)
+=====================================================
+
+Open MAIN (laceys-publish-v82) → Edit → Dock tab → Scale & size calculator.
+(Share has the same calculator; Apply to dock is MAIN-only.)
+
+0) Calibrate (once)
+   Click Calibrate → two points on a known length (e.g. one slip) → enter feet.
+   Chart-unit suggestions appear after this.
+
+1) Slips only (per side) — length BEFORE dividers / cart path
+   • Each row = count (per side) × along-dock ft × into-slip ft.
+   • Defaults: 13×10×30 and 2×12×30 → 154 ft along from slips alone.
+   • + Add slip size for more sizes; × removes a row.
+   • Calculate slips (or just change a field — it auto-updates).
+   • Block A shows slips-only along length, into depth, and sw/sh suggestions.
+
+2) Dividers & cart path — full dock
+   • Slip dividers = boards between slips (count + width ft). Often ≈ slips−1 or slips+1.
+   • End walkways = caps on either end.
+   • Center cart path = aisle between A and B sides.
+   • Calculate full dock → Block B: along = slips + dividers + ends;
+     across = intoA + cart + intoB.
+
+3) Apply to selected dock (MAIN only)
+   Writes primary slip sw/sh (largest-count row) and gap from divider width.
+   Other slip sizes are noted on the dock, not auto-placed as extras.
+
+Example: 13×10 + 2×12 = 154 ft slips-only; + 4×2 ft dividers = 162 ft full along-dock.

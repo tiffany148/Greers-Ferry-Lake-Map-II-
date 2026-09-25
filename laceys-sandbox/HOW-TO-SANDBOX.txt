@@ -1,0 +1,23 @@
+Lacey's sandbox (blank) — isolated from main chart
+====================================================
+
+Local folder: /workspace/laceys-sandbox-publish-v87/
+Desktop copy: /workspace/laceys-desktop/app-sandbox/
+Upload target (GitHub Pages repo folder): laceys-sandbox/
+
+Web URL (after upload to tiffany148/Greers-Ferry-Lake-Map-II-):
+  https://tiffany148.github.io/Greers-Ferry-Lake-Map-II-/laceys-sandbox/
+  (or .../laceys-sandbox/index.html)
+
+Desktop:
+  File → Open sandbox (blank)
+
+Isolation:
+  STORE=laceys-sandbox-slips-v1
+  LAYOUT_STORE=laceys-sandbox-layout-v1
+  layers=laceys-sandbox-layers-v1
+  photo/label/scale/gcp/published keys all laceys-sandbox-...
+  GitHub Publish path = laceys-sandbox/published-layout.json (NOT laceys/)
+  Does not write Electron shared published-layout.json used by main share/view
+
+Blank start: empty docks/marks/layers; aerial dock-map.jpg kept for GCP/scale.
