@@ -108,6 +108,10 @@ body.editing.sel-active:not(.multipick) #btn-multi-done{display:none}
 
 .multi-bar b{flex:1 1 auto;font-size:14px}
 .multi-bar .btn{padding:10px 14px;font-size:14px;min-height:44px}
+.multi-bar .multi-geom{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;width:100%;margin-top:4px;padding-top:8px;border-top:1px solid rgba(255,255,255,.14)}
+.multi-bar .multi-geom .mg-title{font-size:12px;font-weight:800;opacity:.95;margin-right:4px}
+.multi-bar .multi-geom label{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700}
+.multi-bar .multi-geom input[type=number]{width:4.4em;border:0;border-radius:8px;padding:8px 6px;background:#0c3c41;color:#eef6f8;font-size:14px;font-variant-numeric:tabular-nums;min-height:40px}
 .pick-list{max-height:42vh;overflow:auto;margin:10px 0;border-radius:12px;background:#0a3539}
 .pick-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #15565b;font-size:15px;cursor:pointer;min-height:48px;-webkit-tap-highlight-color:transparent;user-select:none}
 .pick-row:last-child{border-bottom:0}
@@ -650,6 +654,13 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   <button type="button" class="btn" id="btn-multi-scale-up" title="Resize selection larger">Scale +</button>
   <button type="button" class="btn" id="btn-multi-lock">Lock as dock</button>
   <button type="button" class="btn" id="btn-multi-done">Done</button>
+  <div class="multi-geom" id="multi-geom" title="Type numbers like a single dock/slip — Group X/Y moves the selection top-left; Slip W/H sets every selected slip size">
+    <span class="mg-title" id="multi-geom-label">Group</span>
+    <label>X<input id="multi-x" type="number" inputmode="numeric" aria-label="Group X (selection top-left)"/></label>
+    <label>Y<input id="multi-y" type="number" inputmode="numeric" aria-label="Group Y (selection top-left)"/></label>
+    <label>Slip W<input id="multi-sw" type="number" min="6" inputmode="numeric" aria-label="Slip width for selection"/></label>
+    <label>Slip H<input id="multi-sh" type="number" min="6" inputmode="numeric" aria-label="Slip height for selection"/></label>
+  </div>
 </div>
 <div class="edit-banner">Edit: drag docks on the map · use the right panel (Dock / Layers) for tools · Undo/Redo/Save in the header. Empty water pans; pinch/zoom stays on the map.</div>
 <div class="search"><input id="q" type="search" placeholder="Search slip number, e.g. 273"/></div>
@@ -772,7 +783,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
     </div>
     <div id="pane-layout" hidden>
       <h2>Move & edit</h2>
-      <p class="hint">Workflow: <b>Unlock slips</b> on a dock → <b>Multi-select</b> the slips you want → drag to move / Scale± to resize together → <b>Lock as dock</b> when done. Tools stay closed until you tap Tools.</p>
+      <p class="hint">Workflow: <b>Unlock slips</b> on a dock → <b>Multi-select</b> the slips you want → type <b>Group X/Y</b> &amp; <b>Slip W/H</b> (or drag / Scale±) → <b>Lock as dock</b> when done. Tools stay closed until you tap Tools.</p>
       <div class="st">
         <button class="btn" id="add-dock">+ Dock</button>
         <button class="btn" id="add-slip-free">+ Slip</button>
@@ -883,7 +894,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=90-layers"></script>
-<script src="app.js?v=90-layers"></script>
+<script src="app-data.js?v=91-layers"></script>
+<script src="app.js?v=91-layers"></script>
 </body>
 </html>
