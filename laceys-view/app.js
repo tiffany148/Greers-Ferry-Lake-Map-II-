@@ -492,6 +492,7 @@ function updateSelHint(){
   }
   renderPickList();
   updateSelChip();
+  try{ syncMultiGeomInputs(); }catch(e){}
 }
 function pieceLabel(kind,id){
   if(kind==="slip"){
@@ -984,6 +985,109 @@ function resizeSelectionSlips(dw, dh){
   sanitizeLayout(); saveLayout(); redraw(); renderDockEditor();
   return true;
 }
+function selectionGeomSummary(){
+  const keys=selectionKeys();
+  const box=keysBBox(keys);
+  let swSum=0, shSum=0, n=0;
+  (keys||[]).forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="slip"){
+      const info=slipWorldPos(id); if(!info||!info.slip) return;
+      swSum+=Number(info.slip.w)||10; shSum+=Number(info.slip.h)||10; n++;
+    }else if(kind==="dock"){
+      const d=docks.find(x=>x.id===id); if(!d) return;
+      swSum+=Number(d.sw!=null?d.sw:(d.w||40))||40;
+      shSum+=Number(d.sh!=null?d.sh:(d.h||16))||16; n++;
+    }else if(kind==="mark"){
+      const m=marks.find(x=>x.id===id); if(!m||m.kind==="text") return;
+      if(m.w!=null||m.h!=null){ swSum+=Number(m.w)||12; shSum+=Number(m.h)||20; n++; }
+    }
+  });
+  return {
+    keys, box,
+    x: box?Math.round(box.x):0,
+    y: box?Math.round(box.y):0,
+    gw: box?Math.round(box.w):0,
+    gh: box?Math.round(box.h):0,
+    sw: n?Math.round(swSum/n):40,
+    sh: n?Math.round(shSum/n):16,
+    n
+  };
+}
+function syncMultiGeomInputs(){
+  if(multi.size<1 && !selectionKeys().length) return;
+  const g=selectionGeomSummary();
+  const fill=(id,val)=>{
+    const el=document.getElementById(id); if(!el) return;
+    if(document.activeElement===el) return;
+    el.value=String(val);
+  };
+  fill("multi-x", g.x); fill("multi-y", g.y);
+  fill("multi-sw", g.sw); fill("multi-sh", g.sh);
+  fill("ed-sel-x", g.x); fill("ed-sel-y", g.y);
+  fill("ed-sel-sw", g.sw); fill("ed-sel-sh", g.sh);
+  const boxLab=document.getElementById("multi-geom-label");
+  if(boxLab) boxLab.textContent = multi.size>1 ? ("Group · "+multi.size) : "Selection";
+}
+function moveSelectionToXY(nx, ny){
+  const keys=selectionKeys();
+  if(!keys.length){ alert("Select or Multi-select pieces first."); return false; }
+  const box=keysBBox(keys); if(!box) return false;
+  const rawDx=(Number(nx)||0)-box.x, rawDy=(Number(ny)||0)-box.y;
+  const c=clampDeltaForBox(box, rawDx, rawDy);
+  moveMembersByKeys(keys, c.dx, c.dy);
+  sanitizeLayout(); saveLayout(); redraw(); renderDockEditor(); updateSelHint();
+  return true;
+}
+function setSelectionPieceSize(nw, nh){
+  nw=Math.max(6, Number(nw)||0); nh=Math.max(6, Number(nh)||0);
+  if(!nw || !nh){ alert("Enter Width and Height (min 6)."); return false; }
+  const keys=selectionKeys();
+  let n=0;
+  keys.forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind==="slip"){
+      const info=slipWorldPos(id); if(!info) return;
+      const s=info.slip;
+      setPlaced(info.dock, String(id), {
+        x:s.x, y:s.y, w:nw, h:nh, rot:s.rot||0, fill:s.fill
+      });
+      n++;
+    }else if(kind==="dock"){
+      const d=docks.find(x=>x.id===id); if(!d) return;
+      if(d.type==="col"){ d.w=nw; d.h=nh; }
+      else { d.sw=nw; d.sh=nh; }
+      if(d.placed){
+        Object.keys(d.placed).forEach(pid=>{
+          const p=d.placed[pid]; if(!p) return;
+          p.w=nw; p.h=nh;
+        });
+      }
+      n++;
+    }else if(kind==="mark"){
+      const m=marks.find(x=>x.id===id); if(!m || m.kind==="text") return;
+      m.w=nw; m.h=nh; n++;
+    }
+  });
+  if(!n){ alert("Selection has no slips/docks to size."); return false; }
+  sanitizeLayout(); saveLayout(); redraw(); renderDockEditor(); updateSelHint();
+  return true;
+}
+function wireGeomFields(ids){
+  const applyPos=()=>{
+    const xEl=document.getElementById(ids.x), yEl=document.getElementById(ids.y);
+    if(!xEl||!yEl) return;
+    moveSelectionToXY(+xEl.value, +yEl.value);
+  };
+  const applySize=()=>{
+    const wEl=document.getElementById(ids.w), hEl=document.getElementById(ids.h);
+    if(!wEl||!hEl) return;
+    setSelectionPieceSize(+wEl.value, +hEl.value);
+  };
+  [ids.x,ids.y].forEach(id=>{ const el=document.getElementById(id); if(el) el.onchange=applyPos; });
+  [ids.w,ids.h].forEach(id=>{ const el=document.getElementById(id); if(el) el.onchange=applySize; });
+}
+
 function keysForDrag(kind,id){
   const key=kind+":"+id;
   if(multi.has(key) && multi.size>1) return [...multi];
@@ -1400,8 +1504,9 @@ function renderDockEditor(){
     const parents=parentDocksFromKeys([...multi]);
     const anyLocked=parents.some(d=>isLocked(d));
     const anyUnlocked=parents.some(d=>!isLocked(d));
+    const geom=selectionGeomSummary();
     box.innerHTML=`<h2>${multi.size} selected</h2>
-      <p class="hint">Move on the map by dragging any selected piece. Resize together below. Lock as dock when finished so they act as one unit again.</p>
+      <p class="hint">Type Group X/Y to move the set (top-left). Type Slip width/height to set every selected slip/dock size. Or drag / Scale±. Lock as dock when finished.</p>
       <div class="st">
         <button type="button" class="btn" id="ed-sel-unlock">Unlock slips</button>
         <button type="button" class="btn" id="ed-sel-lock">Lock as dock</button>
@@ -1411,7 +1516,10 @@ function renderDockEditor(){
         <button type="button" class="btn" id="ed-sel-join-new">Join as new dock</button>
       </div>
       ${placementSec(`
-        <p class="hint" style="margin-top:0">Resize selection together</p>
+        <p class="hint" style="margin-top:0">Group position (selection top-left) &amp; slip size</p>
+        <div class="row2"><label>Group X<input id="ed-sel-x" type="number" value="${geom.x}"/></label><label>Group Y<input id="ed-sel-y" type="number" value="${geom.y}"/></label></div>
+        <div class="row2"><label>Slip width<input id="ed-sel-sw" type="number" min="6" value="${geom.sw}"/></label><label>Slip height<input id="ed-sel-sh" type="number" min="6" value="${geom.sh}"/></label></div>
+        <p class="hint">Group size on map: ${geom.gw}×${geom.gh} · Scale −/+ resizes the whole arrangement together</p>
         <div class="st">
           <button type="button" class="btn" id="ed-sel-scale-down" title="Scale 90%">Scale −</button>
           <button type="button" class="btn" id="ed-sel-scale-up" title="Scale 110%">Scale +</button>
@@ -1459,6 +1567,7 @@ function renderDockEditor(){
         saveLayout(); redraw(); renderDockEditor();
       };
     });
+    wireGeomFields({x:"ed-sel-x",y:"ed-sel-y",w:"ed-sel-sw",h:"ed-sel-sh"});
   }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label. Workflow: Unlock slips → Multi-select → move/resize → Lock as dock.</p>";
  } finally {
   if(typeof isMobileEdit==="function" && isMobileEdit() && document.body.classList.contains("editing")){
@@ -4208,6 +4317,8 @@ function wireMultiButtons(){
     if(multi.size<1){ alert("Pick slips or docks first."); return; }
     scaleSelectionByFactor(1.1);
   };
+  wireGeomFields({x:"multi-x",y:"multi-y",w:"multi-sw",h:"multi-sh"});
+  try{ syncMultiGeomInputs(); }catch(e){}
 }
 wireMultiButtons();
 document.getElementById("btn-select-all").onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } multiPick=false; selectAllLayout(); };
