@@ -105,6 +105,8 @@ body.editing.multipick .multi-bar{display:flex}
 body.editing.sel-active .multi-bar{display:flex}
 body.editing.sel-active:not(.multipick) #btn-multi-clear,
 body.editing.sel-active:not(.multipick) #btn-multi-done{display:none}
+body.editing.multipick #btn-multi-edit{display:none}
+body.editing.sel-active #btn-multi-edit{display:inline-flex}
 
 .multi-bar b{flex:1 1 auto;font-size:14px}
 .multi-bar .btn{padding:10px 14px;font-size:14px;min-height:44px}
@@ -649,10 +651,12 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 <div class="multi-bar" id="multi-bar">
   <b id="multi-count">0 selected</b>
   <button type="button" class="btn" id="btn-multi-clear">Clear</button>
+  <button type="button" class="btn" id="btn-multi-edit" title="Re-open checklist to add or remove slips from this group">Add / remove</button>
   <button type="button" class="btn" id="btn-multi-move">Move selected</button>
-  <button type="button" class="btn" id="btn-multi-scale-down" title="Resize selection smaller">Scale −</button>
-  <button type="button" class="btn" id="btn-multi-scale-up" title="Resize selection larger">Scale +</button>
+  <button type="button" class="btn" id="btn-multi-scale-down" title="Resize selection smaller (whole group)">Scale −</button>
+  <button type="button" class="btn" id="btn-multi-scale-up" title="Resize selection larger (whole group)">Scale +</button>
   <button type="button" class="btn" id="btn-multi-lock">Lock as dock</button>
+  <button type="button" class="btn" id="btn-multi-unlock" title="Ungroup and unlock only this dock — slips stay on the original parent">Unlock this dock</button>
   <button type="button" class="btn" id="btn-multi-done">Done</button>
   <div class="multi-geom" id="multi-geom" title="Type numbers like a single dock/slip — Group X/Y moves the selection top-left; Slip W/H sets every selected slip size">
     <span class="mg-title" id="multi-geom-label">Group</span>
@@ -796,8 +800,8 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <button class="btn" id="btn-group-all">Select / group all</button>
         <button class="btn" id="btn-group" title="Keep selection moving as one unit">Group / Join</button>
         <button class="btn" id="btn-lock-as-dock" type="button" title="Relock selected slips/docks as one dock unit">Lock as dock</button>
-        <button class="btn" id="btn-unlock-slips" type="button" title="Unlock slips on the selected dock so you can move them alone">Unlock slips</button>
-        <button class="btn" id="btn-ungroup">Ungroup</button>
+        <button class="btn" id="btn-unlock-slips" type="button" title="Unlock only the selected dock so you can move its slips">Unlock this dock</button>
+        <button class="btn" id="btn-ungroup" title="Ungroup and unlock only the selected dock — slips stay on the original parent">Ungroup / Unlock this dock</button>
       </div>
       <p class="hint" id="sel-hint">Turn on Multi-select, then tick docks, dock sides, or slips (easiest on phones). You can also tap the map.</p>
       <div id="pick-list" hidden></div>
@@ -894,7 +898,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=91-share"></script>
-<script src="app.js?v=91-share"></script>
+<script src="app-data.js?v=92-share"></script>
+<script src="app.js?v=92-share"></script>
 </body>
 </html>

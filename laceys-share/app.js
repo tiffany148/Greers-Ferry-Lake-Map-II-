@@ -486,7 +486,7 @@ function updateSelHint(){
   if(multiPick){
     el.textContent = multi.size ? (multi.size+" selected · tick more in the list, or tap Done") : "Tick docks/slips/labels in the list below (or tap the map)";
   }else if(moveWholeChart || multi.size>1){
-    el.textContent = (multi.size||"All")+" selected · drag on the map to move them · Multi-select to change the set";
+    el.textContent = (multi.size||"All")+" selected · drag selected to move · tap map to add/remove · Scale −/+ or type Slip W/H · Add/remove for checklist";
   }else{
     el.textContent = "Multi-select opens a checklist — easiest on phones.";
   }
@@ -732,6 +732,69 @@ function bindStackButtons(){
 function clearLayerNudge(){
   [layerBg, layerStack, layerSite, layerWalkMarks, layerDocks, layerSlips, layerLabels, layerMarks].forEach(L=>{ if(L) L.removeAttribute("transform"); });
 }
+function clearSelectionNudge(){
+  try{
+    if(svg){
+      svg.querySelectorAll("[data-nudge-sel]").forEach(n=>{
+        const base=n.getAttribute("data-base-tf");
+        if(base!=null && base!=="") n.setAttribute("transform", base);
+        else n.removeAttribute("transform");
+        n.removeAttribute("data-nudge-sel");
+        n.removeAttribute("data-base-tf");
+      });
+    }
+  }catch(_){}
+  clearLayerNudge();
+}
+function cssAttrEscape(id){
+  return String(id==null?"":id).replace(/\\/g,"\\\\").replace(/"/g,"\\\"");
+}
+function keysCoverEntireLayout(keys){
+  const all=allLayoutKeys();
+  if(!keys || !keys.length || keys.length<all.length) return false;
+  const set=new Set(keys);
+  return all.every(k=>set.has(k));
+}
+function nudgeSelectionKeys(keys,dx,dy,scaleF,cx,cy){
+  // Partial selection: translate only those pieces so the rest of the map does not jump.
+  // Full selection / select-all: keep the cheap whole-layer nudge.
+  if(keysCoverEntireLayout(keys) || ((!keys||!keys.length) && moveWholeChart)){
+    clearSelectionNudge();
+    nudgeLayers(dx,dy,scaleF,cx,cy);
+    return;
+  }
+  clearSelectionNudge();
+  if(scaleF!=null && Math.abs(scaleF-1)>1e-6){
+    // Pinch-scale still uses layer nudge (dock-align mode); partial scale is applied on pointerup.
+    nudgeLayers(dx,dy,scaleF,cx,cy);
+    return;
+  }
+  const keySet=new Set(keys||[]);
+  const dockIds=new Set();
+  keySet.forEach(k=>{ const {kind,id}=parseMemberKey(k); if(kind==="dock") dockIds.add(id); });
+  const applyNode=n=>{
+    if(!n||!n.setAttribute) return;
+    if(n.getAttribute("data-nudge-sel")==="1") return;
+    if(!n.hasAttribute("data-base-tf")) n.setAttribute("data-base-tf", n.getAttribute("transform")||"");
+    const base=n.getAttribute("data-base-tf")||"";
+    n.setAttribute("data-nudge-sel","1");
+    n.setAttribute("transform", (dx||dy) ? (`translate(${dx} ${dy})`+(base?" "+base:"")) : base);
+  };
+  keySet.forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    const esc=cssAttrEscape(id);
+    if(kind==="dock"){
+      if(svg) svg.querySelectorAll('g.dock-hit[data-dock="'+esc+'"]').forEach(applyNode);
+      // slips are children of the dock group — they ride along
+    }else if(kind==="slip"){
+      const info=slipWorldPos(id);
+      if(info && dockIds.has(info.dock.id)) return; // parent dock already nudged
+      if(svg) svg.querySelectorAll('g.slip[data-id="'+esc+'"]').forEach(applyNode);
+    }else if(kind==="mark"){
+      if(svg) svg.querySelectorAll('[data-mark="'+esc+'"]').forEach(applyNode);
+    }
+  });
+}
 function nudgeLayers(dx,dy,scaleF,cx,cy){
   // Never nudge layerBg — photo stays put while docks/marks move (Move photo owns the aerial)
   let t=`translate(${dx} ${dy})`;
@@ -810,15 +873,26 @@ function parentDocksFromKeys(keys){
   });
   return [...ids].map(id=>docks.find(d=>d.id===id)).filter(Boolean);
 }
+function bakeDockPlaced(d){
+  if(!d) return;
+  generatedSlips(d).forEach(raw=>{
+    const s=applyPlaced(d, raw);
+    if(!(d.placed&&d.placed[String(s.id)])){
+      setPlaced(d, String(s.id), {x:s.x,y:s.y,w:s.w,h:s.h,rot:s.rot||0,fill:s.fill});
+    }
+  });
+}
 function unlockSelectionSlips(){
-  const docksToUnlock=parentDocksFromKeys(selectionKeys());
+  const keys=selectionKeys();
+  const docksToUnlock=parentDocksFromKeys(keys);
   if(!docksToUnlock.length){
-    alert("Select a dock (or slips on a dock) first, then Unlock slips.");
+    alert("Select a dock (or slips on a dock) first, then Unlock this dock.");
     return false;
   }
-  docksToUnlock.forEach(d=>{ d.locked=false; });
+  // Unlock ONLY the parent dock(s) of the current selection — never every dock on the map
+  docksToUnlock.forEach(d=>{ d.locked=false; bakeDockPlaced(d); });
   // Ensure each selected slip has placed coords so it can move independently
-  selectionKeys().forEach(k=>{
+  keys.forEach(k=>{
     const {kind,id}=parseMemberKey(k);
     if(kind!=="slip") return;
     const info=slipWorldPos(id); if(!info) return;
@@ -827,19 +901,57 @@ function unlockSelectionSlips(){
       setPlaced(d, String(id), {x:s.x,y:s.y,w:s.w,h:s.h,rot:s.rot||0,fill:s.fill});
     }
   });
-  // Also bake placed for all slips on unlocked docks so geometry stays put when walking/generated layout changes aren't needed
-  docksToUnlock.forEach(d=>{
-    generatedSlips(d).forEach(raw=>{
-      const s=applyPlaced(d, raw);
-      if(!(d.placed&&d.placed[String(s.id)])){
-        setPlaced(d, String(s.id), {x:s.x,y:s.y,w:s.w,h:s.h,rot:s.rot||0,fill:s.fill});
-      }
-    });
+  // Drop "Locked selection" groups that only covered these docks/slips
+  const unlockIds=new Set(docksToUnlock.map(d=>d.id));
+  groups=groups.filter(g=>{
+    const mem=g.members||[];
+    if((g.name==="Locked selection" || g.name==="Group") && mem.length){
+      const touches=mem.some(k=>{
+        const {kind,id}=parseMemberKey(k);
+        if(kind==="dock") return unlockIds.has(id);
+        if(kind==="slip"){ const d=findDockForSlipId(id); return d && unlockIds.has(d.id); }
+        return false;
+      });
+      if(touches) return false;
+    }
+    return true;
   });
   multiPick=false;
   moveWholeChart=false;
+  const names=docksToUnlock.map(d=>d.name||d.id).join(", ");
   const h=document.getElementById("hint");
-  if(h) h.textContent="Unlocked · Multi-select slips to move/resize together, or drag one slip";
+  if(h) h.textContent="Unlocked "+names+" only · Multi-select / Add-remove freely · Lock as dock returns them to this parent";
+  saveLayout(); redraw(); renderDockEditor(); updateSelHint(); updateSelChip();
+  return true;
+}
+/** Ungroup + unlock only the dock(s) tied to the current selection (not the whole marina). */
+function ungroupUnlockThisDock(){
+  const keys=selectionKeys();
+  if(!keys.length){
+    alert("Select a dock or grouped slips first, then Ungroup / Unlock this dock.");
+    return false;
+  }
+  const parents=parentDocksFromKeys(keys);
+  // Remove groups that intersect this selection
+  const keySet=new Set(keys);
+  groups=groups.filter(g=>!(g.members||[]).some(k=>keySet.has(k)));
+  // Unlock only those parent docks and bake placed geometry
+  parents.forEach(d=>{ d.locked=false; bakeDockPlaced(d); });
+  // Prefer a slip multi-selection so she can Lock back to the same parent cleanly
+  if(parents.length){
+    multi.clear();
+    parents.forEach(d=>{
+      generatedSlips(d).forEach(s=>multi.add("slip:"+String(s.id)));
+    });
+    selectedDock=parents.length===1?parents[0].id:null;
+    selected=null; selectedMark=null;
+  }
+  multiPick=true;
+  moveWholeChart=false;
+  setMultiPick(true);
+  const names=parents.map(d=>d.name||d.id).join(", ")||"selection";
+  const h=document.getElementById("hint");
+  if(h) h.textContent="Ungrouped / unlocked "+names+" only · add/remove slips, then Lock as dock to return to the same parent";
   saveLayout(); redraw(); renderDockEditor(); updateSelHint(); updateSelChip();
   return true;
 }
@@ -864,22 +976,25 @@ function lockSelectionAsDock(){
   if(slipKeys.length>=2 && uniqueParents.size>1){
     return joinSelectionAsNewDock(true);
   }
-  // Same parent (or dock selected): relock parent dock(s), keep placed positions
-  parents.forEach(d=>{ d.locked=true; });
-  if(keys.length>=2){
-    // Keep a named group so the selection still moves as one if mixed with marks
-    groups=groups.filter(g=>g.name!=="Locked selection");
+  // Same parent (or dock selected): relock ORIGINAL parent dock(s), keep placed positions
+  parents.forEach(d=>{ d.locked=true; bakeDockPlaced(d); });
+  // Replace any prior Locked selection group with a clean dock-keyed group
+  groups=groups.filter(g=>g.name!=="Locked selection");
+  if(parents.length===1){
+    const d=parents[0];
+    // Prefer dock member so Unlock this dock / Lock round-trips cleanly
+    groups.push({id:uid("grp"),name:"Locked selection",members:["dock:"+d.id]});
+    multi.clear();
+    multi.add("dock:"+d.id);
+    selectedDock=d.id; selected=null; selectedMark=null;
+  }else if(keys.length>=2){
     groups.push({id:uid("grp"),name:"Locked selection",members:[...keys]});
   }
   multiPick=false;
   moveWholeChart=true;
-  // Prefer selecting the primary dock so Unlock/Lock stays obvious next time
-  if(parents.length===1){
-    selectedDock=parents[0].id; selected=null; selectedMark=null;
-    if(!multi.size) multi.add("dock:"+parents[0].id);
-  }
   const h=document.getElementById("hint");
-  if(h) h.textContent="Locked as dock · drag moves the whole unit · Unlock slips to adjust again";
+  const pname=parents.length===1?(parents[0].name||parents[0].id):"dock";
+  if(h) h.textContent="Locked back to "+pname+" · drag moves the whole unit · Ungroup / Unlock this dock to adjust again";
   saveLayout(); redraw(); renderDockEditor(); updateSelHint(); updateSelChip();
   return true;
 }
@@ -953,8 +1068,19 @@ function scaleSelectionByFactor(f){
   if(!keys.length){ alert("Select or Multi-select pieces first."); return false; }
   const box=keysBBox(keys)||{x:0,y:0,w:MAP_W,h:MAP_H};
   const cx=box.x+box.w/2, cy=box.y+box.h/2;
+  // Ensure slip keys have placed coords before scaling (works even if dock still locked)
+  keys.forEach(k=>{
+    const {kind,id}=parseMemberKey(k);
+    if(kind!=="slip") return;
+    const info=slipWorldPos(id); if(!info) return;
+    const s=info.slip, d=info.dock;
+    if(!(d.placed&&d.placed[String(id)])){
+      setPlaced(d, String(id), {x:s.x,y:s.y,w:s.w,h:s.h,rot:s.rot||0,fill:s.fill});
+    }
+  });
   scaleMembersByKeys(keys, f, cx, cy);
   sanitizeLayout(); saveLayout(); redraw(); renderDockEditor(); updateSelHint();
+  try{ syncMultiGeomInputs(); }catch(e){}
   return true;
 }
 function resizeSelectionSlips(dw, dh){
@@ -1049,6 +1175,7 @@ function setSelectionPieceSize(nw, nh){
     if(kind==="slip"){
       const info=slipWorldPos(id); if(!info) return;
       const s=info.slip;
+      // Always write placed so group sizing works whether the parent dock is locked or not
       setPlaced(info.dock, String(id), {
         x:s.x, y:s.y, w:nw, h:nh, rot:s.rot||0, fill:s.fill
       });
@@ -1071,6 +1198,7 @@ function setSelectionPieceSize(nw, nh){
   });
   if(!n){ alert("Selection has no slips/docks to size."); return false; }
   sanitizeLayout(); saveLayout(); redraw(); renderDockEditor(); updateSelHint();
+  try{ syncMultiGeomInputs(); }catch(e){}
   return true;
 }
 function wireGeomFields(ids){
@@ -1084,10 +1212,32 @@ function wireGeomFields(ids){
     if(!wEl||!hEl) return;
     setSelectionPieceSize(+wEl.value, +hEl.value);
   };
-  [ids.x,ids.y].forEach(id=>{ const el=document.getElementById(id); if(el) el.onchange=applyPos; });
-  [ids.w,ids.h].forEach(id=>{ const el=document.getElementById(id); if(el) el.onchange=applySize; });
+  const bind=(id,fn)=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.onchange=fn;
+    el.onkeydown=ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); fn(); el.blur(); } };
+  };
+  bind(ids.x, applyPos); bind(ids.y, applyPos);
+  bind(ids.w, applySize); bind(ids.h, applySize);
 }
 
+
+function selectionOwnsTap(tapKey, tapDock){
+  if(!tapKey) return false;
+  if(multi.has(tapKey)) return true;
+  // Slip on a selected dock counts as part of the group (Lock as dock stores dock:id)
+  if(tapKey.startsWith("slip:") && tapDock && multi.has("dock:"+tapDock)) return true;
+  // Dock hit while slips from that dock are selected
+  if(tapKey.startsWith("dock:")){
+    const did=tapKey.slice(5);
+    for(const k of multi){
+      if(!k.startsWith("slip:")) continue;
+      const d=findDockForSlipId(k.slice(5));
+      if(d && d.id===did) return true;
+    }
+  }
+  return false;
+}
 function keysForDrag(kind,id){
   const key=kind+":"+id;
   if(multi.has(key) && multi.size>1) return [...multi];
@@ -1337,12 +1487,92 @@ function resizeSide(arr,count,startHint){
   while(arr.length<count){ while(used.has(String(n))) n++; arr.push(/^[A-Z]/.test(String(startHint))?String(startHint):n); used.add(String(n)); n++; }
   return arr;
 }
+function renderMultiSelectionEditor(box){
+    const parents=parentDocksFromKeys([...multi]);
+    const anyLocked=parents.some(d=>isLocked(d));
+    const anyUnlocked=parents.some(d=>!isLocked(d));
+    const geom=selectionGeomSummary();
+    box.innerHTML=`<h2>${multi.size} selected</h2>
+      <p class="hint">Type Group X/Y to move the set (top-left). Type Slip width/height to set every selected slip/dock size. Or drag / Scale±. Lock as dock when finished.</p>
+      <div class="st">
+        <button type="button" class="btn" id="ed-sel-unlock" title="Unlock only the dock(s) for this selection">Unlock this dock</button>
+        <button type="button" class="btn" id="ed-sel-lock">Lock as dock</button>
+      </div>
+      <div class="st">
+        <button type="button" class="btn" id="ed-sel-ungroup" title="Ungroup and unlock only this dock — slips stay on the original parent">Ungroup / Unlock this dock</button>
+      </div>
+      <div class="st">
+        <button type="button" class="btn" id="ed-sel-group">Group / Join</button>
+        <button type="button" class="btn" id="ed-sel-join-new">Join as new dock</button>
+      </div>
+      ${placementSec(`
+        <p class="hint" style="margin-top:0">Group position (selection top-left) &amp; slip size</p>
+        <div class="row2"><label>Group X<input id="ed-sel-x" type="number" value="${geom.x}"/></label><label>Group Y<input id="ed-sel-y" type="number" value="${geom.y}"/></label></div>
+        <div class="row2"><label>Slip width<input id="ed-sel-sw" type="number" min="6" value="${geom.sw}"/></label><label>Slip height<input id="ed-sel-sh" type="number" min="6" value="${geom.sh}"/></label></div>
+        <p class="hint">Group size on map: ${geom.gw}×${geom.gh} · Scale −/+ resizes the whole arrangement together</p>
+        <div class="st">
+          <button type="button" class="btn" id="ed-sel-scale-down" title="Scale 90%">Scale −</button>
+          <button type="button" class="btn" id="ed-sel-scale-up" title="Scale 110%">Scale +</button>
+        </div>
+        <div class="st">
+          <button type="button" class="btn" data-sel-resize="-4,0">W −</button>
+          <button type="button" class="btn" data-sel-resize="4,0">W +</button>
+          <button type="button" class="btn" data-sel-resize="0,-4">H −</button>
+          <button type="button" class="btn" data-sel-resize="0,4">H +</button>
+        </div>
+        ${nudgeCtrlHtml()}
+      `)}
+      ${stackCtrlHtml()}`;
+    bindStackButtons();
+    const u=document.getElementById("ed-sel-unlock");
+    if(u){ u.disabled=!parents.length; u.onclick=()=>unlockSelectionSlips(); }
+    const ug=document.getElementById("ed-sel-ungroup");
+    if(ug){ ug.onclick=()=>ungroupUnlockThisDock(); }
+    const l=document.getElementById("ed-sel-lock");
+    if(l){ l.onclick=()=>lockSelectionAsDock(); }
+    const g=document.getElementById("ed-sel-group");
+    if(g) g.onclick=()=>{
+      if(multi.size<2) return;
+      const name=prompt("Group name?","Group "+(groups.length+1));
+      if(name==null) return;
+      groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
+      multiPick=false; moveWholeChart=true;
+      const h=document.getElementById("hint");
+      if(h) h.textContent="Grouped · drag selected to move all "+multi.size+" · tap to add/remove · Scale −/+ · Lock as dock when done";
+      saveLayout(); redraw(); updateSelHint(); updateSelChip(); renderDockEditor();
+    };
+    const j=document.getElementById("ed-sel-join-new");
+    if(j) j.onclick=()=>joinSelectionAsNewDock(false);
+    const sd=document.getElementById("ed-sel-scale-down");
+    if(sd) sd.onclick=()=>scaleSelectionByFactor(0.9);
+    const su=document.getElementById("ed-sel-scale-up");
+    if(su) su.onclick=()=>scaleSelectionByFactor(1.1);
+    box.querySelectorAll("[data-sel-resize]").forEach(btn=>{
+      btn.onclick=()=>{ const [dw,dh]=btn.getAttribute("data-sel-resize").split(",").map(Number); resizeSelectionSlips(dw,dh); };
+    });
+    box.querySelectorAll("[data-nudge]").forEach(btn=>{
+      btn.onclick=()=>{
+        const [dx,dy]=btn.dataset.nudge.split(",").map(Number);
+        const keys=[...multi];
+        const c=clampDeltaForBox(keysBBox(keys), dx, dy);
+        moveMembersByKeys(keys, c.dx, c.dy);
+        saveLayout(); redraw(); renderDockEditor();
+      };
+    });
+    wireGeomFields({x:"ed-sel-x",y:"ed-sel-y",w:"ed-sel-sw",h:"ed-sel-sh"});
+    try{ syncMultiGeomInputs(); }catch(e){}
+}
 function renderDockEditor(){
  try{
   const box=document.getElementById("dock-editor");
   const d=docks.find(x=>x.id===selectedDock);
   const m=marks.find(x=>x.id===selectedMark);
   const s=slips.find(x=>x.id===selected);
+  // Multi-selection UI takes priority so Scale −/+ and Group X/Y/Slip W/H stay available
+  if(editing && multi.size>1){
+    renderMultiSelectionEditor(box);
+    return;
+  }
   if(s && editing && selectedDock && d && !isLocked(d)){
     const placed=(d.placed&&d.placed[s.id])||{};
     box.innerHTML=`<h2>Slip ${s.num}</h2><p class="hint">Unlocked · drag this slip · Multi-select several, then Lock as dock when done</p>
@@ -1387,7 +1617,7 @@ function renderDockEditor(){
     const locked=isLocked(d);
     const moreOpen=!isMobileEdit()||dockEditorMore;
     box.innerHTML=`<h2>Dock ${d.name}</h2>
-      <div class="st"><button type="button" class="btn" id="ed-lock">${locked?"Unlock slips":"Lock as dock"}</button>
+      <div class="st"><button type="button" class="btn" id="ed-lock">${locked?"Unlock this dock":"Lock as dock"}</button>
       <button type="button" class="btn" id="ed-multi-here" title="Multi-select slips on this dock">Multi-select slips</button></div>
       <p class="hint">${locked?"Locked as one dock unit. Unlock slips → Multi-select the ones you want → move/resize → Lock as dock when done.":"Unlocked: drag slips one at a time, or Multi-select several to move/resize together, then Lock as dock."}</p>`+
       placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
@@ -1500,74 +1730,6 @@ function renderDockEditor(){
     document.getElementById("ed-dup-mark").onclick=()=>{ const copy=clone(m); copy.id=uid(m.kind||"mark"); copy.x+=30; copy.y+=30; marks.push(copy); ensureStackOrder(); stackMove(["mark:"+copy.id],"front"); selectedMark=copy.id; saveLayout(); redraw(); renderDockEditor(); };
     document.getElementById("ed-del").onclick=()=>{if(!confirm("Delete this piece?"))return;marks=marks.filter(x=>x.id!==m.id);groups.forEach(g=>g.members=(g.members||[]).filter(k=>k!=="mark:"+m.id));ensureStackOrder();selectedMark=null;saveLayout();redraw();renderDockEditor();};
     bindStackButtons();
-  }else if(multi.size>1){
-    const parents=parentDocksFromKeys([...multi]);
-    const anyLocked=parents.some(d=>isLocked(d));
-    const anyUnlocked=parents.some(d=>!isLocked(d));
-    const geom=selectionGeomSummary();
-    box.innerHTML=`<h2>${multi.size} selected</h2>
-      <p class="hint">Type Group X/Y to move the set (top-left). Type Slip width/height to set every selected slip/dock size. Or drag / Scale±. Lock as dock when finished.</p>
-      <div class="st">
-        <button type="button" class="btn" id="ed-sel-unlock">Unlock slips</button>
-        <button type="button" class="btn" id="ed-sel-lock">Lock as dock</button>
-      </div>
-      <div class="st">
-        <button type="button" class="btn" id="ed-sel-group">Group / Join</button>
-        <button type="button" class="btn" id="ed-sel-join-new">Join as new dock</button>
-      </div>
-      ${placementSec(`
-        <p class="hint" style="margin-top:0">Group position (selection top-left) &amp; slip size</p>
-        <div class="row2"><label>Group X<input id="ed-sel-x" type="number" value="${geom.x}"/></label><label>Group Y<input id="ed-sel-y" type="number" value="${geom.y}"/></label></div>
-        <div class="row2"><label>Slip width<input id="ed-sel-sw" type="number" min="6" value="${geom.sw}"/></label><label>Slip height<input id="ed-sel-sh" type="number" min="6" value="${geom.sh}"/></label></div>
-        <p class="hint">Group size on map: ${geom.gw}×${geom.gh} · Scale −/+ resizes the whole arrangement together</p>
-        <div class="st">
-          <button type="button" class="btn" id="ed-sel-scale-down" title="Scale 90%">Scale −</button>
-          <button type="button" class="btn" id="ed-sel-scale-up" title="Scale 110%">Scale +</button>
-        </div>
-        <div class="st">
-          <button type="button" class="btn" data-sel-resize="-4,0">W −</button>
-          <button type="button" class="btn" data-sel-resize="4,0">W +</button>
-          <button type="button" class="btn" data-sel-resize="0,-4">H −</button>
-          <button type="button" class="btn" data-sel-resize="0,4">H +</button>
-        </div>
-        ${nudgeCtrlHtml()}
-      `)}
-      ${stackCtrlHtml()}`;
-    bindStackButtons();
-    const u=document.getElementById("ed-sel-unlock");
-    if(u){ u.disabled=!parents.length; u.onclick=()=>unlockSelectionSlips(); }
-    const l=document.getElementById("ed-sel-lock");
-    if(l){ l.onclick=()=>lockSelectionAsDock(); }
-    const g=document.getElementById("ed-sel-group");
-    if(g) g.onclick=()=>{
-      if(multi.size<2) return;
-      const name=prompt("Group name?","Group "+(groups.length+1));
-      if(name==null) return;
-      groups.push({id:uid("grp"),name:String(name).trim()||"Group",members:[...multi]});
-      multiPick=false; moveWholeChart=true;
-      const h=document.getElementById("hint");
-      if(h) h.textContent="Grouped · drag to move all "+multi.size+" · Scale +/− to resize · Lock as dock when done";
-      saveLayout(); redraw(); updateSelHint(); updateSelChip(); renderDockEditor();
-    };
-    const j=document.getElementById("ed-sel-join-new");
-    if(j) j.onclick=()=>joinSelectionAsNewDock(false);
-    const sd=document.getElementById("ed-sel-scale-down");
-    if(sd) sd.onclick=()=>scaleSelectionByFactor(0.9);
-    const su=document.getElementById("ed-sel-scale-up");
-    if(su) su.onclick=()=>scaleSelectionByFactor(1.1);
-    box.querySelectorAll("[data-sel-resize]").forEach(btn=>{
-      btn.onclick=()=>{ const [dw,dh]=btn.getAttribute("data-sel-resize").split(",").map(Number); resizeSelectionSlips(dw,dh); };
-    });
-    box.querySelectorAll("[data-nudge]").forEach(btn=>{
-      btn.onclick=()=>{
-        const [dx,dy]=btn.dataset.nudge.split(",").map(Number);
-        const keys=[...multi];
-        const c=clampDeltaForBox(keysBBox(keys), dx, dy);
-        moveMembersByKeys(keys, c.dx, c.dy);
-        saveLayout(); redraw(); renderDockEditor();
-      };
-    });
-    wireGeomFields({x:"ed-sel-x",y:"ed-sel-y",w:"ed-sel-sw",h:"ed-sel-sh"});
   }else box.innerHTML="<p>Click a dock, slip, walkway, building, or label. Workflow: Unlock slips → Multi-select → move/resize → Lock as dock.</p>";
  } finally {
   if(typeof isMobileEdit==="function" && isMobileEdit() && document.body.classList.contains("editing")){
@@ -1906,14 +2068,33 @@ chart.addEventListener("pointerdown",e=>{
       }
       pan={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); return;
     }
-    // Grouped / multi-selected / select-all: drag on a hit object moves the set; empty water pans
+    // Grouped / multi-selected / select-all:
+    //  - drag a SELECTED piece → move only that selection (pan must not steal)
+    //  - tap a selected piece → remove from selection
+    //  - tap an unselected piece → add to selection
+    //  - empty water / drag on unselected → pan
     if(moveWholeChart || multi.size>1){
-      if(!(sEl||dEl||mEl)){
+      let tapKey=null, tapDock=null, tapMark=null, tapSlip=null;
+      if(sEl && sEl.getAttribute("data-id")){
+        tapSlip=sEl.getAttribute("data-id");
+        tapKey="slip:"+tapSlip;
+        tapDock=sEl.getAttribute("data-dock")||null;
+      }else if(mEl && mEl.getAttribute("data-mark")){ tapMark=mEl.getAttribute("data-mark"); tapKey="mark:"+tapMark; }
+      else if(dEl && dEl.getAttribute("data-dock")){ tapDock=dEl.getAttribute("data-dock"); tapKey="dock:"+tapDock; }
+      if(!(sEl||dEl||mEl) || !tapKey){
         pan={x:e.clientX-tx,y:e.clientY-ty}; chart.setPointerCapture(e.pointerId); return;
       }
-      const keys = multi.size ? [...multi] : allLayoutKeys();
-      dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,startBox:keysBBox(keys)};
-      chart.style.cursor="grabbing";
+      if(selectionOwnsTap(tapKey, tapDock) || (!multi.size && moveWholeChart)){
+        const keys = multi.size ? [...multi] : allLayoutKeys();
+        // Tap-toggle only when the exact key is in multi; dock/slip ownership still drags the group
+        const canToggle = multi.has(tapKey);
+        dockDrag={kind:"chart",keys,px:p.x,py:p.y,sx:0,sy:0,moved:false,fromMultiPick:canToggle,tapKey,tapDock,tapMark,tapSlip,startBox:keysBBox(keys)};
+        chart.style.cursor="grabbing";
+        chart.setPointerCapture(e.pointerId);
+        return;
+      }
+      // Hit outside the current selection — allow free add (tap) without moving the group
+      dockDrag={kind:"pick",tapKey,tapDock,tapMark,tapSlip,px:p.x,py:p.y,moved:false};
       chart.setPointerCapture(e.pointerId);
       return;
     }
@@ -2070,8 +2251,8 @@ chart.addEventListener("pointermove",e=>{
       const rawX=Math.round(dx), rawY=Math.round(dy);
       const c=clampDeltaForBox(dockDrag.startBox||keysBBox(dockDrag.keys), rawX, rawY);
       dockDrag.sx=c.dx; dockDrag.sy=c.dy;
-      // Live nudge via SVG transform (no full redraw -- keeps it smooth)
-      nudgeLayers(dockDrag.sx, dockDrag.sy);
+      // Live nudge ONLY the selection — never translate the whole marina for a partial group
+      nudgeSelectionKeys(dockDrag.keys, dockDrag.sx, dockDrag.sy);
       return;
     }
     if(dockDrag.kind==="slip"){
@@ -2179,7 +2360,7 @@ chart.addEventListener("pointerup",e=>{
         showTab("layout"); renderDockEditor();
       }
     }else if(dockDrag.kind==="chart"){
-      clearLayerNudge();
+      clearSelectionNudge();
       if(dockDrag.fromMultiPick && !dockDrag.moved && dockDrag.tapKey){
         // Tap (not drag) while a multi-selection exists — toggle that piece
         toggleMultiKey(dockDrag.tapKey);
@@ -2333,7 +2514,7 @@ document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
         ? "Tools = panel · drag docks · empty water pans · Done exits"
-        : (multiPick?"Multi-select on · tap docks/slips/labels":(moveWholeChart||multi.size>1?"Drag anywhere to move the whole chart · Ungroup to edit pieces":"Drag docks/labels · use Dock panel on the right · empty water pans")))
+        : (multiPick?"Multi-select on · tap docks/slips/labels":(moveWholeChart||multi.size>1?"Drag selected pieces to move the group · tap to add/remove · empty water pans · Ungroup/Unlock this dock to edit":"Drag docks/labels · use Dock panel on the right · empty water pans")))
     : "Click a numbered slip · drag to pan";
   if(editing){
     showTab("layout");
@@ -4282,14 +4463,21 @@ function wireMultiButtons(){
   const b1=document.getElementById("btn-multi"); if(b1) b1.onclick=toggle;
   const b2=document.getElementById("btn-multi-hdr"); if(b2) b2.onclick=toggle;
   const clear=document.getElementById("btn-multi-clear");
-  if(clear) clear.onclick=()=>{ multi.clear(); moveWholeChart=false; updateSelHint(); redraw(); };
+  if(clear) clear.onclick=()=>{ multi.clear(); moveWholeChart=false; updateSelHint(); redraw(); renderDockEditor(); };
   const done=document.getElementById("btn-multi-done");
   if(done) done.onclick=()=>{
     setMultiPick(false);
     if(multi.size>1){
       moveWholeChart=true;
-      document.getElementById("hint").textContent="Drag on the map to move the "+multi.size+" selected pieces";
+      document.getElementById("hint").textContent="Grouped · drag selected to move · tap to add/remove · Scale −/+ or type Slip W/H · Lock as dock when done";
+      renderDockEditor();
     }
+  };
+  const editSel=document.getElementById("btn-multi-edit");
+  if(editSel) editSel.onclick=()=>{
+    if(multi.size<1){ alert("Nothing selected yet."); return; }
+    setMultiPick(true);
+    document.getElementById("hint").textContent="Add/remove · tick list or tap the map · Done when the set is right";
   };
   const move=document.getElementById("btn-multi-move");
   if(move) move.onclick=()=>{
@@ -4297,15 +4485,21 @@ function wireMultiButtons(){
     setMultiPick(false);
     moveWholeChart = multi.size>0;
     document.getElementById("hint").textContent = multi.size>1
-      ? ("Drag on the map to move all "+multi.size+" selected pieces · Lock as dock when finished")
+      ? ("Drag selected pieces to move all "+multi.size+" · tap to add/remove · Scale −/+ works · Lock as dock when finished")
       : "Drag on the map to move the selected piece";
     updateSelHint();
+    renderDockEditor();
   };
   const mlock=document.getElementById("btn-multi-lock");
   if(mlock) mlock.onclick=()=>{
     if(multi.size<1){ alert("Pick slips or a dock first."); return; }
     setMultiPick(false);
     lockSelectionAsDock();
+  };
+  const mUnlock=document.getElementById("btn-multi-unlock");
+  if(mUnlock) mUnlock.onclick=()=>{
+    if(multi.size<1 && !selectionKeys().length){ alert("Select a dock or slips first."); return; }
+    ungroupUnlockThisDock();
   };
   const msDown=document.getElementById("btn-multi-scale-down");
   if(msDown) msDown.onclick=()=>{
@@ -4333,7 +4527,7 @@ document.getElementById("btn-group").onclick=()=>{
   moveWholeChart=true;
   updateSelHint();
   const h=document.getElementById("hint");
-  if(h) h.textContent="Grouped / joined · drag to move · Scale ± in Tools to resize · Lock as dock when done";
+  if(h) h.textContent="Grouped · drag selected to move · tap to add/remove · Scale −/+ or type Slip W/H · Lock as dock when done";
   saveLayout(); redraw(); updateSelChip(); renderDockEditor();
 };
 const _lockAs=document.getElementById("btn-lock-as-dock");
@@ -4341,13 +4535,8 @@ if(_lockAs) _lockAs.onclick=()=>{ if(!editing){ if(blockEdit()) return; document
 const _unlockSl=document.getElementById("btn-unlock-slips");
 if(_unlockSl) _unlockSl.onclick=()=>{ if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); } unlockSelectionSlips(); };
 document.getElementById("btn-ungroup").onclick=()=>{
-  const keys=[...multi];
-  if(selectedDock) keys.push("dock:"+selectedDock);
-  if(selectedMark) keys.push("mark:"+selectedMark);
-  if(selected) keys.push("slip:"+selected);
-  if(!keys.length){ alert("Select a grouped item (or multi-select) first."); return; }
-  groups=groups.filter(g=>!(g.members||[]).some(k=>keys.includes(k)));
-  multi.clear(); moveWholeChart=false; updateSelHint(); saveLayout(); redraw();
+  if(!editing){ if(blockEdit()) return; document.getElementById("edit-toggle").click(); }
+  ungroupUnlockThisDock();
 };
 document.getElementById("btn-dup").onclick=()=>{
   if(selectedDock){
