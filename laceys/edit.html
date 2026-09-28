@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Lacey's Narrows (editable)</title>
+<style>html,body{margin:0;background:#0c3c41;color:#eef4f3;font-family:-apple-system,system-ui,sans-serif}p{padding:24px}a{color:#d5ecea}</style>
+</head>
+<body>
+<p id="s">Loading the edit chart…</p>
+<script>
+fetch("https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/e278feea94/laceys/index.html")
+  .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
+  .then(function(html){
+    if(html.indexOf("edit-toggle")===-1) throw new Error("not editor");
+    document.open();
+    document.write(html);
+    document.close();
+  })
+  .catch(function(){
+    document.getElementById("s").innerHTML = 'Could not open the edit chart. <a href="../laceys-sandbox/">Open sandbox editor</a>';
+  });
+</script>
+</body>
+</html>
