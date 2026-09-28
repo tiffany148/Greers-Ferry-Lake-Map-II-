@@ -19,7 +19,7 @@ let DEFAULT_GROUPS=[];
 (function loadPublishedDefaults(){
   try{
     const xhr=new XMLHttpRequest();
-    xhr.open("GET","./published-layout.json?v=94",false);
+    xhr.open("GET","./published-layout.json?v=95",false);
     xhr.send(null);
     if(xhr.status>=200 && xhr.status<300 && xhr.responseText){
       const j=JSON.parse(xhr.responseText);
@@ -30,4 +30,27 @@ let DEFAULT_GROUPS=[];
       DEFAULT_STACK_ORDER=j.stackOrder||[];
     }
   }catch(e){}
+})();
+(function phoneMapFix(){
+  const css=document.createElement("style");
+  css.setAttribute("data-phone-map","1");
+  css.textContent=[
+    "@media (max-width:860px){",
+    "  #layout-tip-banner,#gh-publish-token-wrap,.kicker,.search,.label-size-bar,.meta #hint,.meta #count{display:none !important;}",
+    "  header{padding:8px 10px 4px !important;}",
+    "  header .top{gap:6px;}",
+    "  header h1{font-size:20px !important;margin:0;}",
+    "  header .hdr-actions{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;max-width:100%;}",
+    "  header .hdr-actions .btn, header .hdr-actions button{flex:0 0 auto;}",
+    "  .photo-op,.photo-align{margin:4px 8px !important;padding:6px 8px !important;}",
+    "  .map-stage{flex:1 1 auto !important;min-height:0 !important;}",
+    "  .layout{min-height:58dvh !important;height:58dvh !important;position:relative;}",
+    "  .chart{position:relative !important;width:100% !important;height:58dvh !important;min-height:58dvh !important;margin:0 !important;z-index:3;touch-action:none;}",
+    "  .chart svg#svg{z-index:1;pointer-events:auto;}",
+    "  body:not(.editing) .layout > aside{max-height:72px !important;z-index:4;}",
+    "  .zoom,.pan{z-index:6;pointer-events:auto;}",
+    "}",
+    "body.photo-moving .chart{outline:3px solid #f0c14b;}",
+  ].join("\n");
+  document.documentElement.appendChild(css);
 })();
