@@ -8,8 +8,9 @@
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
 *{box-sizing:border-box}
-html,body{height:100%;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
-header{padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
+html,body{height:100%;height:100dvh;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}
+header{flex:0 0 auto;padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
 .kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
 .top{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
 h1{margin:4px 0 0;font-size:28px;font-weight:650}
@@ -17,13 +18,15 @@ h1{margin:4px 0 0;font-size:28px;font-weight:650}
 .hdr-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .hdr-actions button,.btn{border:0;border-radius:10px;padding:8px 12px;background:#15565b;color:var(--ink);cursor:pointer;font-size:13px}
 .hdr-actions button.on,.btn.on{background:#d5ecea;color:#0c3c41;font-weight:700}
+.map-stage{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.search,.chips,.photo-op,.label-size-bar,.photo-align,.multi-bar,.edit-banner{flex:0 0 auto}
 .search{padding:8px 16px 0}
 .search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
 .chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
-.layout{display:grid;grid-template-columns:1fr 320px;height:calc(100% - 188px)}
-.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539;touch-action:none;-ms-touch-action:none}
+.layout{display:grid;grid-template-columns:1fr 320px;flex:1 1 auto;min-height:0;height:auto !important}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539;touch-action:none;-ms-touch-action:none;height:100%;min-height:0}
 .chart.editing{cursor:default}
 svg{transform-origin:0 0}
 .slip{cursor:pointer}
@@ -48,7 +51,7 @@ svg{transform-origin:0 0}
   .zoom button,.pan button{width:52px;height:52px;font-size:24px}
   .pan{grid-template-columns:52px 52px 52px;grid-template-rows:52px 52px 52px}
 }
-aside{background:#0a3338;padding:16px;overflow:auto}
+aside{background:#0a3338;padding:16px;overflow:auto;min-height:0}
 .tabs{display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .tabs button{background:none;border:0;color:var(--muted);font-size:15px;padding-bottom:6px;cursor:pointer}
 .tabs button.on{color:var(--ink);box-shadow:inset 0 -2px 0 #d5ecea}
@@ -77,7 +80,16 @@ aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;p
 .chip.layer-on{outline:2px solid #b8f5c5}
 .edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
 body.editing .edit-banner{display:block}
-@media(max-width:860px){.layout{grid-template-columns:1fr;height:auto}.chart{height:55vh;margin:0 12px;border-radius:14px}}
+@media(max-width:860px){
+  .layout{grid-template-columns:1fr;grid-template-rows:1fr;position:relative;height:auto !important;min-height:0}
+  .chart{height:100%;min-height:0;margin:0 12px;border-radius:14px;grid-row:1;grid-column:1}
+  /* browse: aside overlays bottom so chart keeps full map-stage height (edit mode overrides to sheet) */
+  body:not(.editing) .layout > aside{
+    position:absolute;left:0;right:0;bottom:0;z-index:15;
+    max-height:min(42vh,360px);border-radius:14px 14px 0 0;
+    box-shadow:0 -8px 24px rgba(0,0,0,.35);
+  }
+}
 
 @media print{
   @page{ size: landscape; margin: 0.4in; }
@@ -85,14 +97,19 @@ body.editing .edit-banner{display:block}
   header .kicker,.search,.chips,.zoom,.pan,.photo-op,.photo-align,.label-size-bar,aside,.edit-banner,.hdr-actions,#hint,#count{ display:none !important; }
   header{ padding:0 0 6px !important; }
   h1{ color:#111 !important; font-size:18px !important; }
+  .map-stage{ display:block !important; overflow:visible !important; height:auto !important; flex:none !important; }
   .layout{ display:block !important; height:auto !important; }
   .chart{ margin:0 !important; border-radius:0 !important; overflow:visible !important; height:auto !important; background:#fff !important; }
   svg{ width:10.5in !important; height:7.2in !important; max-width:100% !important; transform:none !important; }
 }
 
 
-.chart{min-height:420px}
-.layout{min-height:420px}
+/* chart/layout fill flex stage — no fixed min-height (was 420px; crushed mobile) */
+.chart{min-height:0}
+.layout{min-height:0}
+@media(min-width:861px){
+  .chart{min-height:200px}
+}
 #error-banner{display:none;margin:8px 16px;padding:10px 12px;border-radius:10px;background:#7a1f1f;color:#fff;font-size:14px}
 
 
@@ -635,19 +652,22 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <button id="edit-toggle">Edit docks</button>
         <a id="link-sandbox" class="btn" href="../laceys-sandbox/" title="Blank playground — separate saves, never overwrites main" style="text-decoration:none;display:inline-flex;align-items:center">Sandbox (blank)</a>
       </div>
-      <div id="gh-publish-token-wrap" style="margin-top:8px;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.18);font-size:12px;max-width:640px">
-        <div style="font-weight:700;margin-bottom:4px">GitHub publish token</div>
-        <div style="opacity:.9;margin-bottom:6px">Create a fine-grained PAT at github.com/settings/tokens with Contents: Read and write on repo tiffany148/Greers-Ferry-Lake-Map-II- only. Saved only on this device — never written into published-layout.json.</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-          <input id="gh-publish-token" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:180px;padding:6px 8px;border-radius:8px;border:0;background:#0c3c41;color:#eef6f8"/>
-          <button type="button" class="btn" id="btn-gh-token-save">Save token</button>
-          <button type="button" class="btn" id="btn-gh-token-clear">Clear token</button>
-        </div>
-        <div id="gh-publish-status" style="margin-top:6px;opacity:.85"></div>
+      <div id="gh-publish-token-wrap" style="margin-top:4px;padding:4px 8px;border-radius:8px;background:rgba(0,0,0,.18);font-size:11px;max-width:520px;line-height:1.25">
+        <details>
+          <summary style="font-weight:700;cursor:pointer;user-select:none">GitHub publish token</summary>
+          <div style="opacity:.9;margin:4px 0 6px">Fine-grained PAT · Contents Read/write on tiffany148/Greers-Ferry-Lake-Map-II- only. Saved on this device only.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+            <input id="gh-publish-token" type="password" autocomplete="off" placeholder="github_pat_…" style="flex:1;min-width:160px;padding:5px 8px;border-radius:8px;border:0;background:#0c3c41;color:#eef6f8"/>
+            <button type="button" class="btn" id="btn-gh-token-save">Save token</button>
+            <button type="button" class="btn" id="btn-gh-token-clear">Clear token</button>
+          </div>
+          <div id="gh-publish-status" style="margin-top:4px;opacity:.85"></div>
+        </details>
       </div>
     </div>
   </div>
 </header>
+<div class="map-stage">
 <div class="multi-bar" id="multi-bar">
   <b id="multi-count">0 selected</b>
   <button type="button" class="btn" id="btn-multi-clear">Clear</button>
@@ -892,13 +912,14 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   </aside>
 </div>
 
+</div>
 <div id="edit-fabs" aria-label="Edit quick actions">
   <button type="button" id="edit-fab-tools">Tools</button>
   <button type="button" id="edit-fab-done">Done</button>
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=92-view"></script>
-<script src="app.js?v=92-view"></script>
+<script src="app-data.js?v=93-view"></script>
+<script src="app.js?v=93-view"></script>
 </body>
 </html>
