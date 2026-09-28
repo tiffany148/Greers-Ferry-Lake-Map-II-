@@ -8,8 +8,10 @@
 <style>
 :root{--water:#0c3c41;--ink:#eef4f3;--muted:#b7c9c7;--chip:#13494e}
 *{box-sizing:border-box}
-html,body{height:100%;height:100dvh;margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif;overflow:hidden}
-body{display:flex;flex-direction:column}
+/* v95: sticky browse bar + page scrolls (overflow-y:auto) so tall chrome/options stay reachable; chart keeps a large min-height */
+html{min-height:100%;min-height:100dvh}
+html,body{margin:0;background:var(--water);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,sans-serif}
+body{min-height:100%;min-height:100dvh;height:auto;overflow-x:hidden;overflow-y:auto;display:flex;flex-direction:column;-webkit-text-size-adjust:100%}
 header{flex:0 0 auto;padding:calc(10px + env(safe-area-inset-top)) 16px 4px}
 .kicker{font-size:11px;letter-spacing:.16em;color:var(--muted)}
 .top{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
@@ -18,15 +20,15 @@ h1{margin:4px 0 0;font-size:28px;font-weight:650}
 .hdr-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
 .hdr-actions button,.btn{border:0;border-radius:10px;padding:8px 12px;background:#15565b;color:var(--ink);cursor:pointer;font-size:13px}
 .hdr-actions button.on,.btn.on{background:#d5ecea;color:#0c3c41;font-weight:700}
-.map-stage{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.map-stage{flex:1 1 auto;min-height:min(70dvh,calc(100dvh - 8rem));display:flex;flex-direction:column;overflow:visible}
 .search,.chips,.photo-op,.label-size-bar,.photo-align,.multi-bar,.edit-banner{flex:0 0 auto}
 .search{padding:8px 16px 0}
 .search input{width:100%;border:0;border-radius:12px;padding:12px 14px;font-size:15px;background:#15565b;color:var(--ink)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:10px 16px}
 .chip{flex:0 0 auto;border:0;border-radius:999px;padding:8px 13px;background:var(--chip);color:var(--ink);cursor:pointer;font-size:14px}
 .chip.on{background:#d5ecea;color:#0c3c41;font-weight:700}
-.layout{display:grid;grid-template-columns:1fr 320px;flex:1 1 auto;min-height:0;height:auto !important}
-.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539;touch-action:none;-ms-touch-action:none;height:100%;min-height:0}
+.layout{display:grid;grid-template-columns:1fr 320px;flex:1 1 auto;min-height:min(70dvh,calc(100dvh - 8rem));height:auto !important}
+.chart{position:relative;overflow:hidden;cursor:grab;margin-left:10px;border-radius:14px 0 0 0;background:#0a3539;touch-action:none;-ms-touch-action:none;height:min(78dvh,calc(100dvh - 6rem));min-height:min(70dvh,calc(100dvh - 8rem))}
 .chart.editing{cursor:default}
 svg{transform-origin:0 0}
 .slip{cursor:pointer}
@@ -81,9 +83,9 @@ aside input,aside textarea,aside select{width:100%;border:0;border-radius:10px;p
 .edit-banner{display:none;margin:0 16px;padding:8px 12px;border-radius:10px;background:#1a5c4a;font-size:13px}
 body.editing .edit-banner{display:block}
 @media(max-width:860px){
-  .layout{grid-template-columns:1fr;grid-template-rows:1fr;position:relative;height:auto !important;min-height:0}
-  .chart{height:100%;min-height:0;margin:0 12px;border-radius:14px;grid-row:1;grid-column:1}
-  /* browse: aside overlays bottom so chart keeps full map-stage height (edit mode overrides to sheet) */
+  .layout{grid-template-columns:1fr;grid-template-rows:auto;position:relative;height:auto !important;min-height:min(70dvh,calc(100dvh - 10rem))}
+  .chart{height:min(70dvh,calc(100dvh - 10rem));min-height:min(70dvh,calc(100dvh - 10rem));margin:0 12px;border-radius:14px;grid-row:1;grid-column:1}
+  /* browse: aside overlays bottom so chart keeps generous height (edit mode overrides to sheet) */
   body:not(.editing) .layout > aside{
     position:absolute;left:0;right:0;bottom:0;z-index:15;
     max-height:min(42vh,360px);border-radius:14px 14px 0 0;
@@ -104,11 +106,11 @@ body.editing .edit-banner{display:block}
 }
 
 
-/* chart/layout fill flex stage — no fixed min-height (was 420px; crushed mobile) */
-.chart{min-height:0}
-.layout{min-height:0}
+/* v95: generous chart min-height; page (not only map) can scroll when chrome is tall */
+.chart{min-height:min(70dvh,calc(100dvh - 8rem))}
+.layout{min-height:min(70dvh,calc(100dvh - 8rem))}
 @media(min-width:861px){
-  .chart{min-height:200px}
+  .chart{min-height:max(420px,min(70dvh,calc(100dvh - 8rem)));height:min(78dvh,calc(100dvh - 6rem))}
 }
 #error-banner{display:none;margin:8px 16px;padding:10px 12px;border-radius:10px;background:#7a1f1f;color:#fff;font-size:14px}
 
@@ -617,9 +619,46 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
   }
 }
 
+
+/* v95: mobile browse — sticky always-on Edit docks (map touch-action:none eats swipes) */
+#browse-sticky{display:none}
+@media (max-width:860px){
+  body:not(.editing) #browse-sticky{
+    display:flex; align-items:center; gap:8px; flex-wrap:nowrap;
+    position:-webkit-sticky; position:sticky; top:0; z-index:90;
+    flex:0 0 auto; flex-shrink:0;
+    padding:8px 12px; padding-top:calc(8px + env(safe-area-inset-top,0px));
+    background:#0c3c41; border-bottom:1px solid #15565b;
+    box-shadow:0 2px 12px rgba(0,0,0,.4);
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation;
+  }
+  body.editing #browse-sticky{display:none !important}
+  body:not(.editing) header{padding-top:8px} /* safe-area handled by sticky bar */
+  #browse-sticky button,#browse-sticky a.btn{
+    border:0; border-radius:10px; padding:8px 12px; min-height:40px;
+    background:#15565b; color:var(--ink); cursor:pointer; font-size:13px;
+    text-decoration:none; display:inline-flex; align-items:center; white-space:nowrap;
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation;
+  }
+  #browse-sticky #edit-toggle-sticky{
+    font-weight:700; background:#d5ecea; color:#0c3c41;
+  }
+  #browse-sticky #edit-toggle-sticky.on{background:#f0c14b; color:#1a1a1a}
+  #browse-sticky .bs-spacer{flex:1 1 auto; min-width:4px}
+}
+@media print{
+  #browse-sticky{display:none !important}
+}
+
 </style>
 </head>
 <body>
+<div id="browse-sticky" aria-label="Quick actions">
+  <button type="button" id="edit-toggle-sticky">Edit docks</button>
+  <button type="button" id="btn-save-sticky" title="Save current layout on this device">Save</button>
+  <span class="bs-spacer" aria-hidden="true"></span>
+  <a id="link-sandbox-sticky" class="btn" href="../laceys-sandbox/" title="Blank playground — separate saves, never overwrites main">Sandbox</a>
+</div>
 <header>
 
 <div id="edit-chrome" aria-label="Edit toolbar">
@@ -919,7 +958,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=93-layers"></script>
-<script src="app.js?v=93-layers"></script>
+<script src="app-data.js?v=95-layers"></script>
+<script src="app.js?v=95-layers"></script>
 </body>
 </html>
