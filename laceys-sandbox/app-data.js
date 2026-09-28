@@ -11,8 +11,23 @@ const clone=o=>JSON.parse(JSON.stringify(o));
 const parseNums=str=>String(str||"").split(/[\s,]+/).map(s=>s.trim()).filter(Boolean).map(s=>/^\d+$/.test(s)?Number(s):s);
 const uid=p=>p+"-"+Math.random().toString(36).slice(2,8);
 const isLocked=d=>d.locked!==false;
-const DEFAULT_DOCKS=[];
-const DEFAULT_MARKS=[];
-const DEFAULT_LAYERS=[];
-const DEFAULT_STACK_ORDER=[];
-const DEFAULT_GROUPS=[];
+let DEFAULT_DOCKS=[];
+let DEFAULT_MARKS=[];
+let DEFAULT_LAYERS=[];
+let DEFAULT_STACK_ORDER=[];
+let DEFAULT_GROUPS=[];
+(function loadPublishedDefaults(){
+  try{
+    const xhr=new XMLHttpRequest();
+    xhr.open("GET","./published-layout.json?v=94",false);
+    xhr.send(null);
+    if(xhr.status>=200 && xhr.status<300 && xhr.responseText){
+      const j=JSON.parse(xhr.responseText);
+      DEFAULT_DOCKS=j.docks||[];
+      DEFAULT_MARKS=j.marks||[];
+      DEFAULT_LAYERS=j.layers||[];
+      DEFAULT_GROUPS=j.groups||[];
+      DEFAULT_STACK_ORDER=j.stackOrder||[];
+    }
+  }catch(e){}
+})();
