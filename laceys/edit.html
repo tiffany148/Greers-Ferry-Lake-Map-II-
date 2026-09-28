@@ -19,14 +19,32 @@ fetch("https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/e2
     );
     html = html.replace('</head>',
       '<style id="page-scroll">'
-      + 'html,body{overflow:auto!important;overflow-x:hidden!important;height:auto!important;min-height:100%!important;max-height:none!important;position:static!important;touch-action:manipulation!important}'
-      + 'body.editing{position:static!important;height:auto!important}'
+      + 'html,body{overflow:auto!important;overflow-x:hidden!important;height:auto!important;min-height:100%!important;max-height:none!important;position:static!important}'
+      + 'header{position:relative!important;top:auto!important}'
       + '.map-stage{overflow:visible!important;height:auto!important;flex:none!important}'
-      + '.layout{height:auto!important;min-height:62dvh!important}'
-      + '.chart{touch-action:none!important;min-height:62dvh!important;height:62dvh!important;width:100%!important}'
-      + '.photo-align,.photo-op,.label-size-bar,.hdr-actions,.search,.chips,.edit-banner{position:relative!important}'
-      + 'body.editing .photo-op,body.editing .photo-align,body.editing .label-size-bar{position:relative!important;top:auto!important;display:flex!important}'
+      + '.layout{height:auto!important;min-height:58dvh!important}'
+      + '.chart{touch-action:none!important;min-height:58dvh!important;height:58dvh!important;width:100%!important}'
+      + '#always-edit{position:fixed;top:8px;left:8px;z-index:99999;border:0;border-radius:12px;padding:12px 16px;background:#f0c14b;color:#1a1a1a;font-weight:800;font-size:16px;box-shadow:0 4px 14px rgba(0,0,0,.4)}'
       + '</style></head>'
+    );
+    html = html.replace('</body>',
+      '<button type="button" id="always-edit">Edit docks</button>'
+      + '<script>'
+      + '(function(){'
+      + 'var b=document.getElementById("always-edit");'
+      + 'function sync(){'
+      + '  var on=document.body.classList.contains("editing");'
+      + '  b.textContent=on?"Done editing":"Edit docks";'
+      + '}'
+      + 'b.onclick=function(){'
+      + '  var t=document.getElementById("edit-toggle")||document.getElementById("edit-toggle-mobile");'
+      + '  if(t) t.click();'
+      + '  setTimeout(sync, 50);'
+      + '};'
+      + 'window.scrollTo(0,0);'
+      + 'sync();'
+      + '})();'
+      + '<\/script></body>'
     );
     document.open();
     document.write(html);
