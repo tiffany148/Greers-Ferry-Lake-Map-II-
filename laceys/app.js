@@ -2512,6 +2512,8 @@ document.getElementById("edit-toggle").onclick=()=>{ if(blockEdit()) return;
   document.getElementById("edit-toggle").textContent=editing?"Done editing":"Edit docks";
   const em=document.getElementById("edit-toggle-mobile");
   if(em){ em.classList.toggle("on",editing); em.textContent="Done"; }
+  const es=document.getElementById("edit-toggle-sticky");
+  if(es){ es.classList.toggle("on",editing); es.textContent=editing?"Done editing":"Edit docks"; }
   if(!editing){ multiPick=false; closeEditPanel(); stretchToolsOpen=false; document.body.classList.remove("stretch-open","photo-tools-open"); ["--edit-chrome-h","--edit-photo-op-h","--edit-label-h","--edit-align-h","--edit-top","--edit-sheet-h"].forEach(k=>document.documentElement.style.removeProperty(k)); if(dockAlignMode) setDockAlignMode(false); if(photoMoveMode) setPhotoMoveMode(false); if(gcpMode) setGcpMode(false); if(scaleMeasureMode) setScaleMeasureMode(false); }
   document.getElementById("hint").textContent=editing
     ? (window.matchMedia("(max-width:860px)").matches
@@ -2568,7 +2570,9 @@ function wireMobileEditChrome(){
     "btn-undo-m":"btn-undo",
     "btn-redo-m":"btn-redo",
     "btn-save-m":"btn-save",
-    "edit-toggle-mobile":"edit-toggle"
+    "btn-save-sticky":"btn-save",
+    "edit-toggle-mobile":"edit-toggle",
+    "edit-toggle-sticky":"edit-toggle"
   };
   Object.keys(map).forEach(id=>{
     const src=document.getElementById(id);
@@ -4571,6 +4575,7 @@ if((typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) || (typeof LAYERS_EDIT_ONLY!=="
   document.body.classList.remove("editing");
   const et=document.getElementById("edit-toggle"); if(et){ et.hidden=true; et.onclick=()=>{ blockEdit(); }; }
   const etm=document.getElementById("edit-toggle-mobile"); if(etm){ etm.hidden=true; etm.onclick=()=>{ blockEdit(); }; }
+  const ets=document.getElementById("edit-toggle-sticky"); if(ets){ ets.hidden=true; ets.onclick=()=>{ blockEdit(); }; }
   ["btn-photo-move","btn-dock-align","btn-gcp-align","photo-nudge-l","photo-nudge-r","photo-nudge-u","photo-nudge-d",
    "photo-reset-align","photo-fit-workspace","btn-reset-cruiser","btn-restore-original","reset-layout","import-layout",
    "add-dock","add-slip-free","add-walk","add-box","add-label","btn-dup","btn-multi","btn-select-all","btn-lock-as-dock","btn-unlock-slips","btn-multi-lock",
