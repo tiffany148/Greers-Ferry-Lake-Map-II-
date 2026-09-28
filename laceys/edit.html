@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"/>
 <title>Lacey's Narrows (editable)</title>
 <style>html,body{margin:0;background:#0c3c41;color:#eef4f3;font-family:-apple-system,system-ui,sans-serif}p{padding:24px}a{color:#d5ecea}</style>
 </head>
@@ -13,6 +13,21 @@ fetch("https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/e2
   .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
   .then(function(html){
     if(html.indexOf("edit-toggle")===-1) throw new Error("not editor");
+    html = html.replace(
+      'content="width=device-width, initial-scale=1, viewport-fit=cover"',
+      'content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"'
+    );
+    html = html.replace('</head>',
+      '<style id="page-scroll">'
+      + 'html,body{overflow:auto!important;overflow-x:hidden!important;height:auto!important;min-height:100%!important;max-height:none!important;position:static!important;touch-action:manipulation!important}'
+      + 'body.editing{position:static!important;height:auto!important}'
+      + '.map-stage{overflow:visible!important;height:auto!important;flex:none!important}'
+      + '.layout{height:auto!important;min-height:62dvh!important}'
+      + '.chart{touch-action:none!important;min-height:62dvh!important;height:62dvh!important;width:100%!important}'
+      + '.photo-align,.photo-op,.label-size-bar,.hdr-actions,.search,.chips,.edit-banner{position:relative!important}'
+      + 'body.editing .photo-op,body.editing .photo-align,body.editing .label-size-bar{position:relative!important;top:auto!important;display:flex!important}'
+      + '</style></head>'
+    );
     document.open();
     document.write(html);
     document.close();
