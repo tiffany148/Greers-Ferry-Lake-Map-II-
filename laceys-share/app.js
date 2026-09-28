@@ -2434,8 +2434,10 @@ if(panCenter) panCenter.onclick=()=>fitWholeMap();
 // Initial view: zoomed in for reading slips; use ⛶ to see whole map on one page
 requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(deepZoom) fitWholeMap(); else defaultMarinaZoom(); }));
 window.addEventListener("resize",()=>{
-  // Keep current relative zoom band sane after rotate/resize
-  if(scale<minZoomScale()) { scale=minZoomScale(); applyZoom(); }
+  // After flex shell reflow, chart getBoundingClientRect changes — re-apply zoom band
+  if(scale<minZoomScale()) scale=minZoomScale();
+  applyZoom();
+  try{ if(document.body.classList.contains("editing")) syncEditChromeHeight(); }catch(e){}
 });
 document.querySelectorAll("#pane-slip .st button").forEach(b=>b.onclick=()=>{if(!selected)return; if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{};data[selected].status=b.dataset.st;save(data);select(selected);});
 ["boat","notes"].forEach(fid=>document.getElementById(fid).addEventListener("input",()=>{if(!selected)return; if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ blockEdit(); return; }data[selected]=data[selected]||{status:"vacant"};data[selected][fid]=document.getElementById(fid).value;save(data);renderDir();}));
