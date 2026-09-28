@@ -1,0 +1,49 @@
+/* Phone working-map fix for Lacey's chart.
+   The SVG canvas is 3200×2400. Without this, that size blows the page
+   wider than the phone and you only see the left strip. */
+
+.layout,
+.map-stage,
+.chart,
+header,
+.search,
+.chips,
+.photo-op,
+.photo-align,
+.label-size-bar,
+.hdr-actions {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chart svg#svg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3200px;
+  height: 2400px;
+  max-width: none;
+  display: block;
+}
+
+@media (max-width: 860px) {
+  .map-stage { width: 100%; }
+  .layout {
+    width: 100%;
+    grid-template-columns: 1fr !important;
+    min-width: 0;
+  }
+  .chart {
+    width: 100%;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    border-radius: 0;
+    min-height: min(58dvh, 640px);
+  }
+  .search,
+  .chips,
+  .photo-op,
+  .photo-align,
+  .label-size-bar { width: 100%; }
+  #gh-publish-token-wrap { max-width: 100% !important; }
+}
