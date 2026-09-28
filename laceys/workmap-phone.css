@@ -1,6 +1,4 @@
-/* Phone working-map fix for Lacey's chart.
-   The SVG canvas is 3200×2400. Without this, that size blows the page
-   wider than the phone and you only see the left strip. */
+/* Keep the working map on screen without covering buttons or blocking drag. */
 
 .layout,
 .map-stage,
@@ -16,14 +14,33 @@ header,
   max-width: 100%;
 }
 
+.layout,
+.map-stage {
+  overflow: hidden;
+  width: 100%;
+}
+
+.chart {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Take the 3200px SVG out of document flow so the page stays phone-width.
+   Keep it behind the pan/zoom buttons so those stay tappable. */
 .chart svg#svg {
   position: absolute;
   left: 0;
   top: 0;
-  width: 3200px;
-  height: 2400px;
-  max-width: none;
-  display: block;
+  z-index: 1;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.chart .pan,
+.chart .zoom {
+  z-index: 8;
+  pointer-events: auto;
 }
 
 @media (max-width: 860px) {
