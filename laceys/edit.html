@@ -13,10 +13,7 @@ fetch("https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/e2
   .then(function(r){ if(!r.ok) throw new Error(r.status); return r.text(); })
   .then(function(html){
     if(html.indexOf("edit-toggle")===-1) throw new Error("not editor");
-    html = html.replace(
-      'content="width=device-width, initial-scale=1, viewport-fit=cover"',
-      'content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"'
-    );
+    html = html.replace('content="width=device-width, initial-scale=1, viewport-fit=cover"','content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover"');
     html = html.replace('</head>',
       '<style id="page-scroll">'
       + 'html,body,html.editing,body.editing{overflow:auto!important;height:auto!important;min-height:100%!important;max-height:none!important;position:static!important;touch-action:pan-y!important}'
@@ -27,42 +24,49 @@ fetch("https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/e2
       + '#always-edit,#always-stop{position:fixed;z-index:99999;top:8px;border:0;border-radius:12px;padding:10px 12px;font-weight:800;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.4)}'
       + '#always-edit{left:8px;background:#f0c14b;color:#1a1a1a}'
       + '#always-stop{right:8px;background:#15565b;color:#eef4f3}'
-      + '#always-undo,#always-redo,#always-lock{position:fixed;z-index:99999;bottom:14px;border:0;border-radius:12px;padding:12px 14px;font-weight:800;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.45)}'
-      + '#always-undo{left:8px;background:#d5ecea;color:#0c3c41}'
-      + '#always-redo{left:92px;background:#d5ecea;color:#0c3c41}'
-      + '#always-lock{right:8px;background:#f0c14b;color:#1a1a1a}'
+      + '#always-undo,#always-redo,#always-lock,#always-sep{position:fixed;z-index:99999;border:0;border-radius:12px;padding:12px 14px;font-weight:800;font-size:15px;box-shadow:0 4px 14px rgba(0,0,0,.45)}'
+      + '#always-undo{bottom:62px;left:8px;background:#d5ecea;color:#0c3c41}'
+      + '#always-redo{bottom:62px;left:92px;background:#d5ecea;color:#0c3c41}'
+      + '#always-lock{bottom:14px;left:8px;background:#f0c14b;color:#1a1a1a}'
+      + '#always-sep{bottom:14px;right:8px;background:#7ec8ff;color:#0a1a28}'
       + '#sel-tools{display:none;position:fixed;top:54px;left:8px;right:8px;z-index:99998;background:rgba(10,51,56,.96);color:#eef4f3;border-radius:12px;padding:8px}'
       + '#sel-tools .row{display:flex;gap:6px;flex-wrap:wrap}'
       + '#sel-tools label{font-size:11px;display:flex;flex-direction:column}'
       + '#sel-tools input{width:64px;border:0;border-radius:8px;padding:6px;background:#15565b;color:#eef4f3}'
       + 'body.editing #dock-editor{display:flex;flex-direction:column}'
       + 'body.editing #dock-editor .ed-sec{order:-1}'
-      + '</style></head>'
-    );
+      + '</style></head>');
     html = html.replace('</body>',
       '<button type="button" id="always-edit">Edit docks</button>'
       + '<button type="button" id="always-stop">Stop selecting</button>'
       + '<button type="button" id="always-undo">Undo</button>'
       + '<button type="button" id="always-redo">Redo</button>'
       + '<button type="button" id="always-lock">Lock all docks</button>'
+      + '<button type="button" id="always-sep">Separate 1 and 2</button>'
       + '<div id="sel-tools"><b>Selected</b><div class="row">'
-      + '<label>X<input id="st-x" type="number"></label>'
-      + '<label>Y<input id="st-y" type="number"></label>'
-      + '<label>Rotate<input id="st-rot" type="number"></label>'
-      + '<label>Scale W<input id="st-w" type="number"></label>'
-      + '<label>Scale H<input id="st-h" type="number"></label>'
+      + '<label>X<input id="st-x" type="number"></label><label>Y<input id="st-y" type="number"></label>'
+      + '<label>Rotate<input id="st-rot" type="number"></label><label>Scale W<input id="st-w" type="number"></label><label>Scale H<input id="st-h" type="number"></label>'
       + '</div></div>'
       + '<script>'
       + '(function(){'
       + 'function stopSelecting(){ try{ if(typeof setMultiPick==="function") setMultiPick(false);}catch(e){} try{ if(typeof multi!=="undefined"&&multi.clear) multi.clear(); }catch(e){} try{ moveWholeChart=false; }catch(e){} document.body.classList.remove("multipick","sel-active"); }'
-      + 'function lockAll(){ if(typeof docks==="undefined") return; docks.forEach(function(d){ d.locked=true; try{ bakeDockPlaced(d);}catch(e){} }); try{ saveLayout(); }catch(e){} try{ redraw(); }catch(e){} try{ renderDockEditor(); }catch(e){} alert("All docks are locked. A single slip will not move until you unlock that dock in Tools."); }'
+      + 'function lockAll(){ if(typeof docks==="undefined") return; docks.forEach(function(d){ d.locked=true; try{ bakeDockPlaced(d);}catch(e){} }); try{ saveLayout(); }catch(e){} try{ redraw(); }catch(e){} alert("All docks are locked."); }'
+      + 'function separate12(){'
+      + '  if(typeof docks==="undefined") return;'
+      + '  var want=docks.filter(function(d){ var n=String(d.name||d.id).trim(); return n==="1"||n==="2"||String(d.id)==="1"||String(d.id)==="2"; });'
+      + '  if(want.length<1){ alert("Could not find dock 1 or dock 2."); return; }'
+      + '  want.forEach(function(d){ d.locked=false; try{ bakeDockPlaced(d);}catch(e){} });'
+      + '  if(typeof groups!=="undefined"){ groups=groups.filter(function(g){ return !(g.members||[]).some(function(k){ return want.some(function(d){ return k==="dock:"+d.id || String(k).indexOf(String(d.id))>=0; }); }); }); }'
+      + '  stopSelecting(); try{ saveLayout(); }catch(e){} try{ redraw(); }catch(e){} try{ renderDockEditor(); }catch(e){}'
+      + '  alert("Docks 1 and 2 are unlocked from each other. Tap one dock, then drag only that dock.");'
+      + '}'
       + 'function showFullMap(){ document.body.classList.remove("panel-open","editing"); document.documentElement.classList.remove("editing"); try{ closeEditPanel(); }catch(e){} try{ fitWholeMap(); }catch(e){} var bar=document.getElementById("sel-tools"); if(bar) bar.style.display="none"; window.scrollTo(0,0); }'
       + 'function exitToMap(){ stopSelecting(); if(document.body.classList.contains("editing")){ var t=document.getElementById("edit-toggle"); if(t) t.click(); } document.body.classList.remove("editing","panel-open","multipick","sel-active"); document.documentElement.classList.remove("editing"); var chart=document.getElementById("chart"); if(chart) chart.classList.remove("editing"); var et=document.getElementById("edit-toggle"); if(et){ et.classList.remove("on"); et.textContent="Edit docks"; } showFullMap(); sync(); }'
       + 'var chart=document.getElementById("chart"); if(chart){ chart.addEventListener("pointerdown", function(ev){ if(!document.body.classList.contains("editing")) ev.stopPropagation(); }, true); }'
-      + 'var b=document.getElementById("always-edit"), s=document.getElementById("always-stop"), u=document.getElementById("always-undo"), r=document.getElementById("always-redo"), lock=document.getElementById("always-lock"), bar=document.getElementById("sel-tools");'
-      + 'function sync(){ var on=document.body.classList.contains("editing"); b.textContent=on?"Done editing":"Edit docks"; u.style.display=on?"block":"none"; r.style.display=on?"block":"none"; s.style.display=on?"block":"none"; lock.style.display=on?"block":"none"; if(!on) bar.style.display="none"; }'
+      + 'var b=document.getElementById("always-edit"), s=document.getElementById("always-stop"), u=document.getElementById("always-undo"), r=document.getElementById("always-redo"), lock=document.getElementById("always-lock"), sep=document.getElementById("always-sep"), bar=document.getElementById("sel-tools");'
+      + 'function sync(){ var on=document.body.classList.contains("editing"); b.textContent=on?"Done editing":"Edit docks"; u.style.display=r.style.display=s.style.display=lock.style.display=sep.style.display=on?"block":"none"; if(!on) bar.style.display="none"; }'
       + 'function setVal(id,v){ var el=document.getElementById(id); if(!el) return; el.value=v; el.dispatchEvent(new Event("input",{bubbles:true})); el.dispatchEvent(new Event("change",{bubbles:true})); }'
-      + 'function readSel(){ if(!document.body.classList.contains("editing")){ bar.style.display="none"; return; } var x=document.getElementById("ed-x"), y=document.getElementById("ed-y"), rot=document.getElementById("ed-rot-num")||document.getElementById("ed-rot"), w=document.getElementById("ed-sw")||document.getElementById("ed-w"), h=document.getElementById("ed-sh")||document.getElementById("ed-h"); if(!x&&!y){ bar.style.display="none"; return; } bar.style.display="block"; if(x) document.getElementById("st-x").value=x.value; if(y) document.getElementById("st-y").value=y.value; if(rot) document.getElementById("st-rot").value=rot.value; if(w) document.getElementById("st-w").value=w.value; if(h) document.getElementById("st-h").value=h.value; var box=document.getElementById("dock-editor"), sec=box&&box.querySelector(".ed-sec"); if(box&&sec) box.insertBefore(sec, box.firstChild); }'
+      + 'function readSel(){ if(!document.body.classList.contains("editing")){ bar.style.display="none"; return; } var x=document.getElementById("ed-x"), y=document.getElementById("ed-y"), rot=document.getElementById("ed-rot-num")||document.getElementById("ed-rot"), w=document.getElementById("ed-sw")||document.getElementById("ed-w"), h=document.getElementById("ed-sh")||document.getElementById("ed-h"); if(!x&&!y){ bar.style.display="none"; return; } bar.style.display="block"; if(x) document.getElementById("st-x").value=x.value; if(y) document.getElementById("st-y").value=y.value; if(rot) document.getElementById("st-rot").value=rot.value; if(w) document.getElementById("st-w").value=w.value; if(h) document.getElementById("st-h").value=h.value; }'
       + 'function push(id,src){ var el=document.getElementById(src); if(el) setVal(id, el.value); }'
       + 'document.getElementById("st-x").onchange=function(){ push("ed-x","st-x"); };'
       + 'document.getElementById("st-y").onchange=function(){ push("ed-y","st-y"); };'
@@ -73,14 +77,14 @@ fetch("https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/e2
       + 'u.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); try{ undo(); }catch(e){} };'
       + 'r.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); try{ redo(); }catch(e){} };'
       + 'lock.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); lockAll(); };'
+      + 'sep.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); separate12(); };'
       + 'b.onclick=function(ev){ ev.preventDefault(); ev.stopPropagation(); if(document.body.classList.contains("editing")) exitToMap(); else { var t=document.getElementById("edit-toggle"); if(t) t.click(); sync(); } };'
       + 'document.addEventListener("click", function(ev){ var mapBtn=ev.target.closest&&ev.target.closest("#btn-sheet-close,#edit-fab-done,#edit-toggle-mobile"); if(!mapBtn) return; ev.preventDefault(); ev.stopPropagation(); if(mapBtn.id==="btn-sheet-close"){ try{ closeEditPanel(); }catch(e){} document.body.classList.remove("panel-open"); return; } exitToMap(); }, true);'
       + 'if(typeof renderDockEditor==="function" && !renderDockEditor._wrapped){ var orig=renderDockEditor; renderDockEditor=function(){ var out=orig.apply(this, arguments); setTimeout(readSel,0); return out; }; renderDockEditor._wrapped=true; }'
       + 'setInterval(function(){ if(document.body.classList.contains("editing")) readSel(); }, 800);'
       + 'sync();'
       + '})();'
-      + '<\/script></body>'
-    );
+      + '<\/script></body>');
     document.open(); document.write(html); document.close();
   })
   .catch(function(){ document.getElementById("s").innerHTML='Could not open the edit chart.'; });
