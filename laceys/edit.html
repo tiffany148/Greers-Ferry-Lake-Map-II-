@@ -1652,10 +1652,10 @@
 <script>
 try{
   var layout=JSON.parse(document.getElementById("published-layout").textContent);
-  if(layout && layout.docks && localStorage.getItem("laceys-force-20261001b")!=="1"){
+  if(layout && layout.docks && localStorage.getItem("laceys-force-20261001c")!=="1"){
     localStorage.setItem("laceys-layout-v3", JSON.stringify(layout));
     localStorage.setItem("laceys-published-at", layout.publishedAt||"");
-    localStorage.setItem("laceys-force-20261001b","1");
+    localStorage.setItem("laceys-force-20261001c","1");
   }
 }catch(e){}
 function loadPage(){
