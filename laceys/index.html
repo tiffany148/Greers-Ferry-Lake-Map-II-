@@ -1,6 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+try{
+  if(localStorage.getItem("laceys-force-20261001b")!=="1"){
+    var x=new XMLHttpRequest();
+    x.open("GET","published-layout.json?v=20261001b",false);
+    x.send();
+    if(x.status>=200&&x.status<300){
+      var layout=JSON.parse(x.responseText);
+      if(layout&&layout.docks){
+        localStorage.setItem("laceys-layout-v3", JSON.stringify(layout));
+        localStorage.setItem("laceys-published-at", layout.publishedAt||"");
+        localStorage.setItem("laceys-force-20261001b","1");
+      }
+    }
+  }
+}catch(e){}
+</script>
+
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Lacey's Narrows (editable)</title>
