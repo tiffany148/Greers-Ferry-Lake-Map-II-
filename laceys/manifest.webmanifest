@@ -1,3 +1,13 @@
-self.addEventListener('install', function(e){ self.skipWaiting(); });
-self.addEventListener('activate', function(e){ e.waitUntil(self.clients.claim()); });
-self.addEventListener('fetch', function(){});
+{
+  "name": "Lacey's Narrows",
+  "short_name": "Lacey's",
+  "start_url": "./edit.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0c3c41",
+  "theme_color": "#0c3c41",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}
+  ]
+}
