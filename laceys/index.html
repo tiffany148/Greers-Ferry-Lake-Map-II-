@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="manifest" href="manifest.webmanifest"/>
+<link rel="apple-touch-icon" href="icon-180.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Lacey's"/>
+<meta name="theme-color" content="#0c3c41"/>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}</script>
+
 <script>
 try{
   if(localStorage.getItem("laceys-force-20261001c")!=="1"){
