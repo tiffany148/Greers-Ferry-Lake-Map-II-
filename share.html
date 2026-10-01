@@ -123,6 +123,12 @@
   .lake-facts dt { color:#9bb4c4; }
   .lake-facts dd { margin:0; }
   .lake-facts a { color:#7bdff2; }
+  /* v28: geology loading pill */
+  .geo-loading { position:absolute; left:50%; bottom:calc(78px + var(--safe-bot)); transform:translateX(-50%); z-index:800; display:flex; align-items:center; gap:8px; background:#0e2a3aee; color:var(--ink); border:1px solid #1e4a5f; border-radius:999px; padding:6px 12px; font-size:12px; box-shadow:0 4px 14px #0007; pointer-events:none; opacity:0; visibility:hidden; transition:opacity .3s ease-in-out, visibility 0s linear .3s; white-space:nowrap; }
+  .geo-loading.on { opacity:1; visibility:visible; transition:opacity .3s ease-in-out, visibility 0s; }
+  .geo-loading .spin { width:12px; height:12px; border-radius:50%; border:2px solid #7bdff2; border-right-color:transparent; animation:gflspin .8s linear infinite; }
+  @keyframes gflspin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .geo-loading, .geo-loading.on { transition:none; } .geo-loading .spin { animation:none; } }
 
 </style>
 </head>
@@ -232,6 +238,7 @@
   <span class="lbl" id="coord-lbl">Center</span> <span id="coord-val">—</span>
   <button type="button" id="coord-copy" title="Copy coordinates">Copy</button>
 </div>
+<div id="geo-loading" class="geo-loading" role="status" aria-live="polite"><span class="spin" aria-hidden="true"></span><span>Loading geology…</span></div>
 <div id="opacity-box" class="opacity-box hidden">
   <span>Opacity</span>
   <input id="hist-opacity" type="range" min="0" max="100" value="65" />
@@ -504,19 +511,114 @@ function formatWhen(ts){
   try { return new Date(ts).toLocaleString(); } catch(e){ return ""; }
 }
 
-const map = L.map("map", { zoomControl:false, rotate:true, bearing:0, touchRotate:true, rotateControl:false }).fitBounds([[35.48,-92.36],[35.66,-91.97]]);
+const map = L.map("map", { zoomControl:false, rotate:true, bearing:0, touchRotate:true, rotateControl:false, fadeAnimation:true, zoomAnimation:true, markerZoomAnimation:true }).fitBounds([[35.48,-92.36],[35.66,-91.97]]);
 L.control.zoom({ position:"bottomleft" }).addTo(map);
 L.control.scale({ imperial:true, metric:false }).addTo(map);
-const layers = {
-  satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom:19, attribution:"Esri", opacity:0 }),
-  streets: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:"OSM" }),
-  topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", { maxZoom:17, attribution:"OTM" })
-};
-let base = "auto";
-function clearBaseLayers(){
-  Object.keys(layers).forEach(function(k){
-    if (map.hasLayer(layers[k])) map.removeLayer(layers[k]);
+
+/* ---- v28: smooth layer fades ----
+   One rAF opacity tween per owner (layer, pane, or marker group), ease-in-out, FADE_MS long.
+   A safety timer finishes the tween if rAF is paused (background tab), so fade-outs always end in removal.
+   prefers-reduced-motion: every change is instant. */
+const FADE_MS = 350;
+const reduceMotionMQ = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+function reduceMotion(){ return !!(reduceMotionMQ && reduceMotionMQ.matches); }
+function easeInOut(t){ return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2) / 2; }
+function fadeState(obj){ return obj._gflFade || (obj._gflFade = { v:null, anim:null, out:false }); }
+function tweenOpacity(st, to, apply, done, ms){
+  if (st.anim) st.anim.cancel();
+  ms = ms == null ? FADE_MS : ms;
+  const from = st.v == null ? to : st.v;
+  if (reduceMotion() || ms <= 0 || Math.abs(to - from) < 0.001) {
+    st.v = to; apply(to); if (done) done(); return;
+  }
+  let raf = 0, timer = 0, over = false;
+  const t0 = performance.now();
+  function stop(){ over = true; cancelAnimationFrame(raf); clearTimeout(timer); st.anim = null; }
+  function finish(){ if (over) return; stop(); st.v = to; apply(to); if (done) done(); }
+  function step(now){
+    if (over) return;
+    const t = Math.min(1, Math.max(0, (now - t0) / ms));
+    st.v = from + (to - from) * easeInOut(t);
+    apply(st.v);
+    if (t >= 1) finish(); else raf = requestAnimationFrame(step);
+  }
+  st.anim = { cancel: function(){ if (!over) stop(); }, to: to };
+  raf = requestAnimationFrame(step);
+  timer = setTimeout(finish, ms + 250);
+}
+function layerOpacity(layer){ return layer.options && layer.options.opacity != null ? layer.options.opacity : 1; }
+/* Layers with setOpacity (tile layers, the pre-lake canvas): add at 0 and fade up; fade to 0 and only then remove. */
+function fadeLayerIn(layer, target){
+  const st = fadeState(layer);
+  st.out = false;
+  if (!map.hasLayer(layer)) { st.v = 0; layer.setOpacity(0); layer.addTo(map); }
+  else if (st.v == null) st.v = layerOpacity(layer);
+  tweenOpacity(st, target, function(v){ layer.setOpacity(v); });
+}
+function fadeLayerOut(layer, after){
+  const st = fadeState(layer);
+  if (!map.hasLayer(layer)) { if (st.anim) st.anim.cancel(); st.v = 0; if (after) after(); return; }
+  if (st.out && st.anim) return; // already fading out
+  if (st.v == null) st.v = layerOpacity(layer);
+  st.out = true;
+  tweenOpacity(st, 0, function(v){ layer.setOpacity(v); }, function(){
+    if (st.out && map.hasLayer(layer)) map.removeLayer(layer);
+    if (after) after();
   });
+}
+function fadePane(pane, to, done){
+  const st = fadeState(pane);
+  if (st.v == null) st.v = pane.style.opacity === "" ? 1 : +pane.style.opacity;
+  tweenOpacity(st, to, function(v){ pane.style.opacity = String(Math.round(v*1000)/1000); }, done);
+}
+function setPaneOpacityNow(pane, v){
+  const st = fadeState(pane);
+  if (st.anim) st.anim.cancel();
+  st.v = v; pane.style.opacity = String(v);
+}
+/* Custom panes go inside leaflet-rotate's rotatePane so they turn with the map. */
+function makePane(name, z){
+  let p = map.getPane(name);
+  if (!p) {
+    p = map.createPane(name, map.getPane("rotatePane") || map.getPane("mapPane"));
+    p.style.zIndex = String(z);
+  }
+  return p;
+}
+
+/* Tile smoothness: hold more off-screen tiles, don't fetch mid-zoom, wait for pan end on phones. */
+const TILE_OPTS = { keepBuffer:4, updateWhenZooming:false, updateWhenIdle:L.Browser.mobile };
+/* Base maps live in two panes (A/B). A mode switch builds the new mode in the idle pane on top,
+   waits briefly for its tiles, fades that pane in, then clears the old one: no background flash. */
+const BASE_PANE_NAMES = ["gflBaseA", "gflBaseB"];
+const BASE_PANES = BASE_PANE_NAMES.map(function(n){ return makePane(n, 200); });
+function makeBaseSet(pane){
+  return {
+    satellite: L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", Object.assign({ maxZoom:19, attribution:"Esri", opacity:0, pane:pane }, TILE_OPTS)),
+    streets: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", Object.assign({ maxZoom:19, attribution:"OSM", pane:pane }, TILE_OPTS)),
+    topo: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", Object.assign({ maxZoom:17, attribution:"OTM", pane:pane }, TILE_OPTS))
+  };
+}
+const baseSets = BASE_PANE_NAMES.map(makeBaseSet);
+let baseIdx = 0;
+let layers = baseSets[0]; // the active base set (auto blend works on this)
+let base = "auto";
+let baseTok = 0, baseInit = false;
+function clearBaseSet(set){
+  Object.keys(set).forEach(function(k){
+    if (map.hasLayer(set[k])) map.removeLayer(set[k]);
+  });
+}
+function clearBaseLayers(){ clearBaseSet(layers); }
+function whenTilesReady(set, cb, maxMs){
+  const pend = Object.keys(set).map(function(k){ return set[k]; })
+    .filter(function(l){ return map.hasLayer(l) && l.isLoading && l.isLoading(); });
+  if (!pend.length) { cb(); return; }
+  let left = pend.length, fired = false;
+  const timer = setTimeout(go, maxMs);
+  function go(){ if (fired) return; fired = true; clearTimeout(timer); pend.forEach(function(l){ l.off("load", one); }); cb(); }
+  function one(){ if (--left <= 0) go(); }
+  pend.forEach(function(l){ l.on("load", one); });
 }
 function clamp01(x){ return Math.max(0, Math.min(1, x)); }
 function lerp(a,b,t){ return a + (b-a)*t; }
@@ -567,13 +669,29 @@ function applyAutoBase(){
 }
 function setBaseMode(mode){
   base = mode;
-  clearBaseLayers();
-  if (mode === "auto") {
-    applyAutoBase();
-    return;
+  const tok = ++baseTok;
+  const oldIdx = baseIdx;
+  const newIdx = baseInit ? 1 - baseIdx : baseIdx;
+  const oldPane = BASE_PANES[oldIdx], newPane = BASE_PANES[newIdx];
+  if (baseInit) {
+    // If a crossfade is still running, settle it: the half-faded pane becomes the solid "old" one.
+    setPaneOpacityNow(oldPane, 1);
+    oldPane.style.zIndex = "200";
   }
-  layers[mode].setOpacity(1);
-  layers[mode].addTo(map);
+  clearBaseSet(baseSets[newIdx]);
+  baseIdx = newIdx;
+  layers = baseSets[newIdx];
+  newPane.style.zIndex = "201";
+  const instant = !baseInit || reduceMotion();
+  setPaneOpacityNow(newPane, instant ? 1 : 0);
+  if (mode === "auto") applyAutoBase();
+  else { layers[mode].setOpacity(1); layers[mode].addTo(map); }
+  if (!baseInit) { baseInit = true; return; }
+  if (instant) { clearBaseSet(baseSets[oldIdx]); return; }
+  whenTilesReady(layers, function(){
+    if (tok !== baseTok) return;
+    fadePane(newPane, 1, function(){ if (tok === baseTok) clearBaseSet(baseSets[oldIdx]); });
+  }, 900);
 }
 setBaseMode("auto");
 map.on("zoom zoomend", function(){
@@ -600,9 +718,10 @@ map.on("zoom zoomend", function(){
   }
 })();
 
-const hist = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}", {
-  maxZoom:15, opacity:0.55, attribution:"Esri / USGS historic topo"
-});
+makePane("gflHist", 250); // above both base panes, below vector overlays
+const hist = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}", Object.assign({
+  maxZoom:15, opacity:0.55, attribution:"Esri / USGS historic topo", pane:"gflHist"
+}, TILE_OPTS));
 const histOn = document.getElementById("hist-on");
 const prelakeOn = document.getElementById("prelake-on");
 const opacityBox = document.getElementById("opacity-box");
@@ -687,8 +806,9 @@ prelakeImg.addEventListener("load", () => { if (typeof map !== "undefined" && ma
 
 const natGeoOn = document.getElementById("natgeo-on");
 const natGeoOpts = document.getElementById("natgeo-opts");
-let natGeoLayer = null;
-let natGeoMeta = { colors: {}, dmu: {}, loading: null, horizon: "surface" };
+const geoLoadingEl = document.getElementById("geo-loading");
+let natGeoLayer = null; // the visible (active) geology layer
+let natGeoMeta = { colors: {}, dmu: {}, info: {}, loading: null, horizon: "surface" };
 
 const NATGEO_HORIZONS = {
   surface: {
@@ -719,12 +839,22 @@ function rgbaToHex(c) {
   return "#" + h(c[0]) + h(c[1]) + h(c[2]);
 }
 
+/* Layer metadata (renderer colors) is shared with esri-leaflet so the ~140 kB ?f=json is fetched once per horizon. */
+function natGeoInfo(horizon) {
+  if (!natGeoMeta.info[horizon]) {
+    natGeoMeta.info[horizon] = fetch(NATGEO_HORIZONS[horizon].units + "?f=json")
+      .then(function(r){ return r.json(); })
+      .catch(function(err){ delete natGeoMeta.info[horizon]; throw err; });
+  }
+  return natGeoMeta.info[horizon];
+}
+
 function loadNatGeoDictionaries(horizon, done) {
   const cfg = NATGEO_HORIZONS[horizon];
   const key = horizon;
   if (natGeoMeta.colors[key] && natGeoMeta.dmu[key]) { done(null); return; }
   Promise.all([
-    fetch(cfg.units + "?f=json").then(function(r){ return r.json(); }),
+    natGeoInfo(horizon),
     fetch(cfg.dmu + "/query?where=1%3D1&outFields=MapUnit,Name,FullName,Age,Description,GeoMaterial,Symbol&returnGeometry=false&resultRecordCount=2000&f=json").then(function(r){ return r.json(); })
   ]).then(function(pair) {
     const layerInfo = pair[0];
@@ -734,7 +864,6 @@ function loadNatGeoDictionaries(horizon, done) {
     (renderer.uniqueValueInfos || []).forEach(function(info) {
       const v = info.value;
       const sym = info.symbol || {};
-      const c = sym.color || (sym.outline && sym.outline.color);
       if (v != null && sym.color) colors[String(v)] = rgbaToHex(sym.color);
     });
     const dmu = {};
@@ -748,23 +877,25 @@ function loadNatGeoDictionaries(horizon, done) {
   }).catch(function(err){ done(err); });
 }
 
-function styleNatGeoFeature(feature) {
-  const o = opacitySlider.value / 100;
+/* Overlay opacity (slider) is applied to the geology pane, so the slider never restyles polygons. */
+function styleNatGeoFeature(feature, horizon) {
+  horizon = horizon || natGeoMeta.horizon;
   const mu = String((feature.properties && (feature.properties.MapUnit || feature.properties.mapunit)) || "");
-  const fill = (natGeoMeta.colors[natGeoMeta.horizon] || {})[mu] || "#80b3ff";
+  const fill = (natGeoMeta.colors[horizon] || {})[mu] || "#80b3ff";
   return {
     color: "#1e3a4c",
     weight: 0.4,
     fillColor: fill,
-    fillOpacity: 0.55 * o,
-    opacity: 0.9 * o
+    fillOpacity: 0.55,
+    opacity: 0.9
   };
 }
 
-function natGeoPopupHtml(props) {
+function natGeoPopupHtml(props, horizon) {
   props = props || {};
+  horizon = horizon || natGeoMeta.horizon;
   const mu = String(props.MapUnit || "");
-  const d = (natGeoMeta.dmu[natGeoMeta.horizon] || {})[mu] || {};
+  const d = (natGeoMeta.dmu[horizon] || {})[mu] || {};
   const name = d.Name || d.FullName || props.Label || mu || "Geologic unit";
   const age = d.Age || "";
   const desc = d.Description || "";
@@ -774,88 +905,194 @@ function natGeoPopupHtml(props) {
   if (age) h += "<br>" + age;
   if (mat) h += "<br><span class=\"crowd-meta\">" + mat + "</span>";
   if (desc) h += "<br>" + desc;
-  h += "<br><span class=\"crowd-meta\">USGS Cooperative National Geologic Map — " + (NATGEO_HORIZONS[natGeoMeta.horizon].label) + "</span>";
+  h += "<br><span class=\"crowd-meta\">USGS Cooperative National Geologic Map — " + (NATGEO_HORIZONS[horizon].label) + "</span>";
   return h;
 }
 
-function destroyNatGeoLayer() {
-  if (natGeoLayer) {
-    if (map.hasLayer(natGeoLayer)) map.removeLayer(natGeoLayer);
-    natGeoLayer = null;
-  }
-}
-
-function buildNatGeoLayer(done) {
-  const horizon = (document.querySelector('input[name="natgeo-horizon"]:checked') || {}).value || "surface";
-  natGeoMeta.horizon = horizon;
-  const cfg = NATGEO_HORIZONS[horizon];
-  loadNatGeoDictionaries(horizon, function(err) {
-    if (err) console.warn(err);
-    destroyNatGeoLayer();
-    if (typeof L.esri === "undefined" || !L.esri.featureLayer) {
-      done(new Error("esri-leaflet missing"));
+/* v28 geology layer.
+   Before: one esri featureLayer, destroyed and rebuilt on every horizon switch or toggle, SVG paths in the shared
+   overlay pane, all fields, full-resolution geometry, 512 px query cells, every duplicate copy of a polygon
+   re-applied with setLatLngs, and the slider restyling every polygon.
+   Now: one layer per horizon, built once and kept (cells already downloaded are reused without network);
+   canvas renderer in a per-horizon pane (pane opacity = fades + slider); only OBJECTID/MapUnit/Label;
+   zoom-scaled simplification (maxAllowableOffset); 1024 px cells; duplicate/coarser copies skipped. */
+const NatGeoFeatureLayer = (typeof L.esri !== "undefined" && L.esri.FeatureLayer) ? L.esri.FeatureLayer.extend({
+  createCell: function(bounds, coords) {
+    if (!this._visibleZoom()) return;
+    const key = this._cacheKey(coords);
+    const fetched = this._gflFetched || (this._gflFetched = {});
+    if (fetched[key]) { // this cell was already downloaded at this zoom: reuse the built polygons
+      if (this._cache[key]) this.addLayers(this._cache[key]);
       return;
     }
-    natGeoLayer = L.esri.featureLayer({
-      url: cfg.units,
-      precision: 5,
-      style: styleNatGeoFeature,
-      attribution: "USGS / AASG Cooperative National Geologic Map"
-    });
-    natGeoLayer.bindPopup(function(layer) {
-      return natGeoPopupHtml(layer.feature && layer.feature.properties);
-    });
-    natGeoLayer.setOpacity = function(o) {
-      this.setStyle(styleNatGeoFeature);
-    };
-    done(null);
-  });
-}
+    this._requestFeatures(bounds, coords, function(err){ if (!err) fetched[key] = true; });
+  },
+  _addFeatures: function(features, coords) {
+    this._gflZ = coords ? coords.z : 99;
+    return L.esri.FeatureLayer.prototype._addFeatures.call(this, features, coords);
+  },
+  createNewLayer: function(geojson) {
+    const l = L.esri.FeatureLayer.prototype.createNewLayer.call(this, geojson);
+    if (l) l._gflZ = this._gflZ;
+    return l;
+  },
+  _updateLayer: function(layer, geojson) {
+    // Polygons spanning several cells arrive several times; only rebuild when the copy is finer (higher zoom).
+    if (layer._gflZ != null && this._gflZ <= layer._gflZ) return;
+    layer._gflZ = this._gflZ;
+    return L.esri.FeatureLayer.prototype._updateLayer.call(this, layer, geojson);
+  }
+}) : null;
 
-function ensureNatGeo(done) {
-  if (natGeoLayer) { done(null); return; }
-  buildNatGeoLayer(done);
+const natGeo = { layers: {}, panes: {}, active: null, want: null, shown: false, tok: 0 };
+function natGeoHorizon() {
+  return (document.querySelector('input[name="natgeo-horizon"]:checked') || {}).value || "surface";
 }
+function natGeoTarget() { return opacitySlider.value / 100; }
+function updateGeoLoading() {
+  const w = natGeo.want;
+  const lyr = w && natGeo.layers[w];
+  const on = !!(natGeo.shown && w && (natGeo.active !== w || (lyr && lyr._activeRequests > 0)));
+  geoLoadingEl.classList.toggle("on", on);
+}
+function buildNatGeoFor(h) {
+  if (natGeo.layers[h]) return natGeo.layers[h];
+  const cfg = NATGEO_HORIZONS[h];
+  const paneName = "gflGeo_" + h;
+  const pane = makePane(paneName, 410);
+  setPaneOpacityNow(pane, 0);
+  natGeo.panes[h] = pane;
+  const lyr = new NatGeoFeatureLayer({
+    url: cfg.units,
+    pane: paneName,
+    renderer: L.canvas({ pane: paneName, padding: 0.5, tolerance: 3 }),
+    fields: ["OBJECTID", "MapUnit", "Label"],
+    precision: 5,
+    simplifyFactor: 0.5,
+    cellSize: 1024,
+    style: function(f){ return styleNatGeoFeature(f, h); },
+    attribution: "USGS / AASG Cooperative National Geologic Map"
+  });
+  // esri-leaflet asks for layer metadata on every add; answer from the shared, cached fetch instead.
+  lyr.service.metadata = function(cb, ctx) {
+    natGeoInfo(h).then(function(m){ cb.call(ctx, null, m); }, function(e){ cb.call(ctx, e); });
+    return this;
+  };
+  lyr.bindPopup(function(layer) {
+    return natGeoPopupHtml(layer.feature && layer.feature.properties, h);
+  });
+  lyr.on("loading load", updateGeoLoading);
+  natGeo.layers[h] = lyr;
+  return lyr;
+}
+function waitNatGeoLoad(lyr, cb, maxMs) {
+  if (!(lyr._activeRequests > 0)) { setTimeout(cb, 0); return; }
+  let fin = false;
+  const timer = setTimeout(go, maxMs);
+  function go(){ if (fin) return; fin = true; clearTimeout(timer); lyr.off("load", go); cb(); }
+  lyr.on("load", go);
+}
+function natGeoReveal(h) {
+  natGeo.active = h;
+  natGeoLayer = natGeo.layers[h];
+  Object.keys(natGeo.panes).forEach(function(k){ natGeo.panes[k].style.zIndex = k === h ? "411" : "410"; });
+  fadePane(natGeo.panes[h], natGeoTarget());
+  // crossfade: the previous horizon fades out over the same time, then is removed (but kept built)
+  Object.keys(natGeo.layers).forEach(function(k){
+    if (k === h) return;
+    const lk = natGeo.layers[k];
+    if (!map.hasLayer(lk)) return;
+    fadePane(natGeo.panes[k], 0, function(){ if (natGeo.active !== k && map.hasLayer(lk)) map.removeLayer(lk); });
+  });
+  updateGeoLoading();
+}
+function natGeoShow() {
+  const h = natGeoHorizon();
+  natGeoMeta.horizon = h;
+  if (natGeo.shown && natGeo.want === h) {
+    if (natGeo.active === h) fadePane(natGeo.panes[h], natGeoTarget());
+    return;
+  }
+  if (!NatGeoFeatureLayer) { console.warn(new Error("esri-leaflet missing")); return; }
+  natGeo.shown = true;
+  natGeo.want = h;
+  const tok = ++natGeo.tok;
+  const lyr = buildNatGeoFor(h);
+  const ready = { dict: false, data: false };
+  // Nothing else on screen (fresh toggle-on): fade in as soon as the first polygons arrive and keep
+  // filling in. Switching horizons: hold the old one until the new one has fully loaded.
+  const progressive = !Object.keys(natGeo.layers).some(function(k){
+    return k !== h && map.hasLayer(natGeo.layers[k]) && +natGeo.panes[k].style.opacity > 0.01;
+  });
+  function check(){
+    if (tok !== natGeo.tok || natGeo.active === h || !ready.dict) return;
+    if (!ready.data && !(progressive && Object.keys(lyr._layers).length)) return;
+    lyr.off("createfeature", check);
+    natGeoReveal(h);
+  }
+  if (progressive) lyr.on("createfeature", check);
+  // Dictionary (colors + unit descriptions) and polygons load in parallel; the old horizon stays
+  // visible until both are in, then the two crossfade.
+  if (!map.hasLayer(lyr)) {
+    setPaneOpacityNow(natGeo.panes[h], 0);
+    lyr.addTo(map);
+  }
+  const hadColors = !!natGeoMeta.colors[h];
+  loadNatGeoDictionaries(h, function(err){
+    if (err) console.warn(err);
+    if (!hadColors && map.hasLayer(lyr)) lyr.setStyle(function(f){ return styleNatGeoFeature(f, h); });
+    ready.dict = true; check();
+  });
+  updateGeoLoading();
+  waitNatGeoLoad(lyr, function(){ ready.data = true; check(); }, 15000);
+}
+function natGeoHide() {
+  natGeo.shown = false;
+  natGeo.want = null;
+  natGeo.active = null;
+  natGeo.tok++;
+  natGeoLayer = null;
+  Object.keys(natGeo.layers).forEach(function(k){
+    const lk = natGeo.layers[k];
+    if (!map.hasLayer(lk)) return;
+    fadePane(natGeo.panes[k], 0, function(){ if (natGeo.active !== k && map.hasLayer(lk)) map.removeLayer(lk); });
+  });
+  updateGeoLoading();
+}
+function destroyNatGeoLayer() { natGeoHide(); }
 
 function anyOverlay(){
   return histOn.checked || prelakeOn.checked || natGeoOn.checked;
 }
 function setOverlays(){
-  if (histOn.checked) { if (!map.hasLayer(hist)) hist.addTo(map); }
-  else if (map.hasLayer(hist)) map.removeLayer(hist);
-  if (prelakeOn.checked) { if (!map.hasLayer(prelake)) prelake.addTo(map); }
-  else if (map.hasLayer(prelake)) map.removeLayer(prelake);
+  const o = opacitySlider.value / 100;
+  if (histOn.checked) fadeLayerIn(hist, o); else fadeLayerOut(hist);
+  if (prelakeOn.checked) fadeLayerIn(prelake, o); else fadeLayerOut(prelake);
 
   natGeoOpts.classList.toggle("hidden", !natGeoOn.checked);
-  if (natGeoOn.checked) {
-    ensureNatGeo(function(err){
-      if (!err && natGeoLayer && !map.hasLayer(natGeoLayer)) natGeoLayer.addTo(map);
-      if (natGeoLayer) natGeoLayer.setOpacity(opacitySlider.value / 100);
-    });
-  } else {
-    destroyNatGeoLayer();
-  }
+  if (natGeoOn.checked) natGeoShow(); else natGeoHide();
 
   opacityBox.classList.toggle("hidden", !anyOverlay());
+}
+/* Slider: follow the thumb directly (no tween) on whatever overlay is showing. */
+function applyOverlayOpacity(){
   const o = opacitySlider.value / 100;
-  hist.setOpacity(o);
-  prelake.setOpacity(o);
-  if (natGeoLayer) natGeoLayer.setOpacity(o);
+  [hist, prelake].forEach(function(l){
+    const st = fadeState(l);
+    if (!map.hasLayer(l) || st.out) return;
+    if (st.anim) st.anim.cancel();
+    st.v = o; l.setOpacity(o);
+  });
+  if (natGeo.shown && natGeo.active && natGeo.active === natGeo.want) setPaneOpacityNow(natGeo.panes[natGeo.active], o);
 }
 histOn.onchange = setOverlays;
 prelakeOn.onchange = setOverlays;
 natGeoOn.onchange = setOverlays;
-opacitySlider.oninput = setOverlays;
+opacitySlider.oninput = applyOverlayOpacity;
 document.querySelectorAll('input[name="natgeo-horizon"]').forEach(function(el){
   el.onchange = function(){
     if (!natGeoOn.checked) return;
-    destroyNatGeoLayer();
-    buildNatGeoLayer(function(err){
-      if (!err && natGeoLayer) {
-        natGeoLayer.addTo(map);
-        natGeoLayer.setOpacity(opacitySlider.value / 100);
-      }
-    });
+    natGeoShow();
   };
 });
 setOverlays();
@@ -918,6 +1155,22 @@ function bindPopupActions(marker, p){
     if (cc) cc.onclick = function(){ copyText(fmtLL(p.lat, p.lng)); };
   });
 }
+/* v28: pin categories fade as a group (marker opacity tween), removed only after the fade-out. */
+function setGroupOpacity(g, v){ g.eachLayer(function(m){ if (m.setOpacity) m.setOpacity(v); }); }
+function fadeGroupIn(g){
+  const st = fadeState(g);
+  st.out = false;
+  if (!map.hasLayer(g)) { st.v = 0; setGroupOpacity(g, 0); map.addLayer(g); }
+  else if (st.v == null) st.v = 1;
+  tweenOpacity(st, 1, function(v){ setGroupOpacity(g, v); });
+}
+function fadeGroupOut(g){
+  const st = fadeState(g);
+  if (!map.hasLayer(g)) return;
+  if (st.v == null) st.v = 1;
+  st.out = true;
+  tweenOpacity(st, 0, function(v){ setGroupOpacity(g, v); }, function(){ if (st.out && map.hasLayer(g)) map.removeLayer(g); });
+}
 function renderPins(){
   Object.keys(groups).forEach(function(cat){ map.removeLayer(groups[cat]); });
   groups = {};
@@ -940,7 +1193,7 @@ function renderPins(){
     catsEl.appendChild(row);
     row.querySelector("input").onchange = function(){
       catOn[cat] = this.checked;
-      if (this.checked) map.addLayer(groups[cat]); else map.removeLayer(groups[cat]);
+      if (this.checked) fadeGroupIn(groups[cat]); else fadeGroupOut(groups[cat]);
     };
   });
 }
