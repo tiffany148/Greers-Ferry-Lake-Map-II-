@@ -1,6 +1,6 @@
 /* Greers Ferry Lake Explorer — service worker
    Caches the app shell. Map tiles are cached opportunistically as they are viewed. */
-const CACHE = "gfl-explorer-v25";
+const CACHE = "gfl-explorer-v26";
 const SHELL = ["./index.html", "./share.html", "./coves.js", "./manifest.json", "./icon-192.png", "./icon-512.png", "./hist-prelake-valley.jpg"];
 
 self.addEventListener("install", (e) => {
@@ -27,6 +27,11 @@ self.addEventListener("fetch", (e) => {
         return res;
       }).catch(() => caches.match("./index.html")))
     );
+    return;
+  }
+  // Live lake-level / temperature feeds: always network (never serve a stale cached reading).
+  if (url.hostname === "cwms-data.usace.army.mil" || url.hostname === "waterservices.usgs.gov") {
+    e.respondWith(fetch(req));
     return;
   }
   e.respondWith(
