@@ -105,6 +105,25 @@
   }
   #toast.show { opacity:1; }
 
+  .coord-box { position:absolute; left:10px; top:calc(94px + var(--safe-top)); z-index:790; display:flex; align-items:center; gap:8px; background:#0e2a3aee; color:var(--ink); border:1px solid #1e4a5f; border-radius:12px; padding:5px 6px 5px 10px; font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; box-shadow:0 4px 14px #0007; max-width:calc(100% - 90px); }
+  .coord-box.hidden, .crosshair.hidden { display:none; }
+  .live-chip.hidden ~ .coord-box { top:calc(58px + var(--safe-top)); }
+  .place-hint.on ~ .coord-box { top:calc(136px + var(--safe-top)); }
+  .place-hint.on ~ .live-chip.hidden ~ .coord-box { top:calc(100px + var(--safe-top)); }
+  .coord-box .lbl { font-family:-apple-system,system-ui,sans-serif; color:#9bb4c4; font-size:11px; }
+  .coord-box button, .coord-copy { border:0; border-radius:8px; padding:4px 8px; background:#123447; color:var(--ink); font-size:12px; cursor:pointer; }
+  .crosshair { position:absolute; left:50%; top:50%; width:18px; height:18px; margin:-9px 0 0 -9px; z-index:650; pointer-events:none; }
+  .crosshair::before, .crosshair::after { content:""; position:absolute; background:#ffffffcc; box-shadow:0 0 2px #000a; }
+  .crosshair::before { left:8px; top:0; width:2px; height:18px; }
+  .crosshair::after { top:8px; left:0; height:2px; width:18px; }
+  .pin-coords { margin-top:4px; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; color:#c9dce8; display:flex; align-items:center; gap:6px; }
+  .lake-facts { font-size:12px; line-height:1.45; color:#c9dce8; margin:4px 0 8px; }
+  .lake-facts summary { cursor:pointer; color:var(--ink); font-size:14px; }
+  .lake-facts dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:6px 0; }
+  .lake-facts dt { color:#9bb4c4; }
+  .lake-facts dd { margin:0; }
+  .lake-facts a { color:#7bdff2; }
+
 </style>
 </head>
 <body>
@@ -142,6 +161,17 @@
   <h2>Lake conditions</h2>
   <label class="row"><input type="checkbox" id="live-on" checked /> Show live level chip</label>
   <div id="live-detail" class="live-detail">Loading USACE lake level…</div>
+  <label class="row"><input type="checkbox" id="coords-on" checked /> Show coordinates (map center)</label>
+  <details class="lake-facts" id="lake-facts">
+    <summary>About the lake</summary>
+    <dl>
+      <dt>Water surface</dt><dd>31,800 acres (50 sq mi)</dd>
+      <dt>Shoreline</dt><dd>~305 miles</dd>
+      <dt>At pool</dt><dd>Top of conservation pool, 462.04 ft NGVD29</dd>
+    </dl>
+    <div>Source: USACE Little Rock District, <a href="https://water.usace.army.mil/cda/documents/wc/3423/WR%20Greers%20Ferry%20WCM%20Oct%202022%20REDACTED.pdf" target="_blank" rel="noopener">Greers Ferry Water Control Manual (Oct 2022)</a>.</div>
+    <div style="margin-top:4px;">The <a href="https://www.swl.usace.army.mil/Missions/Recreation/Lakes/Greers-Ferry-Lake/" target="_blank" rel="noopener">USACE Greers Ferry Lake page</a> lists 31,500 acres and 272 miles of shoreline at conservation pool (343 miles at flood pool, 487 ft). Published figures differ by source and survey method.</div>
+  </details>
   <h2>Depth</h2>
   <div class="live-detail">No public depth survey exists for Greers Ferry Lake (checked AGFC, USGS, USACE). Lidar elevation stops at the water surface. To see the old valley floor, use <i>Pre-lake valley (1894)</i> or <i>USGS historic topo</i>: rough depth = current lake level − the contour elevation.</div>
   <h2>Pins</h2>
@@ -196,6 +226,11 @@
     <button type="button" id="pin-cancel">Cancel</button>
     <button type="button" id="pin-save" class="fab" style="width:auto;height:auto;border-radius:12px;padding:8px 14px;">Save</button>
   </div>
+</div>
+<div id="crosshair" class="crosshair" aria-hidden="true"></div>
+<div id="coord-box" class="coord-box" role="status" aria-live="off" title="Map center (decimal degrees, WGS84)">
+  <span class="lbl" id="coord-lbl">Center</span> <span id="coord-val">—</span>
+  <button type="button" id="coord-copy" title="Copy coordinates">Copy</button>
 </div>
 <div id="opacity-box" class="opacity-box hidden">
   <span>Opacity</span>
@@ -862,6 +897,7 @@ function popupHtml(p){
   if (p.tip) body += "<br><i>"+esc(p.tip)+"</i>";
   if (p.cat==="Marina" || (p.kind==="stock" && MARINA_INFO[p.name])) body += marinaHtml(p.name);
   if ((p.kind==="hazard"||p.kind==="water") && p.updatedAt) body += '<div class="crowd-meta">Updated '+esc(formatWhen(p.updatedAt))+'</div>';
+  body += '<div class="pin-coords"><span>'+esc(fmtLL(p.lat, p.lng))+'</span><button type="button" class="coord-copy">Copy</button></div>';
   return body + popupActionsHtml(p);
 }
 function bindPopupActions(marker, p){
@@ -878,6 +914,8 @@ function bindPopupActions(marker, p){
     if (del) del.onclick = function(){ marker.closePopup(); if (confirm("Remove "+p.name+"?")) removePin(p); };
     if (dir) dir.onclick = function(){ openDirections(p.lat, p.lng); };
     if (share) share.onclick = function(){ shareSpotUrl(p.lat, p.lng, p.name || "Spot"); };
+    const cc = root.querySelector(".coord-copy");
+    if (cc) cc.onclick = function(){ copyText(fmtLL(p.lat, p.lng)); };
   });
 }
 function renderPins(){
@@ -1110,7 +1148,7 @@ function shareSpotUrl(lat, lng, name, z){
 }
 
 function spotPopupHtml(name, lat, lng){
-  return "<b>"+esc(name||"My spot")+"</b><br>"+esc(Number(lat).toFixed(5)+", "+Number(lng).toFixed(5))
+  return "<b>"+esc(name||"My spot")+"</b><div class=\"pin-coords\"><span>"+esc(fmtLL(lat, lng))+"</span><button type=\"button\" class=\"coord-copy\">Copy</button></div>"
     + '<div class="popup-actions">'
     + '<button type="button" class="pin-directions">Directions</button>'
     + '<button type="button" class="pin-share">Share</button>'
@@ -1125,6 +1163,8 @@ function bindSpotPopupActions(marker, lat, lng, name){
     const share = root.querySelector(".pin-share");
     if (dir) dir.onclick = function(){ openDirections(lat, lng); };
     if (share) share.onclick = function(){ shareSpotUrl(lat, lng, name || "My spot"); };
+    const cc = root.querySelector(".coord-copy");
+    if (cc) cc.onclick = function(){ copyText(fmtLL(lat, lng)); };
   });
 }
 
@@ -1462,6 +1502,65 @@ document.getElementById("pin-save").onclick = function(){
   finishLocal();
 };
 
+// ---- Coordinates: live map-center readout, long-press / right-click point, copy ----
+function fmtLL(lat, lng){ return Number(lat).toFixed(5) + ", " + Number(lng).toFixed(5); }
+function copyText(text, okMsg){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function(){ showToast(okMsg || ("Copied " + text)); })
+      .catch(function(){ prompt("Copy:", text); });
+    return;
+  }
+  prompt("Copy:", text);
+}
+(function(){
+  var box = document.getElementById("coord-box");
+  var val = document.getElementById("coord-val");
+  var lbl = document.getElementById("coord-lbl");
+  var cross = document.getElementById("crosshair");
+  var chk = document.getElementById("coords-on");
+  var STORE_COORDS = PUBLIC_VIEW ? "gfl-share-coords" : "gfl-coords";
+  var on = localStorage.getItem(STORE_COORDS) !== "0";
+  chk.checked = on;
+  function apply(){ box.classList.toggle("hidden", !on); cross.classList.toggle("hidden", !on); }
+  function showCenter(){ var c = map.getCenter(); val.textContent = fmtLL(c.lat, c.lng); lbl.textContent = "Center"; }
+  chk.onchange = function(){ on = chk.checked; localStorage.setItem(STORE_COORDS, on ? "1" : "0"); apply(); };
+  map.on("move moveend zoomend rotate", showCenter);
+  document.getElementById("coord-copy").onclick = function(){ copyText(val.textContent); };
+  apply(); showCenter();
+
+  var pointPopup = null;
+  function showPoint(latlng){
+    var t = fmtLL(latlng.lat, latlng.lng);
+    pointPopup = L.popup({ autoPan:false })
+      .setLatLng(latlng)
+      .setContent('<b>Point</b><div class="pin-coords"><span>'+esc(t)+'</span><button type="button" class="coord-copy">Copy</button></div>')
+      .openOn(map);
+    var root = pointPopup.getElement();
+    var b = root && root.querySelector(".coord-copy");
+    if (b) b.onclick = function(){ copyText(t); };
+  }
+  // Desktop right-click (and Android long-press, which fires contextmenu)
+  map.on("contextmenu", function(e){ if (e.originalEvent) e.originalEvent.preventDefault(); showPoint(e.latlng); });
+  // iOS Safari long-press (no contextmenu event): 600 ms hold without moving
+  var el = map.getContainer(), lpTimer = null, lpStart = null, lpFired = false;
+  el.addEventListener("touchstart", function(ev){
+    if (ev.touches.length !== 1) { clearTimeout(lpTimer); return; }
+    var t = ev.touches[0]; lpStart = {x:t.clientX, y:t.clientY}; lpFired = false;
+    clearTimeout(lpTimer);
+    lpTimer = setTimeout(function(){
+      lpFired = true;
+      var r = el.getBoundingClientRect();
+      showPoint(map.containerPointToLatLng(L.point(lpStart.x - r.left, lpStart.y - r.top)));
+    }, 600);
+  }, {passive:true});
+  el.addEventListener("touchmove", function(ev){
+    if (!lpStart) return; var t = ev.touches[0];
+    if (Math.abs(t.clientX - lpStart.x) > 10 || Math.abs(t.clientY - lpStart.y) > 10) clearTimeout(lpTimer);
+  }, {passive:true});
+  el.addEventListener("touchend", function(){ clearTimeout(lpTimer); }, {passive:true});
+  el.addEventListener("touchcancel", function(){ clearTimeout(lpTimer); }, {passive:true});
+  el.addEventListener("contextmenu", function(ev){ if (lpFired) ev.preventDefault(); });
+})();
 
 if (PUBLIC_VIEW) {
   document.title = "Greers Ferry Lake Explorer";
