@@ -1022,5 +1022,77 @@ document.addEventListener("DOMContentLoaded",function(){
   setInterval(refresh, 2000);
 })();
 </script>
+
+<script>
+(function(){
+  var FILE="https://raw.githubusercontent.com/tiffany148/Greers-Ferry-Lake-Map-II-/main/laceys-office/slip-status.json";
+  var API="https://api.github.com/repos/tiffany148/Greers-Ferry-Lake-Map-II-/contents/laceys-office/slip-status.json";
+  var last="";
+  function list(){
+    var out={};
+    try{
+      Object.keys(data||{}).forEach(function(id){
+        var rec=data[id]||{};
+        if(rec.status||rec.boat) out[id]={status:rec.status||"vacant", boat:rec.boat||""};
+      });
+    }catch(e){}
+    return out;
+  }
+  function apply(pack){
+    if(!pack||!pack.slips) return;
+    var changed=false;
+    Object.keys(pack.slips).forEach(function(id){
+      var rec=pack.slips[id]||{};
+      data[id]=data[id]||{};
+      if(data[id].status!==rec.status||data[id].boat!==(rec.boat||"")){
+        data[id].status=rec.status||"vacant";
+        data[id].boat=rec.boat||"";
+        changed=true;
+      }
+    });
+    if(changed){ try{save(data);}catch(e){} try{redraw();}catch(e){} }
+  }
+  function pull(){
+    fetch(FILE+"?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json();}).then(function(pack){
+      var stamp=pack.updatedAt||"";
+      if(stamp&&stamp===last) return;
+      last=stamp;
+      apply(pack);
+    }).catch(function(){});
+  }
+  function push(){
+    var token="";
+    try{ token=localStorage.getItem("laceys-gh-publish-token")||""; }catch(e){}
+    if(!token) return;
+    var body={updatedAt:new Date().toISOString(), slips:list()};
+    fetch(API,{headers:{Authorization:"Bearer "+token, Accept:"application/vnd.github+json"}}).then(function(r){return r.json();}).then(function(cur){
+      return fetch(API,{method:"PUT", headers:{Authorization:"Bearer "+token, Accept:"application/vnd.github+json", "Content-Type":"application/json"}, body:JSON.stringify({message:"Update customer slip list", content:btoa(unescape(encodeURIComponent(JSON.stringify(body,null,2)))), sha:cur.sha, branch:"main"})});
+    }).then(function(){ last=body.updatedAt; }).catch(function(){});
+  }
+  document.addEventListener("click", function(e){
+    var b=e.target.closest&&e.target.closest("#pane-slip .st button");
+    if(b) setTimeout(push, 400);
+  }, true);
+  document.addEventListener("change", function(e){
+    if(e.target&&e.target.id==="boat") push();
+  }, true);
+  var btn=document.createElement("button");
+  btn.type="button";
+  btn.textContent="Sync phones";
+  btn.style.cssText="position:fixed;z-index:100004;right:8px;bottom:calc(8px + env(safe-area-inset-bottom));border:0;border-radius:12px;padding:10px 12px;font-weight:800;background:#f0c14b;color:#1a1a1a";
+  btn.onclick=function(){
+    var token=localStorage.getItem("laceys-gh-publish-token")||"";
+    if(!token){
+      token=prompt("Paste the GitHub token once on this phone so customer names can reach the office copy. Leave blank to cancel.")||"";
+      if(token) localStorage.setItem("laceys-gh-publish-token", token.trim());
+    }
+    push();
+    alert(token?"This phone will send customer names to the office copy.":"No token saved, so this phone cannot send names to other devices.");
+  };
+  document.body.appendChild(btn);
+  setInterval(pull, 15000);
+  pull();
+})();
+</script>
 </body>
 </html>
