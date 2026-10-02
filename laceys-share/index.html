@@ -1008,5 +1008,19 @@ document.addEventListener("DOMContentLoaded",function(){
   chart.addEventListener('touchend',function(){ pinch=null; });
 });
 </script>
+
+<style id="office-style">body.office #edit-toggle,body.office #edit-toggle-mobile,body.office #edit-toggle-sticky{display:none!important}#office-bar{display:none;position:fixed;z-index:100003;left:8px;right:8px;top:8px;background:#1a5c62;color:#fff;border-radius:12px;padding:8px 10px;font-weight:800}body.office #office-bar{display:block}</style>
+<div id="office-bar">Office copy. Customer names come from the share chart. The main map is not changed.</div>
+<script>
+(function(){
+  if(location.search.indexOf("office=1")===-1) return;
+  document.body.classList.add("office");
+  function refresh(){
+    try{ if(typeof redraw==="function") redraw(); }catch(e){}
+  }
+  window.addEventListener("storage", refresh);
+  setInterval(refresh, 2000);
+})();
+</script>
 </body>
 </html>
