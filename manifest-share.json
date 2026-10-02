@@ -1,9 +1,9 @@
 {
-  "name": "Greers Ferry Lake Explorer",
+  "name": "Greers Ferry Lake",
   "short_name": "Greers Ferry",
-  "description": "Satellite map, shoreline pins, live lake level, and personal marks for Greers Ferry Lake, Arkansas.",
+  "description": "Shared map of Greers Ferry Lake, Arkansas: satellite view, shoreline pins, live lake level, and your own marks.",
   "lang": "en",
-  "start_url": "./",
+  "start_url": "./share.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

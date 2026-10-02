@@ -3,10 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Greers Ferry" />
 <meta name="theme-color" content="#0a2438" />
 <title>Greers Ferry Lake Explorer</title>
-<link rel="manifest" href="manifest.json" />
+<link rel="manifest" id="manifest-link" href="manifest.json" />
+<link rel="icon" href="favicon.ico" sizes="any" />
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
   :root { --bg:#071822; --ink:#e8f2f7; --accent:#c49a58; --panel:#0e2a3a; --safe-top:env(safe-area-inset-top,0px); --safe-bot:env(safe-area-inset-bottom,0px); }
@@ -90,6 +96,13 @@
     max-width:calc(100vw - 90px);
   }
   .opacity-box.hidden { display:none; }
+  .install-row { margin-top:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .install-row[hidden] { display:none; }
+  .install-row button { border:0; border-radius:12px; padding:7px 12px; background:transparent; color:#9bb4c4; font-size:13px; box-shadow:inset 0 0 0 1px #2a4a5e; display:inline-flex; align-items:center; gap:6px; }
+  .install-row button:hover, .install-row button:focus-visible { color:var(--ink); background:#123447; }
+  .install-row img { width:18px; height:18px; border-radius:5px; }
+  .install-hint { font-size:12px; color:#c9dce8; line-height:1.4; flex-basis:100%; }
+  .install-hint[hidden] { display:none; }
   .natgeo-opts { margin:4px 0 8px 18px; }
   .natgeo-opts.hidden { display:none; }
   .natgeo-opts .row { margin:4px 0; font-size:13px; }
@@ -185,6 +198,10 @@
   <div class="unlock-row">
     <button type="button" id="btn-unlock-shared">Unlock shared edits</button>
   </div>
+  <div class="install-row" id="install-row" hidden>
+    <button type="button" id="btn-install"><img src="favicon-32.png" alt="" />Install app</button>
+    <div class="install-hint" id="install-hint" hidden>Tap Share <span aria-hidden="true">&#x2191;&#xFE0E;</span>, then <b>Add to Home Screen</b>.</div>
+  </div>
 </div>
 <div id="pw-form" class="pw-form">
   <strong>Shared pin password</strong>
@@ -256,6 +273,8 @@
 <script src="coves.js"></script>
 <script>
 const PUBLIC_VIEW = false;
+// The share view installs as its own app (start_url share.html).
+if (PUBLIC_VIEW) document.getElementById("manifest-link").href = "manifest-share.json";
 const PINS = [
   {name:"Greers Ferry Dam",lat:35.5208,lng:-91.9956,cat:"Infrastructure",fact:"USACE flood control and hydropower. JFK dedicated the dam Oct 3, 1963."},
   {name:"Visitor Center",lat:35.5219,lng:-91.9994,cat:"Park",fact:"Dam overlook and project exhibits."},
@@ -1829,6 +1848,44 @@ if (PUBLIC_VIEW) {
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(function(){});
 }
+
+/* Install app (Layers sheet). Chrome/Edge/Android: beforeinstallprompt. iOS: Share > Add to Home Screen hint.
+   Hidden when already running as an installed app. */
+(function(){
+  var row = document.getElementById("install-row");
+  var btn = document.getElementById("btn-install");
+  var hint = document.getElementById("install-hint");
+  if (!row || !btn) return;
+  function standalone(){
+    return (window.matchMedia && (matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: fullscreen)").matches || matchMedia("(display-mode: minimal-ui)").matches)) || navigator.standalone === true;
+  }
+  if (standalone()) return;
+  var ua = navigator.userAgent || "";
+  var isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var deferred = null;
+  window.addEventListener("beforeinstallprompt", function(e){
+    e.preventDefault();
+    deferred = e;
+    hint.hidden = true;
+    row.hidden = false;
+  });
+  window.addEventListener("appinstalled", function(){
+    deferred = null;
+    row.hidden = true;
+  });
+  if (isIOS) row.hidden = false;
+  btn.onclick = function(){
+    if (deferred) {
+      var ev = deferred; deferred = null;
+      ev.prompt();
+      (ev.userChoice || Promise.resolve({})).then(function(c){
+        if (c && c.outcome === "accepted") row.hidden = true;
+      }).catch(function(){});
+      return;
+    }
+    hint.hidden = !hint.hidden;
+  };
+})();
 </script>
 </body>
 </html>
