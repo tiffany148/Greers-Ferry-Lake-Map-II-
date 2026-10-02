@@ -1385,7 +1385,9 @@ function redraw(){
     if(rot) attrs.transform=`rotate(${rot} ${s.x+s.w/2} ${s.y+s.h/2})`;
     const g=el("g",attrs);
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
-    g.appendChild(el("text",slipLabelAttrs(s.x+s.w/2,s.y+s.h/2+3,9),String(s.num).replace(/^F|^C/,"")));
+    const label=el("text",slipLabelAttrs(s.x+s.w/2,s.y+s.h/2,9),String(s.num).replace(/^F|^C/,""));
+    if(s.h>s.w+6){ label.setAttribute("transform",`rotate(90 ${s.x+s.w/2} ${s.y+s.h/2})`); label.setAttribute("dominant-baseline","middle"); }
+    g.appendChild(label);
     parent.appendChild(g);
   });
   // Paint order = stackOrder (back → front). Orphan slips (no dock) stay in top-level layerSlips.
@@ -3835,16 +3837,13 @@ function ensureMapVisible(){
 }
 
 function printChart(){
-  // Snapshot current SVG (includes layer colors / hidden slips as drawn)
   const clone=svg.cloneNode(true);
   clone.removeAttribute("style");
   clone.setAttribute("width",String(MAP_W));
   clone.setAttribute("height",String(MAP_H));
   clone.setAttribute("viewBox","0 0 "+MAP_W+" "+MAP_H);
-  // Light paper-friendly water background (first big rect)
   const bgRect=clone.querySelector("rect");
   if(bgRect) bgRect.setAttribute("fill","#e8f2f1");
-  // Soften white-ish label fills for print contrast if needed
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>Lacey's Narrows · printable chart</title>
 <style>
@@ -3861,16 +3860,29 @@ function printChart(){
   <h1>Lacey's Narrows</h1>
   <p class="sub">Greers Ferry Lake · Higden, AR · North up · Printed from live slip chart</p>
   ${clone.outerHTML}
-  <div class="actions"><button onclick="window.print()">Print</button>
-  <button onclick="window.close()">Close</button></div>
+  <div class="actions"><button onclick="window.print()">Print</button></div>
 </div>
-<script>window.onload=function(){ setTimeout(function(){ window.print(); }, 250); };<\/script>
 </body></html>`;
-  const w=window.open("", "_blank");
-  if(!w){ alert("Allow pop-ups to open the printable chart."); return; }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  let frame=document.getElementById("print-frame");
+  if(!frame){
+    frame=document.createElement("iframe");
+    frame.id="print-frame";
+    frame.setAttribute("aria-hidden","true");
+    frame.style.cssText="position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    document.body.appendChild(frame);
+  }
+  const doc=frame.contentDocument||frame.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  setTimeout(function(){
+    try{
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    }catch(e){
+      try{ window.print(); }catch(err){}
+    }
+  }, 350);
 }
 
 
