@@ -10,7 +10,7 @@ try{
     if(x.status>=200&&x.status<300){
       var layout=JSON.parse(x.responseText);
       if(layout&&layout.docks){
-        localStorage.setItem("laceys-layout-v3", JSON.stringify(layout));
+        localStorage.setItem("laceys-share-layout-v1", JSON.stringify(layout));
         localStorage.setItem("laceys-share-published", layout.publishedAt||"2026-10-01T03:39:14.353Z");
       }
     }
@@ -850,7 +850,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
         <h2 id="slip-title"></h2><p id="slip-meta"></p>
         <div class="st"><button data-st="vacant">Vacant</button><button data-st="occupied">Occupied</button><button data-st="reserved">Reserved</button></div>
         <div id="slip-layer-assigns"></div>
-        <label>Boat name<input id="boat"/></label>
+        <label>Customer name<input id="boat" placeholder="Customer name"/></label>
         <label>Notes<textarea id="notes" rows="3"></textarea></label>
       </div>
     </div>
@@ -977,5 +977,36 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 
 <script src="app-data.js?v=95-share"></script>
 <script src="app.js?v=95-share"></script>
+
+<style>
+#edit-toggle,#edit-toggle-mobile,#edit-toggle-sticky,#edit-fab-tools,#edit-fab-done,#edit-tools-peek,#btn-save,#btn-save-m,#btn-save-sticky,[data-tab="layout"],[data-tab="layers"],#pane-layout,#pane-layers,#btn-publish-layout,#btn-publish-layout-dock,#btn-save-layout,#download-layout{display:none!important}
+#slip-detail .st button[data-st="reserved"]{display:none}
+</style>
+<script>
+document.addEventListener("click",function(e){
+  var b=e.target.closest&&e.target.closest("#edit-toggle,#edit-toggle-mobile,#edit-toggle-sticky");
+  if(b){e.preventDefault();e.stopPropagation();}
+},true);
+document.addEventListener("DOMContentLoaded",function(){
+  var boat=document.querySelector('label');
+  document.querySelectorAll('label').forEach(function(l){ if(l.textContent.indexOf('Boat name')===0) l.firstChild.textContent='Customer name'; });
+  var chart=document.getElementById('chart'), pinch=null;
+  if(!chart) return;
+  chart.addEventListener('touchstart',function(e){
+    if(e.touches.length<2) return;
+    var a=e.touches[0], b=e.touches[1];
+    pinch={d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)||1, s:scale||1};
+    e.preventDefault();
+  },{passive:false});
+  chart.addEventListener('touchmove',function(e){
+    if(!pinch||e.touches.length<2) return;
+    var a=e.touches[0], b=e.touches[1], d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY)||1;
+    scale=Math.max(0.05, Math.min(16, pinch.s*(d/pinch.d)));
+    try{applyZoom();}catch(err){}
+    e.preventDefault();
+  },{passive:false});
+  chart.addEventListener('touchend',function(){ pinch=null; });
+});
+</script>
 </body>
 </html>
