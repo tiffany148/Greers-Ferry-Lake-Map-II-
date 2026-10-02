@@ -1,6 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="manifest" href="manifest.webmanifest"/>
+<link rel="apple-touch-icon" href="icon-180.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="Lacey's"/>
+<meta name="theme-color" content="#0c3c41"/>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}</script>
+
+<script>
+try{
+  if(localStorage.getItem("laceys-force-20261001c")!=="1"){
+    var x=new XMLHttpRequest();
+    x.open("GET","published-layout.json?v=20261001c",false);
+    x.send();
+    if(x.status>=200&&x.status<300){
+      var layout=JSON.parse(x.responseText);
+      if(layout&&layout.docks){
+        localStorage.setItem("laceys-layout-v3", JSON.stringify(layout));
+        localStorage.setItem("laceys-published-at", layout.publishedAt||"");
+        localStorage.setItem("laceys-force-20261001c","1");
+      }
+    }
+  }
+}catch(e){}
+</script>
+
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Lacey's Narrows (editable)</title>
@@ -958,7 +984,7 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 </div>
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
-<script src="app-data.js?v=95-layers"></script>
-<script src="app.js?v=95-layers"></script>
+<script src="app-data.js?v=95-layersz"></script>
+<script src="app.js?v=95-layersz"></script>
 </body>
 </html>
