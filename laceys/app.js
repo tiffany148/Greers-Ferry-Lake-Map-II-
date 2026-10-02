@@ -1385,7 +1385,9 @@ function redraw(){
     if(rot) attrs.transform=`rotate(${rot} ${s.x+s.w/2} ${s.y+s.h/2})`;
     const g=el("g",attrs);
     g.appendChild(el("rect",{x:s.x,y:s.y,width:s.w,height:s.h,rx:2,fill:fill(s)}));
-    g.appendChild(el("text",slipLabelAttrs(s.x+s.w/2,s.y+s.h/2+3,9),String(s.num).replace(/^F|^C/,"")));
+    const label=el("text",slipLabelAttrs(s.x+s.w/2,s.y+s.h/2,9),String(s.num).replace(/^F|^C/,""));
+    if(s.h>s.w+6){ label.setAttribute("transform",`rotate(-90 ${s.x+s.w/2} ${s.y+s.h/2})`); label.setAttribute("dominant-baseline","middle"); }
+    g.appendChild(label);
     parent.appendChild(g);
   });
   // Paint order = stackOrder (back → front). Orphan slips (no dock) stay in top-level layerSlips.
