@@ -1,6 +1,23 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+try{
+  if(localStorage.getItem("laceys-share-published")!=="2026-10-01T03:39:14.353Z"){
+    var x=new XMLHttpRequest();
+    x.open("GET","published-layout.json?v=20261001d",false);
+    x.send();
+    if(x.status>=200&&x.status<300){
+      var layout=JSON.parse(x.responseText);
+      if(layout&&layout.docks){
+        localStorage.setItem("laceys-layout-v3", JSON.stringify(layout));
+        localStorage.setItem("laceys-share-published", layout.publishedAt||"2026-10-01T03:39:14.353Z");
+      }
+    }
+  }
+}catch(e){}
+</script>
+
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>Lacey's Narrows (editable)</title>
