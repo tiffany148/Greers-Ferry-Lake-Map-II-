@@ -2063,6 +2063,85 @@ function hitEditTarget(e){
   }
   return {sEl,dEl,mEl};
 }
+// v97: two-finger pinch zooms the map in view and edit mode. .chart has touch-action:none,
+// so the browser can't pinch there; the map handles it here. Pinch outside the map is left to the browser.
+// Photo move / dock align keep their own two-finger scaling.
+const mapPinchPts=new Map(), mapPinchIgnore=new Set();
+let mapPinch=null, mapPinchHold=null;
+function mapPinchAllowed(){ return !photoMoveMode && !dockAlignMode; }
+function mapPinchGeom(){
+  const r=chart.getBoundingClientRect(), v=[...mapPinchPts.values()], a=v[0], b=v[1];
+  return {d:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)), mx:(a.x+b.x)/2-r.left, my:(a.y+b.y)/2-r.top};
+}
+function mapPinchUndoDrag(){
+  // Second finger landed before the first finger really dragged: put back any tiny live move, save nothing
+  if(!dockDrag) return;
+  try{
+    if(dockDrag.kind==="chart"){ clearSelectionNudge(); }
+    else if(dockDrag.kind==="dock"){
+      const d=docks.find(x=>x.id===dockDrag.id);
+      if(d){ const mdx=dockDrag.x-d.x, mdy=dockDrag.y-d.y;
+        if(mdx||mdy){ const g=findGroupFor("dock", d.id); if(g) moveGroupMembers(g,mdx,mdy); else { if(isLocked(d)) moveDockSlips(d,mdx,mdy); d.x=dockDrag.x; d.y=dockDrag.y; } redraw(); } }
+    }else if(dockDrag.kind==="mark"){
+      const m=marks.find(x=>x.id===dockDrag.id);
+      if(m){ const mdx=dockDrag.x-m.x, mdy=dockDrag.y-m.y;
+        if(mdx||mdy){ const g=findGroupFor("mark", m.id); if(g) moveGroupMembers(g,mdx,mdy); else { m.x=dockDrag.x; m.y=dockDrag.y; } redraw(); } }
+    }else if(dockDrag.kind==="slip"){
+      const d=docks.find(x=>x.id===dockDrag.dockId), p=d&&d.placed&&d.placed[dockDrag.id];
+      if(p && (p.x!==dockDrag.x || p.y!==dockDrag.y)){ setPlaced(d,dockDrag.id,{x:dockDrag.x,y:dockDrag.y}); redraw(); }
+    }
+  }catch(_){}
+}
+chart.addEventListener("pointerdown",e=>{
+  if(e.pointerType==="mouse") return;
+  if(e.isPrimary){ mapPinchPts.clear(); mapPinchIgnore.clear(); mapPinch=null; mapPinchHold=null; } // first finger of a new touch: drop stale state
+  if(e.target.closest && e.target.closest(".zoom,.pan,button,input,select,textarea,label,#scale-measure-chip,#gcp-align-chip,#photo-move-chip,#dock-align-chip")) return;
+  mapPinchPts.set(e.pointerId,{x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY});
+  if(mapPinchPts.size<2 || !mapPinchAllowed()) return;
+  if(!mapPinch){
+    const first=[...mapPinchPts.values()][0];
+    const dragging=dockDrag && dockDrag.kind!=="pick" && Math.hypot(first.x-first.x0, first.y-first.y0)>12;
+    if(dragging){ mapPinchPts.delete(e.pointerId); mapPinchIgnore.add(e.pointerId); e.stopImmediatePropagation(); return; } // keep the drag; ignore the extra finger
+    mapPinchUndoDrag();
+    dockDrag=null; pan=null; scaleDrag=null; gcpDrag=null; mapPinchHold=null; chart.style.cursor="";
+    const g=mapPinchGeom();
+    mapPinch={d0:g.d, s0:scale, wx:(g.mx-tx)/scale, wy:(g.my-ty)/scale};
+  }
+  try{ e.preventDefault(); }catch(_){}
+  try{ chart.setPointerCapture(e.pointerId); }catch(_){}
+  e.stopImmediatePropagation();
+});
+chart.addEventListener("pointermove",e=>{
+  if(mapPinchIgnore.has(e.pointerId)){ e.stopImmediatePropagation(); return; }
+  const pt=mapPinchPts.get(e.pointerId);
+  if(!pt) return;
+  pt.x=e.clientX; pt.y=e.clientY;
+  if(mapPinch && mapPinchPts.size>=2){
+    const g=mapPinchGeom();
+    const s1=Math.min(maxZoomScale(), Math.max(minZoomScale(), mapPinch.s0*g.d/mapPinch.d0));
+    scale=s1; tx=g.mx-mapPinch.wx*s1; ty=g.my-mapPinch.wy*s1; applyZoom();
+  }else if(mapPinchHold && mapPinchHold.id===e.pointerId){
+    tx=e.clientX-mapPinchHold.px; ty=e.clientY-mapPinchHold.py; applyZoom(); // one finger left: keep panning
+  }else return;
+  try{ e.preventDefault(); }catch(_){}
+  e.stopImmediatePropagation();
+});
+function mapPinchEnd(e){
+  if(mapPinchIgnore.delete(e.pointerId)){ e.stopImmediatePropagation(); return; }
+  if(!mapPinchPts.delete(e.pointerId)) return;
+  if(!mapPinch && !mapPinchHold) return;
+  e.stopImmediatePropagation();
+  dockDrag=null; pan=null;
+  if(mapPinchPts.size>=2){ const g=mapPinchGeom(); mapPinch={d0:g.d, s0:scale, wx:(g.mx-tx)/scale, wy:(g.my-ty)/scale}; return; }
+  mapPinch=null;
+  if(mapPinchPts.size===1){ const [id,p]=[...mapPinchPts.entries()][0]; mapPinchHold={id, px:p.x-tx, py:p.y-ty}; }
+  else mapPinchHold=null;
+}
+chart.addEventListener("pointerup",mapPinchEnd);
+chart.addEventListener("pointercancel",mapPinchEnd);
+// iOS Safari: keep a pinch on the map from also zooming the page
+chart.addEventListener("gesturestart",e=>{ try{ e.preventDefault(); }catch(_){} },{passive:false});
+chart.addEventListener("gesturechange",e=>{ try{ e.preventDefault(); }catch(_){} },{passive:false});
 chart.addEventListener("pointerdown",e=>{
   if(scaleMeasureMode){
     try{ e.preventDefault(); }catch(_){}
