@@ -7,7 +7,23 @@
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-title" content="Lacey's"/>
 <meta name="theme-color" content="#0c3c41"/>
-<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js");}</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("sw.js?v=98");}</script>
+<script>
+(function(){
+  try{
+    if(!("serviceWorker" in navigator)) return;
+    if(localStorage.getItem("laceys-sw-bust-20261006b")==="1") return;
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      localStorage.setItem("laceys-sw-bust-20261006b","1");
+      if(!regs || !regs.length) return;
+      Promise.all(regs.map(function(r){return r.unregister();})).then(function(){
+        location.reload();
+      });
+    });
+  }catch(e){}
+})();
+</script>
+
 
 <script>
 try{
@@ -985,6 +1001,6 @@ body.scale-measuring #scale-measure-chip{ display:flex; }
 <button type="button" id="edit-tools-peek" aria-label="Open tools">▲ Tools</button>
 
 <script src="app-data.js?v=95-viewz"></script>
-<script src="app.js?v=97-viewz"></script>
+<script src="app.js?v=98-viewz"></script>
 </body>
 </html>
