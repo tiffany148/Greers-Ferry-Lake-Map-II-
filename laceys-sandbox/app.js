@@ -2063,18 +2063,12 @@ function hitEditTarget(e){
   }
   return {sEl,dEl,mEl};
 }
-// v97: two-finger pinch zooms the map in view and edit mode. .chart has touch-action:none,
-// so the browser can't pinch there; the map handles it here. Pinch outside the map is left to the browser.
-// Photo move / dock align keep their own two-finger scaling.
-const mapPinchPts=new Map(), mapPinchIgnore=new Set();
-let mapPinch=null, mapPinchHold=null;
+// v98: map pinch via Touch Events (works on iOS Safari). Pointer-only v97 failed there:
+// setPointerCapture on finger 1 often eats finger 2, and gesturestart preventDefault then
+// blocked Safari's native zoom too — so nothing zoomed. Photo/dock-align keep their own pinch.
+let mapPinch=null;
 function mapPinchAllowed(){ return !photoMoveMode && !dockAlignMode; }
-function mapPinchGeom(){
-  const r=chart.getBoundingClientRect(), v=[...mapPinchPts.values()], a=v[0], b=v[1];
-  return {d:Math.max(1,Math.hypot(a.x-b.x,a.y-b.y)), mx:(a.x+b.x)/2-r.left, my:(a.y+b.y)/2-r.top};
-}
 function mapPinchUndoDrag(){
-  // Second finger landed before the first finger really dragged: put back any tiny live move, save nothing
   if(!dockDrag) return;
   try{
     if(dockDrag.kind==="chart"){ clearSelectionNudge(); }
@@ -2092,56 +2086,67 @@ function mapPinchUndoDrag(){
     }
   }catch(_){}
 }
-chart.addEventListener("pointerdown",e=>{
-  if(e.pointerType==="mouse") return;
-  if(e.isPrimary){ mapPinchPts.clear(); mapPinchIgnore.clear(); mapPinch=null; mapPinchHold=null; } // first finger of a new touch: drop stale state
-  if(e.target.closest && e.target.closest(".zoom,.pan,button,input,select,textarea,label,#scale-measure-chip,#gcp-align-chip,#photo-move-chip,#dock-align-chip")) return;
-  mapPinchPts.set(e.pointerId,{x:e.clientX,y:e.clientY,x0:e.clientX,y0:e.clientY});
-  if(mapPinchPts.size<2 || !mapPinchAllowed()) return;
-  if(!mapPinch){
-    const first=[...mapPinchPts.values()][0];
-    const dragging=dockDrag && dockDrag.kind!=="pick" && Math.hypot(first.x-first.x0, first.y-first.y0)>12;
-    if(dragging){ mapPinchPts.delete(e.pointerId); mapPinchIgnore.add(e.pointerId); e.stopImmediatePropagation(); return; } // keep the drag; ignore the extra finger
-    mapPinchUndoDrag();
-    dockDrag=null; pan=null; scaleDrag=null; gcpDrag=null; mapPinchHold=null; chart.style.cursor="";
-    const g=mapPinchGeom();
-    mapPinch={d0:g.d, s0:scale, wx:(g.mx-tx)/scale, wy:(g.my-ty)/scale};
-  }
-  try{ e.preventDefault(); }catch(_){}
-  try{ chart.setPointerCapture(e.pointerId); }catch(_){}
-  e.stopImmediatePropagation();
-});
-chart.addEventListener("pointermove",e=>{
-  if(mapPinchIgnore.has(e.pointerId)){ e.stopImmediatePropagation(); return; }
-  const pt=mapPinchPts.get(e.pointerId);
-  if(!pt) return;
-  pt.x=e.clientX; pt.y=e.clientY;
-  if(mapPinch && mapPinchPts.size>=2){
-    const g=mapPinchGeom();
-    const s1=Math.min(maxZoomScale(), Math.max(minZoomScale(), mapPinch.s0*g.d/mapPinch.d0));
-    scale=s1; tx=g.mx-mapPinch.wx*s1; ty=g.my-mapPinch.wy*s1; applyZoom();
-  }else if(mapPinchHold && mapPinchHold.id===e.pointerId){
-    tx=e.clientX-mapPinchHold.px; ty=e.clientY-mapPinchHold.py; applyZoom(); // one finger left: keep panning
-  }else return;
-  try{ e.preventDefault(); }catch(_){}
-  e.stopImmediatePropagation();
-});
-function mapPinchEnd(e){
-  if(mapPinchIgnore.delete(e.pointerId)){ e.stopImmediatePropagation(); return; }
-  if(!mapPinchPts.delete(e.pointerId)) return;
-  if(!mapPinch && !mapPinchHold) return;
-  e.stopImmediatePropagation();
-  dockDrag=null; pan=null;
-  if(mapPinchPts.size>=2){ const g=mapPinchGeom(); mapPinch={d0:g.d, s0:scale, wx:(g.mx-tx)/scale, wy:(g.my-ty)/scale}; return; }
-  mapPinch=null;
-  if(mapPinchPts.size===1){ const [id,p]=[...mapPinchPts.entries()][0]; mapPinchHold={id, px:p.x-tx, py:p.y-ty}; }
-  else mapPinchHold=null;
+function mapPinchBegin(a,b){
+  mapPinchUndoDrag();
+  dockDrag=null; pan=null; scaleDrag=null; gcpDrag=null; chart.style.cursor="";
+  const r=chart.getBoundingClientRect();
+  const mx=(a.clientX+b.clientX)/2-r.left, my=(a.clientY+b.clientY)/2-r.top;
+  const d=Math.max(1, Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY));
+  mapPinch={d0:d, s0:scale, wx:(mx-tx)/scale, wy:(my-ty)/scale};
 }
-chart.addEventListener("pointerup",mapPinchEnd);
-chart.addEventListener("pointercancel",mapPinchEnd);
-// iOS Safari: keep a pinch on the map from also zooming the page
-chart.addEventListener("gesturestart",e=>{ try{ e.preventDefault(); }catch(_){} },{passive:false});
-chart.addEventListener("gesturechange",e=>{ try{ e.preventDefault(); }catch(_){} },{passive:false});
+function mapPinchUpdate(a,b){
+  if(!mapPinch) return;
+  const r=chart.getBoundingClientRect();
+  const mx=(a.clientX+b.clientX)/2-r.left, my=(a.clientY+b.clientY)/2-r.top;
+  const d=Math.max(1, Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY));
+  const s1=Math.min(maxZoomScale(), Math.max(minZoomScale(), mapPinch.s0*(d/mapPinch.d0)));
+  scale=s1; tx=mx-mapPinch.wx*s1; ty=my-mapPinch.wy*s1; applyZoom();
+}
+function mapPinchOnChart(t){
+  const r=chart.getBoundingClientRect();
+  return t.clientX>=r.left && t.clientX<=r.right && t.clientY>=r.top && t.clientY<=r.bottom;
+}
+// Listen on document (capture) so edit-mode FABs/chips that sit over the chart still count —
+// those nodes are outside #chart, so chart-only listeners never see their touches (esp. on iOS).
+document.addEventListener("touchstart", e=>{
+  if(!mapPinchAllowed()) return;
+  if(e.touches.length<2) return;
+  if(!mapPinchOnChart(e.touches[0]) || !mapPinchOnChart(e.touches[1])) return;
+  mapPinchBegin(e.touches[0], e.touches[1]);
+  try{ e.preventDefault(); }catch(_){}
+},{passive:false, capture:true});
+document.addEventListener("touchmove", e=>{
+  // Also BEGIN here: some engines (Chromium/CDP) skip a 2-finger touchstart and only
+  // emit touchmove with touches.length===2; iOS always sends touchstart first (both fine).
+  if(!mapPinchAllowed()) return;
+  if(e.touches.length<2) return;
+  if(!mapPinchOnChart(e.touches[0]) || !mapPinchOnChart(e.touches[1])) return;
+  if(!mapPinch) mapPinchBegin(e.touches[0], e.touches[1]);
+  else mapPinchUpdate(e.touches[0], e.touches[1]);
+  try{ e.preventDefault(); }catch(_){}
+},{passive:false, capture:true});
+document.addEventListener("touchend", e=>{
+  if(!mapPinch) return;
+  if(e.touches.length>=2){ mapPinchBegin(e.touches[0], e.touches[1]); return; }
+  mapPinch=null;
+}, {capture:true});
+document.addEventListener("touchcancel", ()=>{ mapPinch=null; }, {capture:true});
+// While a map pinch is active, ignore pointer drag/pan so docks don't move under the fingers
+chart.addEventListener("pointerdown", e=>{
+  if(!mapPinch) return;
+  try{ e.preventDefault(); }catch(_){}
+  e.stopImmediatePropagation();
+});
+chart.addEventListener("pointermove", e=>{
+  if(!mapPinch) return;
+  try{ e.preventDefault(); }catch(_){}
+  e.stopImmediatePropagation();
+});
+chart.addEventListener("pointerup", e=>{ if(mapPinch) e.stopImmediatePropagation(); });
+chart.addEventListener("pointercancel", e=>{ if(mapPinch) e.stopImmediatePropagation(); });
+// iOS Safari native page-zoom gesture on the chart — block so our touch pinch owns it
+chart.addEventListener("gesturestart", e=>{ try{ e.preventDefault(); }catch(_){} },{passive:false});
+chart.addEventListener("gesturechange", e=>{ try{ e.preventDefault(); }catch(_){} },{passive:false});
 chart.addEventListener("pointerdown",e=>{
   if(scaleMeasureMode){
     try{ e.preventDefault(); }catch(_){}
