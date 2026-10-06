@@ -1507,6 +1507,7 @@ function renderMultiSelectionEditor(box){
         <button type="button" class="btn" id="ed-sel-group">Group / Join</button>
         <button type="button" class="btn" id="ed-sel-join-new">Join as new dock</button>
       </div>
+      ${dockAssignSectionHtml("Set all selected slips", slipIdsForKeys([...multi]).length, false)}
       ${placementSec(`
         <p class="hint" style="margin-top:0">Group position (selection top-left) &amp; slip size</p>
         <div class="row2"><label>Group X<input id="ed-sel-x" type="number" value="${geom.x}"/></label><label>Group Y<input id="ed-sel-y" type="number" value="${geom.y}"/></label></div>
@@ -1561,6 +1562,7 @@ function renderMultiSelectionEditor(box){
         saveLayout(); redraw(); renderDockEditor();
       };
     });
+    bindDockAssign(box, ()=>slipIdsForKeys([...multi]), "the selection", ()=>{ if(selected) renderSlipLayerAssigns(selected); });
     wireGeomFields({x:"ed-sel-x",y:"ed-sel-y",w:"ed-sel-sw",h:"ed-sel-sh"});
     try{ syncMultiGeomInputs(); }catch(e){}
 }
@@ -1622,6 +1624,7 @@ function renderDockEditor(){
       <div class="st"><button type="button" class="btn" id="ed-lock">${locked?"Unlock this dock":"Lock as dock"}</button>
       <button type="button" class="btn" id="ed-multi-here" title="Multi-select slips on this dock">Multi-select slips</button></div>
       <p class="hint">${locked?"Locked as one dock unit. Unlock slips → Multi-select the ones you want → move/resize → Lock as dock when done.":"Unlocked: drag slips one at a time, or Multi-select several to move/resize together, then Lock as dock."}</p>`+
+      dockAssignSectionHtml("Set all slips on this dock", dockSlipIdsFor(d.id).length, false)+
       placementSec(`<div class="row2"><label>X<input id="ed-x" type="number" value="${Math.round(d.x)}"/></label><label>Y<input id="ed-y" type="number" value="${Math.round(d.y)}"/></label></div>
       <div class="row2"><label>Slip width<input id="ed-sw" type="number" value="${Math.round(d.sw||d.w||40)}"/></label><label>Slip height<input id="ed-sh" type="number" value="${Math.round(d.sh||d.h||15)}"/></label></div>
       <label>Gap<input id="ed-gap" type="number" value="${Math.round(d.gap||3)}"/></label>
@@ -1639,6 +1642,7 @@ function renderDockEditor(){
       </div>`;
     const moreBtn=document.getElementById("ed-more-toggle");
     if(moreBtn) moreBtn.onclick=()=>{ dockEditorMore=!dockEditorMore; renderDockEditor(); };
+    bindDockAssign(box, ()=>dockSlipIdsFor(d.id), "Dock "+d.name, ()=>{ if(selected) renderSlipLayerAssigns(selected); });
     document.getElementById("ed-lock").onclick=()=>{
       if(locked){
         selectedDock=d.id; unlockSelectionSlips();
@@ -1740,6 +1744,64 @@ function renderDockEditor(){
  }
 }
 
+/* ===== Whole-dock layer assigning (v96) ===== */
+var dockAssignOpen=false;
+function dockSlipIdsFor(dockId){
+  const d=docks.find(x=>x.id===dockId); if(!d) return [];
+  let ids=slips.filter(s=>s.dockId===dockId).map(s=>s.id);
+  if(!ids.length){ try{ ids=generatedSlips(d).map(s=>applyPlaced(d,s).id); }catch(e){} }
+  return ids;
+}
+function slipIdsForKeys(keys){
+  const out=[], seen=new Set();
+  const add=id=>{ const k=String(id); if(seen.has(k)) return; seen.add(k); out.push(id); };
+  (keys||[]).forEach(key=>{
+    const i=String(key).indexOf(":"); if(i<0) return;
+    const kind=String(key).slice(0,i), id=String(key).slice(i+1);
+    if(kind==="slip"){ const s=slips.find(x=>String(x.id)===id); add(s?s.id:id); }
+    else if(kind==="dock"){ const d=docks.find(x=>String(x.id)===id); if(d) dockSlipIdsFor(d.id).forEach(add); }
+  });
+  return out;
+}
+function dockAssignSectionHtml(title, count, collapsible){
+  if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY) return "";
+  if(!layers.length || !count) return "";
+  const selects=layers.map(layer=>{
+    const options=["<option value=\"__keep\" selected>\u2014</option>","<option value=\"\">Unassigned</option>"].concat((layer.options||[]).map(o=>"<option value=\""+o.id+"\">"+o.name+"</option>"));
+    return "<label>"+layer.name+"<select data-dock-assign=\""+layer.id+"\">"+options.join("")+"</select></label>";
+  }).join("");
+  const inner="<p class=\"hint\" style=\"margin:0 0 4px\">Pick an option to set it on all "+count+" slips. You can still change single slips afterward.</p><div class=\"row2\">"+selects+"</div>";
+  if(collapsible) return "<details class=\"ed-sec dock-assign\""+(dockAssignOpen?" open":"")+"><summary class=\"ed-sec-title\" style=\"cursor:pointer;margin:0\">"+title+"</summary><div style=\"margin-top:6px\">"+inner+"</div></details>";
+  return "<div class=\"ed-sec dock-assign\"><div class=\"ed-sec-title\">"+title+"</div>"+inner+"</div>";
+}
+function bindDockAssign(box, getIds, label, after){
+  if(!box) return;
+  const det=box.querySelector("details.dock-assign");
+  if(det) det.addEventListener("toggle",()=>{ dockAssignOpen=det.open; });
+  box.querySelectorAll("[data-dock-assign]").forEach(sel=>{
+    sel.onchange=()=>{
+      const v=sel.value, layerId=sel.dataset.dockAssign;
+      if(v==="__keep") return;
+      if(typeof VIEW_ONLY!=="undefined" && VIEW_ONLY){ sel.value="__keep"; blockEdit(); return; }
+      const layer=layers.find(l=>l.id===layerId);
+      const opt=layer&&(layer.options||[]).find(o=>o.id===v);
+      const ids=getIds();
+      if(!layer||!ids.length){ sel.value="__keep"; return; }
+      const optName=v?(opt?opt.name:v):"Unassigned";
+      if(!confirm("Set "+layer.name+" to \u201c"+optName+"\u201d on all "+ids.length+" slips of "+label+"?")){ sel.value="__keep"; return; }
+      ids.forEach(id=>{
+        data[id]=data[id]||{status:"vacant"};
+        data[id].layerOpts=data[id].layerOpts||{};
+        if(!v) delete data[id].layerOpts[layerId];
+        else data[id].layerOpts[layerId]=v;
+      });
+      save(data);
+      sel.value="__keep";
+      redraw();
+      if(typeof after==="function"){ try{ after(); }catch(e){} }
+    };
+  });
+}
 function renderSlipLayerAssigns(slipId){
   const box=document.getElementById("slip-layer-assigns");
   if(!box) return;
@@ -1760,6 +1822,12 @@ function renderSlipLayerAssigns(slipId){
     const options=["<option value=\"\">Unassigned</option>"].concat((layer.options||[]).map(o=>"<option value=\""+o.id+"\""+(cur===o.id?" selected":"")+">"+o.name+"</option>"));
     return "<label>"+layer.name+"<select data-layer-assign=\""+layer.id+"\">"+options.join("")+"</select></label>";
   }).join("");
+  const assignSlip=slips.find(x=>String(x.id)===String(slipId));
+  const assignDock=assignSlip&&docks.find(x=>x.id===assignSlip.dockId);
+  if(assignDock){
+    box.innerHTML+=dockAssignSectionHtml("Set all slips on Dock "+assignDock.name, dockSlipIdsFor(assignDock.id).length, true);
+    bindDockAssign(box, ()=>dockSlipIdsFor(assignDock.id), "Dock "+assignDock.name, ()=>renderSlipLayerAssigns(slipId));
+  }
   box.querySelectorAll("[data-layer-assign]").forEach(sel=>{
     sel.onchange=()=>{
       data[slipId]=data[slipId]||{status:"vacant"};
