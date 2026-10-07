@@ -1,11 +1,11 @@
 /* Greers Ferry Lake Explorer — service worker
    Caches the app shell. Map tiles are cached opportunistically as they are viewed. */
-const CACHE = "gfl-explorer-v32";
+const CACHE = "gfl-explorer-v33";
 const SHELL = [
   "./", "./index.html", "./share.html", "./coves.js", "./hist-prelake-valley.jpg",
   "./manifest.json", "./manifest-share.json",
   "./icon.svg", "./icon-192.png", "./icon-512.png", "./maskable-512.png",
-  "./apple-touch-icon.png", "./apple-touch-icon-lake.png", "./favicon-32.png", "./favicon.ico"
+  "./apple-touch-icon.png", "./apple-touch-icon-lake.png", "./apple-touch-icon-180.png", "./favicon-32.png", "./favicon.ico"
 ];
 
 self.addEventListener("install", (e) => {
